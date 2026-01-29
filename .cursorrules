@@ -1,0 +1,155 @@
+# SAP Analytics - Web Monitor Dashboard Project Rules
+
+## CRITICAL: Real-Time Data Only - No Mock Data
+
+### Data Source Rules
+1. **NEVER use mock data, fake data, or hardcoded values** in production code
+2. **ALWAYS fetch real-time data** from actual APIs, databases, or external services
+3. **When API calls fail**, return proper error responses with clear messages - DO NOT fall back to mock data
+4. **All analytics, monitoring, and metrics** must come from real sources:
+   - Google Analytics API (not mock analytics)
+   - Google Search Console API (not mock search console data)
+   - Real website health checks (not simulated responses)
+   - Actual performance metrics (not generated random values)
+   - Real security scans (not mock security data)
+
+### Service Implementation Rules
+
+#### Analytics Service (`backend/services/analyticsService.js`)
+- ✅ DO: Implement real Google Analytics API integration
+- ✅ DO: Implement real Google Search Console API integration
+- ✅ DO: Return proper errors when APIs are not configured
+- ❌ DON'T: Use `getMockAnalyticsData()` or `getMockSearchConsoleData()` in production
+- ❌ DON'T: Generate random values for metrics
+- ❌ DON'T: Fall back to mock data on API errors
+
+#### Performance Service (`backend/services/performanceService.js`)
+- ✅ DO: Use real PageSpeed Insights API
+- ✅ DO: Measure actual Core Web Vitals from real user monitoring
+- ✅ DO: Fetch real server metrics from actual servers
+- ❌ DON'T: Use mock performance scores
+- ❌ DON'T: Generate fake load times or response times
+
+#### Security Service (`backend/services/securityService.js`)
+- ✅ DO: Perform real security scans
+- ✅ DO: Check actual SSL certificates
+- ✅ DO: Verify real firewall status
+- ❌ DON'T: Use mock security data
+- ❌ DON'T: Return fake security scores
+
+#### Monitoring Service (`backend/services/monitoringService.js`)
+- ✅ DO: Perform actual health checks on websites
+- ✅ DO: Measure real response times
+- ✅ DO: Track actual uptime from monitoring
+- ❌ DON'T: Use `getMockComprehensiveData()` or similar fallbacks
+- ❌ DON'T: Simulate website status
+
+#### AI Insights Service (`backend/services/aiInsightsService.js`)
+- ✅ DO: Analyze real data from actual metrics
+- ✅ DO: Generate insights based on real historical data
+- ❌ DON'T: Use mock insights or predictions
+
+### Error Handling Rules
+
+1. **When data sources are unavailable:**
+   - Return HTTP error status codes (500, 503, 404, etc.)
+   - Include clear error messages explaining what failed
+   - Log errors for debugging
+   - DO NOT silently return mock data
+
+2. **When APIs are not configured:**
+   - Return 503 (Service Unavailable) with message: "Google Analytics API not configured"
+   - Include setup instructions in error response
+   - DO NOT generate fake data
+
+3. **When external services fail:**
+   - Return appropriate error status
+   - Include retry information if applicable
+   - DO NOT use mock data as fallback
+
+### Frontend Rules
+
+1. **Display real data only:**
+   - Show actual metrics from API responses
+   - Display error states when data is unavailable
+   - DO NOT show mock/demo data in UI
+
+2. **Error handling:**
+   - Show user-friendly error messages
+   - Indicate when services need configuration
+   - DO NOT silently display fake data
+
+### Configuration Requirements
+
+1. **Environment variables must be set** for all external services:
+   - `GOOGLE_ANALYTICS_ENABLED=true`
+   - `GOOGLE_ANALYTICS_PROPERTY_ID=...`
+   - `GOOGLE_ANALYTICS_API_KEY=...`
+   - `GOOGLE_SEARCH_CONSOLE_ENABLED=true`
+   - `GOOGLE_SEARCH_CONSOLE_SITE_URL=...`
+   - `GOOGLE_SEARCH_CONSOLE_API_KEY=...`
+
+2. **When services are disabled**, return errors, not mock data
+
+### Code Review Checklist
+
+Before committing code, verify:
+- [ ] No `getMock*()` functions are called in production paths
+- [ ] No random value generation for metrics
+- [ ] All API integrations are real implementations
+- [ ] Error handling returns proper HTTP status codes
+- [ ] Error messages are clear and actionable
+- [ ] No fallback to mock data on failures
+
+### Testing Rules
+
+1. **Unit tests** can use mock data for testing purposes only
+2. **Integration tests** must use real API endpoints (or test doubles)
+3. **Production code** must NEVER use mock data
+
+### Migration from Mock Data
+
+If you find mock data in the codebase:
+1. Identify the real data source
+2. Implement proper API integration
+3. Add error handling
+4. Remove mock data fallbacks
+5. Update documentation
+
+---
+
+## General Project Rules
+
+### Code Style
+- Use ES6+ JavaScript features
+- Follow async/await patterns (avoid callbacks)
+- Use meaningful variable and function names
+- Add JSDoc comments for complex functions
+
+### API Design
+- Use RESTful conventions
+- Return consistent JSON response formats
+- Include proper HTTP status codes
+- Implement rate limiting and security headers
+
+### Database
+- Use Mongoose for MongoDB operations
+- Validate data before saving
+- Use proper error handling for database operations
+
+### Security
+- Always validate and sanitize user input
+- Use environment variables for sensitive data
+- Implement proper authentication and authorization
+- Never expose API keys in code or logs
+
+### Performance
+- Implement caching where appropriate
+- Optimize database queries
+- Use connection pooling
+- Monitor and log performance metrics
+
+---
+
+**Remember: Real data only. No exceptions for production code.**
+

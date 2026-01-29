@@ -1,0 +1,1082 @@
+const axios = require('axios');
+const Website = require('../models/Website');
+const MonitoringData = require('../models/MonitoringData');
+const analyticsService = require('./analyticsService');
+const performanceService = require('./performanceService');
+const securityService = require('./securityService');
+const aiInsightsService = require('./aiInsightsService');
+
+class MonitoringService {
+  constructor() {
+    this.isRunning = false;
+    this.interval = null;
+  }
+
+  // Start monitoring all websites
+  startMonitoring() {
+    if (this.isRunning) return;
+    
+    this.isRunning = true;
+    this.interval = setInterval(async () => {
+      await this.checkAllWebsites();
+    }, process.env.MONITORING_INTERVAL || 60000); // Default 1 minute
+    
+    console.log('Website monitoring started');
+  }
+
+  // Stop monitoring
+  stopMonitoring() {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+    this.isRunning = false;
+    console.log('Website monitoring stopped');
+  }
+
+  // Check all websites
+  async checkAllWebsites() {
+    try {
+      const websites = await Website.find({ monitoringEnabled: true });
+      
+      for (const website of websites) {
+        await this.checkWebsite(website);
+      }
+    } catch (error) {
+      console.error('Error checking websites:', error);
+    }
+  }
+
+  // Check individual website
+  async checkWebsite(website) {
+    try {
+      const startTime = Date.now();
+      
+      // Simulate different platform checks
+      const result = await this.performHealthCheck(website);
+      
+      const responseTime = Date.now() - startTime;
+      
+      // Save monitoring data
+      const monitoringData = new MonitoringData({
+        websiteId: website._id,
+        status: result.status,
+        responseTime: result.responseTime || responseTime,
+        statusCode: result.statusCode || 200,
+        uptime: result.uptime || 100,
+        error: result.error,
+        metrics: result.metrics
+      });
+      
+      await monitoringData.save();
+      
+      // Update website status with all dynamic data
+      website.status = result.status;
+      website.responseTime = result.responseTime || responseTime;
+      website.uptime = result.uptime || 100;
+      website.lastChecked = new Date();
+      
+      // Update analytics data
+      if (result.analytics) {
+        website.analytics = {
+          totalVisitors: result.analytics.totalVisitors || 0,
+          totalPageViews: result.analytics.totalPageViews || 0,
+          bounceRate: result.analytics.bounceRate || 0,
+          avgSessionDuration: result.analytics.avgSessionDuration || 0,
+          seoScore: result.seo?.score || 0,
+          securityScore: result.security?.securityScore || 0
+        };
+      }
+      
+      // Update performance data
+      if (result.performance) {
+        website.performance = {
+          loadTime: result.performance.loadTime || 0,
+          serverResponseTime: result.performance.serverResponseTime || 0,
+          databaseQueryTime: result.performance.databaseQueryTime || 0,
+          memoryUsage: result.performance.memoryUsage || 0,
+          memoryPeak: result.performance.memoryPeak || 0,
+          cpuUsage: result.performance.cpuUsage || 0,
+          performanceScore: result.performance.performanceScore || 0,
+          activePlugins: result.performance.activePlugins || 0,
+          recommendations: result.performance.recommendations || []
+        };
+      }
+      
+      // Update SEO data
+      if (result.seo) {
+        website.seo = {
+          score: result.seo.score || 0,
+          metaTags: result.seo.metaTags || 'incomplete',
+          altTags: result.seo.altTags || 0,
+          headingStructure: result.seo.headingStructure || 'unknown',
+          internalLinks: result.seo.internalLinks || 0,
+          externalLinks: result.seo.externalLinks || 0,
+          sslEnabled: result.seo.sslEnabled || false,
+          siteTitle: result.seo.siteTitle || '',
+          siteDescription: result.seo.siteDescription || '',
+          totalContent: result.seo.totalContent || 0,
+          seoIssues: result.seo.seoIssues || [],
+          recommendations: result.seo.recommendations || []
+        };
+      }
+      
+      // Update security data
+      if (result.security) {
+        website.security = {
+          sslStatus: result.security.sslStatus || 'disabled',
+          firewall: result.security.firewall || 'none',
+          malwareScan: result.security.malwareScan || 'unknown',
+          vulnerabilityScan: result.security.vulnerabilityScan || 'unknown',
+          securityScore: result.security.securityScore || 0,
+          securityPlugins: result.security.securityPlugins || 0,
+          totalPlugins: result.security.totalPlugins || 0,
+          outdatedPlugins: result.security.outdatedPlugins || 0,
+          wordpressVersion: result.security.wordpressVersion || '',
+          recommendations: result.security.recommendations || []
+        };
+      }
+      
+      await website.save();
+      
+      console.log(`Checked ${website.name}: ${result.status}`);
+      
+    } catch (error) {
+      console.error(`Error checking website ${website.name}:`, error);
+      
+      // Save error data
+      const monitoringData = new MonitoringData({
+        websiteId: website._id,
+        status: 'error',
+        responseTime: 0,
+        statusCode: 0,
+        uptime: 0,
+        error: {
+          message: error.message,
+          code: 'CHECK_FAILED'
+        }
+      });
+      
+      await monitoringData.save();
+    }
+  }
+
+  // Perform health check based on platform
+  async performHealthCheck(website) {
+    try {
+      switch (website.platform) {
+        case 'wordpress':
+          return await this.checkWordPress(website);
+        case 'nextjs':
+          return await this.checkNextJS(website);
+        case 'laravel':
+        case 'php':
+          return await this.checkLaravel(website);
+        case 'codeigniter':
+          return await this.checkCodeIgniter(website);
+        default:
+          return await this.checkGeneric(website);
+      }
+    } catch (error) {
+      return {
+        status: 'error',
+        error: {
+          message: error.message,
+          code: 'HEALTH_CHECK_FAILED'
+        }
+      };
+    }
+  }
+
+  // WordPress health check – return "error"/"offline" if API doesn't exist
+  async checkWordPress(website) {
+    try {
+        // Get all dynamic data from the advanced plugin
+        const [healthResponse, analyticsResponse, performanceResponse, seoResponse, securityResponse] = await Promise.all([
+          axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/health`, {
+            timeout: 10000,
+            headers: {
+              'Authorization': `Bearer ${website.apiKey}`
+            },
+            validateStatus: (s) => s < 500
+          }),
+          axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/analytics`, {
+            timeout: 10000,
+            headers: {
+              'Authorization': `Bearer ${website.apiKey}`
+            }
+          }),
+          axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/performance`, {
+            timeout: 10000,
+            headers: {
+              'Authorization': `Bearer ${website.apiKey}`
+            }
+          }),
+          axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/seo`, {
+            timeout: 10000,
+            headers: {
+              'Authorization': `Bearer ${website.apiKey}`
+            }
+          }),
+          axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/security`, {
+            timeout: 10000,
+            headers: {
+              'Authorization': `Bearer ${website.apiKey}`
+            }
+          })
+        ]);
+      
+      // Check if health endpoint exists (404 = API not installed)
+      if (healthResponse.status === 404) {
+        return {
+          status: 'error',
+          error: {
+            message: 'WordPress Web Monitor plugin not found. Install the plugin first.',
+            code: 'API_NOT_FOUND'
+          }
+        };
+      }
+      
+      if (healthResponse.status === 401) {
+        return {
+          status: 'error',
+          error: {
+            message: 'Invalid API key. Check your WordPress API key.',
+            code: 'INVALID_API_KEY'
+          }
+        };
+      }
+      
+      if (healthResponse.status !== 200) {
+        return {
+          status: 'error',
+          error: {
+            message: `API returned status ${healthResponse.status}`,
+            code: 'API_ERROR'
+          }
+        };
+      }
+      
+      const healthData = healthResponse.data;
+      const analyticsData = analyticsResponse.data;
+      const performanceData = performanceResponse.data;
+      const seoData = seoResponse.data;
+      const securityData = securityResponse.data;
+      
+      return {
+        status: healthData.status || 'healthy',
+        responseTime: healthData.response_time || 0,
+        statusCode: healthResponse.status,
+        uptime: healthData.uptime || 100,
+        metrics: {
+          loadTime: healthData.response_time || 0,
+          sslValid: website.url.startsWith('https://'),
+          database: healthData.checks?.database || 'unknown',
+          memory: healthData.checks?.memory || 'unknown',
+          plugins: healthData.checks?.plugins || 'unknown',
+          memoryUsage: healthData.checks?.memory_usage || '0%',
+          memoryLimit: healthData.checks?.memory_limit || 'unknown'
+        },
+        analytics: {
+          totalVisitors: analyticsData.visitors || 0,
+          totalPageViews: analyticsData.page_views || 0,
+          bounceRate: analyticsData.bounce_rate || 0,
+          avgSessionDuration: analyticsData.avg_session_duration || 0,
+          topPages: analyticsData.top_pages || [],
+          trafficSources: analyticsData.traffic_sources || {},
+          contentStats: analyticsData.content_stats || {}
+        },
+        performance: {
+          loadTime: performanceData.load_time || 0,
+          serverResponseTime: performanceData.server_response_time || 0,
+          databaseQueryTime: performanceData.database_query_time || 0,
+          memoryUsage: performanceData.memory_usage || 0,
+          memoryPeak: performanceData.memory_peak || 0,
+          cpuUsage: performanceData.cpu_usage || 0,
+          performanceScore: performanceData.performance_score || 0,
+          activePlugins: performanceData.active_plugins || 0,
+          recommendations: performanceData.recommendations || []
+        },
+        seo: {
+          score: seoData.score || 0,
+          metaTags: seoData.meta_tags || 'incomplete',
+          altTags: seoData.alt_tags || 0,
+          headingStructure: seoData.heading_structure || 'unknown',
+          internalLinks: seoData.internal_links || 0,
+          externalLinks: seoData.external_links || 0,
+          sslEnabled: seoData.ssl_enabled || false,
+          siteTitle: seoData.site_title || '',
+          siteDescription: seoData.site_description || '',
+          totalContent: seoData.total_content || 0,
+          seoIssues: seoData.seo_issues || [],
+          recommendations: seoData.recommendations || []
+        },
+        security: {
+          sslStatus: securityData.ssl_status || 'disabled',
+          firewall: securityData.firewall || 'none',
+          malwareScan: securityData.malware_scan || 'unknown',
+          vulnerabilityScan: securityData.vulnerability_scan || 'unknown',
+          securityScore: securityData.security_score || 0,
+          securityPlugins: securityData.security_plugins || 0,
+          totalPlugins: securityData.total_plugins || 0,
+          outdatedPlugins: securityData.outdated_plugins || 0,
+          wordpressVersion: securityData.wordpress_version || '',
+          recommendations: securityData.recommendations || []
+        }
+      };
+    } catch (error) {
+      // If API doesn't exist or connection fails, return error/offline
+      const isConnectionError = error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('timeout');
+      const is404 = error.response?.status === 404;
+      
+      return {
+        status: isConnectionError ? 'offline' : (is404 ? 'error' : 'error'),
+        error: {
+          message: is404 
+            ? 'WordPress Web Monitor plugin not found. Install the plugin first.'
+            : error.message,
+          code: isConnectionError ? 'CONNECTION_FAILED' : (is404 ? 'API_NOT_FOUND' : 'WP_CHECK_FAILED')
+        }
+      };
+    }
+  }
+
+  // Next.js health check – return "error"/"offline" if API doesn't exist
+  async checkNextJS(website) {
+    try {
+      const response = await axios.get(`${website.url}/api/webmonitor/health`, {
+        timeout: 10000,
+        headers: {
+          'Authorization': `Bearer ${website.apiKey}`
+        },
+        validateStatus: (s) => s < 500
+      });
+      
+      if (response.status === 404) {
+        return {
+          status: 'error',
+          error: {
+            message: 'Next.js API route not found. Install the integration.',
+            code: 'API_NOT_FOUND'
+          }
+        };
+      }
+      
+      if (response.status === 401) {
+        return {
+          status: 'error',
+          error: {
+            message: 'Invalid API key. Check your WEBMONITOR_API_KEY.',
+            code: 'INVALID_API_KEY'
+          }
+        };
+      }
+      
+      if (response.status !== 200) {
+        return {
+          status: 'error',
+          error: {
+            message: `API returned status ${response.status}`,
+            code: 'API_ERROR'
+          }
+        };
+      }
+      
+      const ct = (response.headers['content-type'] || '').toLowerCase();
+      if (ct.includes('text/html')) {
+        return {
+          status: 'error',
+          error: {
+            message: 'API endpoint returned HTML instead of JSON. Check URL and integration.',
+            code: 'API_NOT_FOUND'
+          }
+        };
+      }
+      
+      const data = response.data;
+      
+      return {
+        status: data.status || 'healthy',
+        responseTime: data.response_time || 0,
+        statusCode: response.status,
+        uptime: data.uptime || 100,
+        metrics: {
+          loadTime: data.response_time || 0,
+          sslValid: website.url.startsWith('https://'),
+          nextjsVersion: data.nextjs_version,
+          nodeVersion: data.node_version
+        }
+      };
+    } catch (error) {
+      const isConnectionError = error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('timeout');
+      return {
+        status: isConnectionError ? 'offline' : 'error',
+        error: {
+          message: error.message,
+          code: isConnectionError ? 'CONNECTION_FAILED' : 'NEXTJS_CHECK_FAILED'
+        }
+      };
+    }
+  }
+
+  // Laravel health check – status "error"/"offline" if API doesn't exist; "warning" only if health OK but packages missing
+  async checkLaravel(website) {
+    try {
+      const baseUrl = (website.url || '').replace(/\/$/, '');
+      const healthResponse = await axios.get(`${baseUrl}/api/webmonitor/health`, {
+        timeout: 10000,
+        headers: { 'Authorization': `Bearer ${website.apiKey}` },
+        validateStatus: (s) => s < 500 // Don't throw on 4xx, check status explicitly
+      });
+
+      // If health endpoint doesn't exist (404) or unauthorized (401), API is not connected
+      if (healthResponse.status === 404) {
+        return {
+          status: 'error',
+          error: {
+            message: 'API endpoint not found. Install the Laravel integration.',
+            code: 'API_NOT_FOUND'
+          }
+        };
+      }
+      
+      if (healthResponse.status === 401) {
+        return {
+          status: 'error',
+          error: {
+            message: 'Invalid API key. Check your WEBMONITOR_API_KEY.',
+            code: 'INVALID_API_KEY'
+          }
+        };
+      }
+
+      if (healthResponse.status !== 200) {
+        return {
+          status: 'error',
+          error: {
+            message: `API returned status ${healthResponse.status}`,
+            code: 'API_ERROR'
+          }
+        };
+      }
+
+      // Check if response is JSON (API exists) vs HTML (wrong endpoint)
+      const ct = (healthResponse.headers['content-type'] || '').toLowerCase();
+      if (ct.includes('text/html')) {
+        return {
+          status: 'error',
+          error: {
+            message: 'API endpoint returned HTML instead of JSON. Check URL and integration.',
+            code: 'API_NOT_FOUND'
+          }
+        };
+      }
+
+      const data = healthResponse.data;
+      let status = data.status || 'healthy';
+      let apiPackagesAvailable = true;
+
+      // Only check packages if health works - if packages missing, show warning
+      try {
+        const packagesRes = await axios.get(`${baseUrl}/api/webmonitor/packages`, {
+          timeout: 5000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` },
+          validateStatus: (s) => s < 500
+        });
+        const packagesCt = (packagesRes.headers['content-type'] || '').toLowerCase();
+        if (packagesRes.status === 404 || packagesCt.includes('text/html')) {
+          apiPackagesAvailable = false;
+          status = 'warning'; // Health works but packages missing = warning
+        }
+      } catch (_) {
+        apiPackagesAvailable = false;
+        status = 'warning'; // Health works but packages check failed = warning
+      }
+
+      return {
+        status,
+        responseTime: data.response_time || 0,
+        statusCode: healthResponse.status,
+        uptime: data.uptime || 100,
+        apiPackagesAvailable,
+        metrics: {
+          loadTime: data.response_time || 0,
+          sslValid: (website.url || '').startsWith('https://'),
+          phpVersion: data.php_version,
+          laravelVersion: data.framework_version,
+          memoryUsage: data.checks?.memory_usage || 0
+        }
+      };
+    } catch (error) {
+      // Network errors, timeouts, etc. = offline/error
+      const isConnectionError = error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('timeout');
+      return {
+        status: isConnectionError ? 'offline' : 'error',
+        error: {
+          message: error.message,
+          code: isConnectionError ? 'CONNECTION_FAILED' : 'LARAVEL_CHECK_FAILED'
+        }
+      };
+    }
+  }
+
+  // CodeIgniter health check – same: "error"/"offline" if API doesn't exist; "warning" only if health OK but packages missing
+  async checkCodeIgniter(website) {
+    try {
+      const baseUrl = (website.url || '').replace(/\/$/, '');
+      const healthResponse = await axios.get(`${baseUrl}/api/webmonitor/health`, {
+        timeout: 10000,
+        headers: { 'Authorization': `Bearer ${website.apiKey}` },
+        validateStatus: (s) => s < 500
+      });
+
+      if (healthResponse.status === 404) {
+        return {
+          status: 'error',
+          error: {
+            message: 'API endpoint not found. Install the CodeIgniter integration.',
+            code: 'API_NOT_FOUND'
+          }
+        };
+      }
+      
+      if (healthResponse.status === 401) {
+        return {
+          status: 'error',
+          error: {
+            message: 'Invalid API key. Check your WEBMONITOR_API_KEY.',
+            code: 'INVALID_API_KEY'
+          }
+        };
+      }
+
+      if (healthResponse.status !== 200) {
+        return {
+          status: 'error',
+          error: {
+            message: `API returned status ${healthResponse.status}`,
+            code: 'API_ERROR'
+          }
+        };
+      }
+
+      const ct = (healthResponse.headers['content-type'] || '').toLowerCase();
+      if (ct.includes('text/html')) {
+        return {
+          status: 'error',
+          error: {
+            message: 'API endpoint returned HTML instead of JSON. Check URL and integration.',
+            code: 'API_NOT_FOUND'
+          }
+        };
+      }
+
+      const data = healthResponse.data;
+      let status = data.status || 'healthy';
+      let apiPackagesAvailable = true;
+
+      try {
+        const packagesRes = await axios.get(`${baseUrl}/api/webmonitor/packages`, {
+          timeout: 5000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` },
+          validateStatus: (s) => s < 500
+        });
+        const packagesCt = (packagesRes.headers['content-type'] || '').toLowerCase();
+        if (packagesRes.status === 404 || packagesCt.includes('text/html')) {
+          apiPackagesAvailable = false;
+          status = 'warning';
+        }
+      } catch (_) {
+        apiPackagesAvailable = false;
+        status = 'warning';
+      }
+
+      return {
+        status,
+        responseTime: data.response_time || 0,
+        statusCode: healthResponse.status,
+        uptime: data.uptime || 100,
+        apiPackagesAvailable,
+        metrics: {
+          loadTime: data.response_time || 0,
+          sslValid: (website.url || '').startsWith('https://'),
+          phpVersion: data.php_version,
+          codeigniterVersion: data.framework_version,
+          memoryUsage: data.checks?.memory_usage || 0
+        }
+      };
+    } catch (error) {
+      const isConnectionError = error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('timeout');
+      return {
+        status: isConnectionError ? 'offline' : 'error',
+        error: {
+          message: error.message,
+          code: isConnectionError ? 'CONNECTION_FAILED' : 'CI_CHECK_FAILED'
+        }
+      };
+    }
+  }
+
+  // Generic health check – URL reachable but no API; show "error" since no API connection
+  async checkGeneric(website) {
+    try {
+      const response = await axios.get(website.url, {
+        timeout: 10000
+      });
+      // URL is reachable but no API = error (not warning, since API is required)
+      return {
+        status: 'error',
+        responseTime: response.headers['x-response-time'] || 0,
+        statusCode: response.status,
+        uptime: response.status === 200 ? 100 : 95,
+        apiConnected: false,
+        error: {
+          message: 'No API integration detected. Add API integration to enable monitoring.',
+          code: 'NO_API'
+        },
+        metrics: {
+          loadTime: response.headers['x-response-time'] || 0,
+          sslValid: (website.url || '').startsWith('https://')
+        }
+      };
+    } catch (error) {
+      const isConnectionError = error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('timeout');
+      return {
+        status: isConnectionError ? 'offline' : 'error',
+        error: {
+          message: error.message,
+          code: isConnectionError ? 'CONNECTION_FAILED' : 'GENERIC_CHECK_FAILED'
+        }
+      };
+    }
+  }
+
+  /**
+   * Get server/hosting info: downtime hours (from real MonitoringData), disk & bandwidth when integrated.
+   * Downtime is computed from historical checks; disk/bandwidth return null until a real integration exists.
+   */
+  async getServerInfo(website) {
+    const intervalMs = website.settings?.checkInterval || parseInt(process.env.MONITORING_INTERVAL, 10) || 60000;
+    const intervalHours = intervalMs / (1000 * 60 * 60);
+    const now = new Date();
+
+    const windows = [
+      { label: '24h', start: new Date(now - 24 * 60 * 60 * 1000) },
+      { label: '7d', start: new Date(now - 7 * 24 * 60 * 60 * 1000) },
+      { label: '30d', start: new Date(now - 30 * 24 * 60 * 60 * 1000) }
+    ];
+
+    const downtimeHours = { last24h: 0, last7d: 0, last30d: 0 };
+    const keys = ['last24h', 'last7d', 'last30d'];
+
+    for (let i = 0; i < windows.length; i++) {
+      const counts = await MonitoringData.countDocuments({
+        websiteId: website._id,
+        timestamp: { $gte: windows[i].start },
+        status: { $in: ['offline', 'error'] }
+      });
+      downtimeHours[keys[i]] = Math.round(counts * intervalHours * 100) / 100;
+    }
+
+    const totalChecks30d = await MonitoringData.countDocuments({
+      websiteId: website._id,
+      timestamp: { $gte: windows[2].start }
+    });
+    const downChecks30d = await MonitoringData.countDocuments({
+      websiteId: website._id,
+      timestamp: { $gte: windows[2].start },
+      status: { $in: ['offline', 'error'] }
+    });
+    const uptimePercent = totalChecks30d > 0
+      ? Math.round((1 - downChecks30d / totalChecks30d) * 1000) / 10
+      : (website.uptime != null ? website.uptime : null);
+
+    let diskSpace = null;
+    let bandwidth = null;
+    let serverResourcesMessage = null;
+
+    try {
+      const sr = await performanceService.getServerResources(website);
+      if (sr && !sr.error) {
+        diskSpace = sr.diskSpace || null;
+        bandwidth = sr.bandwidth || null;
+      }
+    } catch (e) {
+      serverResourcesMessage = 'Disk and bandwidth require a server monitoring integration (e.g. cPanel API, server agent).';
+    }
+
+    if (!diskSpace && !bandwidth && !serverResourcesMessage) {
+      serverResourcesMessage = 'Disk and bandwidth require a server monitoring integration (e.g. cPanel API, server agent).';
+    }
+
+    return {
+      downtimeHours,
+      uptimePercent: uptimePercent != null ? uptimePercent : website.uptime,
+      lastChecked: website.lastChecked || null,
+      status: website.status || 'unknown',
+      checkIntervalMinutes: Math.round(intervalMs / 60000),
+      diskSpace,
+      bandwidth,
+      serverResourcesMessage
+    };
+  }
+
+  // Comprehensive monitoring with all advanced features
+  async getComprehensiveWebsiteData(website) {
+    try {
+      // Get basic health check first
+      const basicHealth = await this.performHealthCheck(website);
+      
+      // Get advanced data with fallbacks
+      let advancedAnalytics, performanceData, securityData, aiInsights, pluginsData;
+      
+      try {
+        advancedAnalytics = await analyticsService.getComprehensiveAnalytics(website);
+      } catch (error) {
+        console.error('Analytics service error:', error.message);
+        // Don't use mock data - let error propagate or handle gracefully
+        advancedAnalytics = {
+          error: error.message,
+          statusCode: error.statusCode,
+          service: 'Analytics'
+        };
+      }
+      
+      try {
+        performanceData = await performanceService.getComprehensivePerformance(website);
+      } catch (error) {
+        console.error('Performance service error:', error.message);
+        // Don't use mock data - let error propagate or handle gracefully
+        performanceData = {
+          error: error.message,
+          statusCode: error.statusCode,
+          service: 'Performance'
+        };
+      }
+      
+      try {
+        securityData = await securityService.getComprehensiveSecurity(website);
+      } catch (error) {
+        console.error('Security service error:', error.message);
+        // Don't use mock data - let error propagate or handle gracefully
+        securityData = {
+          error: error.message,
+          statusCode: error.statusCode,
+          service: 'Security'
+        };
+      }
+      
+      try {
+        aiInsights = await aiInsightsService.getComprehensiveAIAnalysis({
+          ...website,
+          analytics: advancedAnalytics,
+          performance: performanceData,
+          security: securityData
+        });
+      } catch (error) {
+        console.error('AI insights service error:', error.message);
+        // Don't use mock data - let error propagate or handle gracefully
+        aiInsights = {
+          error: error.message,
+          statusCode: error.statusCode,
+          service: 'AI Insights'
+        };
+      }
+
+      // Get plugins/packages data
+      try {
+        if (website.platform === 'wordpress') {
+          const pluginsResponse = await axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/plugins`, {
+            timeout: 10000,
+            headers: { 'Authorization': `Bearer ${website.apiKey}` }
+          });
+          pluginsData = pluginsResponse.data;
+        } else if (website.platform === 'nextjs') {
+          // Next.js libraries handled separately
+        } else if (website.platform === 'laravel' || website.platform === 'codeigniter' || website.platform === 'php') {
+          // PHP projects use Composer packages
+          const baseUrl = website.url.replace(/\/$/, '');
+          const packagesResponse = await axios.get(`${baseUrl}/api/webmonitor/packages`, {
+            timeout: 10000,
+            headers: { 'Authorization': `Bearer ${website.apiKey}` }
+          }).catch(() => null);
+          if (packagesResponse) {
+            pluginsData = packagesResponse.data; // Store as packages for PHP projects
+          }
+        }
+      } catch (error) {
+        console.error('Plugins/packages fetch error:', error.message);
+        pluginsData = null;
+      }
+
+      let serverInfo = null;
+      try {
+        serverInfo = await this.getServerInfo(website);
+      } catch (e) {
+        console.error('Server info error:', e.message);
+      }
+
+      return {
+        basic: basicHealth,
+        analytics: advancedAnalytics,
+        performance: performanceData,
+        security: securityData,
+        aiInsights: aiInsights,
+        plugins: pluginsData,
+        serverInfo,
+        timestamp: new Date(),
+        website: {
+          id: website._id,
+          name: website.name,
+          url: website.url,
+          platform: website.platform
+        }
+      };
+    } catch (error) {
+      console.error(`Error getting comprehensive data for ${website.name}:`, error);
+      // Don't return mock data - throw error instead
+      const apiError = new Error(`Failed to get comprehensive website data: ${error.message}`);
+      apiError.statusCode = error.statusCode || 500;
+      apiError.originalError = error;
+      throw apiError;
+    }
+  }
+
+  // Enhanced Next.js check with all advanced features
+  async getEnhancedNextJSData(website) {
+    try {
+      // Get all Next.js API endpoints including libraries
+      const [
+        healthResponse,
+        analyticsResponse,
+        performanceResponse,
+        seoResponse,
+        securityResponse,
+        librariesResponse
+      ] = await Promise.all([
+        axios.get(`${website.url}/api/webmonitor/health`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${website.url}/api/webmonitor/analytics`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${website.url}/api/webmonitor/performance`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${website.url}/api/webmonitor/seo`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${website.url}/api/webmonitor/security`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${website.url}/api/webmonitor/libraries`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null)
+      ]);
+
+      // Combine all data
+      const nextJSData = {
+        health: healthResponse?.data || {},
+        analytics: analyticsResponse?.data || {},
+        performance: performanceResponse?.data || {},
+        seo: seoResponse?.data || {},
+        security: securityResponse?.data || {},
+        libraries: librariesResponse?.data || {}
+      };
+
+      // Get advanced external data
+      const [
+        advancedAnalytics,
+        performanceInsights,
+        securityInsights,
+        aiAnalysis
+      ] = await Promise.all([
+        analyticsService.getComprehensiveAnalytics(website),
+        performanceService.getComprehensivePerformance(website),
+        securityService.getComprehensiveSecurity(website),
+        aiInsightsService.getComprehensiveAIAnalysis({
+          ...website,
+          ...nextJSData
+        })
+      ]);
+
+      return {
+        nextjs: nextJSData,
+        advancedAnalytics,
+        performanceInsights,
+        securityInsights,
+        aiAnalysis,
+        timestamp: new Date()
+      };
+    } catch (error) {
+      console.error(`Error getting enhanced Next.js data for ${website.name}:`, error);
+      return null;
+    }
+  }
+
+  // Enhanced PHP check with all advanced features (Laravel, CodeIgniter, Core PHP)
+  async getEnhancedPHPData(website) {
+    try {
+      // Remove trailing slash from URL
+      const baseUrl = website.url.replace(/\/$/, '');
+      // Get all PHP API endpoints
+      const [
+        healthResponse,
+        analyticsResponse,
+        performanceResponse,
+        seoResponse,
+        securityResponse,
+        packagesResponse
+      ] = await Promise.all([
+        axios.get(`${baseUrl}/api/webmonitor/health`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${baseUrl}/api/webmonitor/analytics`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${baseUrl}/api/webmonitor/performance`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${baseUrl}/api/webmonitor/seo`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${baseUrl}/api/webmonitor/security`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${baseUrl}/api/webmonitor/packages`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null)
+      ]);
+
+      // Combine all data
+      const phpData = {
+        health: healthResponse?.data || {},
+        analytics: analyticsResponse?.data || {},
+        performance: performanceResponse?.data || {},
+        seo: seoResponse?.data || {},
+        security: securityResponse?.data || {},
+        packages: packagesResponse?.data || {}
+      };
+
+      // Get advanced external data
+      const [
+        advancedAnalytics,
+        performanceInsights,
+        securityInsights,
+        aiAnalysis
+      ] = await Promise.all([
+        analyticsService.getComprehensiveAnalytics(website),
+        performanceService.getComprehensivePerformance(website),
+        securityService.getComprehensiveSecurity(website),
+        aiInsightsService.getComprehensiveAIAnalysis({
+          ...website,
+          ...phpData
+        })
+      ]);
+
+      return {
+        php: phpData,
+        advancedAnalytics,
+        performanceInsights,
+        securityInsights,
+        aiAnalysis,
+        timestamp: new Date()
+      };
+    } catch (error) {
+      console.error(`Error getting enhanced PHP data for ${website.name}:`, error);
+      return null;
+    }
+  }
+
+  // Enhanced WordPress check with all advanced features
+  async getEnhancedWordPressData(website) {
+    try {
+      // Get all WordPress plugin endpoints
+      const [
+        healthResponse,
+        analyticsResponse,
+        performanceResponse,
+        seoResponse,
+        securityResponse,
+        pluginsResponse
+      ] = await Promise.all([
+        axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/health`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/analytics`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/performance`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/seo`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/security`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null),
+        axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/plugins`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        }).catch(() => null)
+      ]);
+
+      // Combine all data
+      const wordPressData = {
+        health: healthResponse?.data || {},
+        analytics: analyticsResponse?.data || {},
+        performance: performanceResponse?.data || {},
+        seo: seoResponse?.data || {},
+        security: securityResponse?.data || {},
+        plugins: pluginsResponse?.data || {}
+      };
+
+      // Get advanced external data
+      const [
+        advancedAnalytics,
+        performanceInsights,
+        securityInsights,
+        aiAnalysis
+      ] = await Promise.all([
+        analyticsService.getComprehensiveAnalytics(website),
+        performanceService.getComprehensivePerformance(website),
+        securityService.getComprehensiveSecurity(website),
+        aiInsightsService.getComprehensiveAIAnalysis({
+          ...website,
+          ...wordPressData
+        })
+      ]);
+
+      return {
+        wordPress: wordPressData,
+        advancedAnalytics,
+        performanceInsights,
+        securityInsights,
+        aiAnalysis,
+        timestamp: new Date()
+      };
+    } catch (error) {
+      console.error(`Error getting enhanced WordPress data for ${website.name}:`, error);
+      return null;
+    }
+  }
+}
+
+module.exports = new MonitoringService();

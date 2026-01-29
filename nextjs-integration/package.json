@@ -1,0 +1,19 @@
+{
+  "name": "webmonitor-nextjs-integration",
+  "version": "1.0.0",
+  "description": "Web Monitor integration for Next.js projects",
+  "scripts": {
+    "install": "node install.js",
+    "generate-api-key": "node generate-api-key.js",
+    "verify": "node verify-installation.js"
+  },
+  "keywords": [
+    "webmonitor",
+    "nextjs",
+    "monitoring",
+    "api"
+  ],
+  "author": "Web Monitor Team",
+  "license": "MIT"
+}
+
