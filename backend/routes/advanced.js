@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const Website = require('../models/Website');
+const MonitoringData = require('../models/MonitoringData');
 const monitoringService = require('../services/monitoringService');
 const analyticsService = require('../services/analyticsService');
 const performanceService = require('../services/performanceService');
@@ -38,6 +39,101 @@ router.get('/server-info/:id', async (req, res) => {
       error: error.message,
       ...(error.service && { service: error.service })
     });
+  }
+});
+
+// Logs (error log + access summary from WordPress plugin)
+router.get('/logs/:id', async (req, res) => {
+  try {
+    const website = await Website.findById(req.params.id);
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+    const logs = await monitoringService.getLogs(website);
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Merged recommendations (performance + SEO + security)
+router.get('/recommendations/:id', async (req, res) => {
+  try {
+    const website = await Website.findById(req.params.id);
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+    const data = await monitoringService.getRecommendations(website);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Incidents (downtime history from health checks)
+router.get('/incidents/:id', async (req, res) => {
+  try {
+    const website = await Website.findById(req.params.id);
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+    const days = Math.min(parseInt(req.query.days, 10) || 30, 90);
+    const incidents = await monitoringService.getIncidents(website._id, days);
+    res.json(incidents);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Export report (CSV for last N days)
+router.get('/export/:id', async (req, res) => {
+  try {
+    const website = await Website.findById(req.params.id);
+    if (!website) {
+      return res.status(404).json({ error: 'Website not found' });
+    }
+    const days = Math.min(parseInt(req.query.days, 10) || 30, 90);
+    const format = (req.query.format || 'csv').toLowerCase();
+
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const history = await MonitoringData.find({
+      websiteId: website._id,
+      timestamp: { $gte: since }
+    }).sort({ timestamp: 1 }).lean();
+
+    const incidents = await monitoringService.getIncidents(website._id, days);
+
+    const headers = ['Date', 'Status', 'Response Time (ms)', 'Uptime %', 'Status Code'];
+    const rows = history.map(h => [
+      new Date(h.timestamp).toISOString(),
+      h.status,
+      h.responseTime,
+      h.uptime,
+      h.statusCode
+    ]);
+
+    if (format === 'csv') {
+      const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${(website.name || 'report').replace(/[^a-z0-9_-]/gi, '_')}-${days}days.csv"`);
+      return res.send(csv);
+    }
+
+    res.json({
+      website: { name: website.name, url: website.url },
+      period: `${days} days`,
+      summary: {
+        totalChecks: history.length,
+        healthy: history.filter(h => h.status === 'healthy').length,
+        incidents: incidents.length
+      },
+      history: rows.map((r, i) => ({ date: r[0], status: r[1], responseTime: r[2], uptime: r[3], statusCode: r[4] })),
+      incidents
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -107,8 +203,9 @@ router.get('/plugins/:id', async (req, res) => {
     }
 
     if (website.platform === 'wordpress') {
-      // WordPress: Get plugins
-      const response = await axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/plugins`, {
+      // WordPress: Get plugins (no trailing slash on base URL to avoid 404)
+      const wpBase = (website.url || '').replace(/\/$/, '');
+      const response = await axios.get(`${wpBase}/wp-json/webmonitor-advanced/v1/plugins`, {
         timeout: 10000,
         headers: { 'Authorization': `Bearer ${website.apiKey}` }
       });
@@ -673,8 +770,9 @@ router.get('/plugins/:id', async (req, res) => {
       return res.status(400).json({ error: 'Website is not a WordPress site' });
     }
 
-    // Get plugins data from WordPress API
-    const response = await axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/plugins`, {
+    // Get plugins data from WordPress API (no trailing slash to avoid 404)
+    const wpBase = (website.url || '').replace(/\/$/, '');
+    const response = await axios.get(`${wpBase}/wp-json/webmonitor-advanced/v1/plugins`, {
       headers: { 'Authorization': `Bearer ${website.apiKey}` }
     });
 

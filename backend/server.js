@@ -30,10 +30,11 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-// Rate limiting
+// Rate limiting - Relaxed in development to prevent false-offline errors
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: process.env.NODE_ENV === 'production' ? 100 : 10000, // 10,000 requests in dev
+  message: { error: 'Too many requests', message: 'Rate limit exceeded during high-frequency monitoring.' }
 });
 app.use(limiter);
 

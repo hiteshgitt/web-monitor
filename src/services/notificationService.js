@@ -48,7 +48,7 @@ class NotificationService {
       if (cached) {
         const data = JSON.parse(cached);
         this.alerts = data.alerts || [];
-        this.notificationCount = this.alerts.length;
+        this.notificationCount = this.alerts.filter(a => !a.read).length;
         this.notifyListeners();
       }
     } catch (error) {
@@ -101,12 +101,18 @@ class NotificationService {
       }
 
       // Compare with previous alerts to detect new ones
-      const previousAlertIds = new Set(this.alerts.map(a => a.id));
-      const newAlerts = allAlerts.filter(alert => !previousAlertIds.has(alert.id));
+      const previousById = new Map(this.alerts.map(a => [a.id, a]));
+      const newAlerts = allAlerts.filter(alert => !previousById.has(alert.id));
 
-      // Update alerts
+      // Preserve read state so we don't re-notify for same alerts when app is open
+      allAlerts.forEach(alert => {
+        const prev = previousById.get(alert.id);
+        if (prev && prev.read) alert.read = true;
+      });
+
+      // Update alerts; count only unread so badge is one-time until new alerts
       this.alerts = allAlerts;
-      this.notificationCount = allAlerts.length;
+      this.notificationCount = this.alerts.filter(a => !a.read).length;
       this.saveNotifications();
       this.notifyListeners();
 
@@ -318,6 +324,14 @@ class NotificationService {
       this.saveNotifications();
       this.notifyListeners();
     }
+  }
+
+  // Mark all alerts as seen (one-time: badge clears when user opens the panel)
+  markAllAsSeen() {
+    this.alerts.forEach(a => { a.read = true; });
+    this.notificationCount = 0;
+    this.saveNotifications();
+    this.notifyListeners();
   }
 
   // Subscribe to notification updates

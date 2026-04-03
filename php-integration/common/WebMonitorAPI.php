@@ -428,6 +428,73 @@ class WebMonitorAPI {
     }
     
     /**
+     * Logs endpoint - read app log file if present (no reinstall: same API class)
+     * Tries Laravel storage/logs, CodeIgniter writable/logs, or PHP error_log path.
+     */
+    public function getLogs(): array {
+        $lines = [];
+        $enabled = false;
+        $logPaths = [];
+        
+        if ($this->framework === 'Laravel' && function_exists('storage_path')) {
+            $logPaths[] = storage_path('logs/laravel.log');
+        }
+        if (defined('WRITEPATH')) {
+            $logPaths[] = rtrim(WRITEPATH, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'logs' . DIRECTORY_SEPARATOR . 'log-' . date('Y-m-d') . '.log';
+        }
+        $logPaths[] = ini_get('error_log') ?: (__DIR__ . '/../../storage/logs/php-error.log');
+        
+        foreach ($logPaths as $logPath) {
+            if ($logPath && is_file($logPath) && is_readable($logPath)) {
+                $content = @file_get_contents($logPath);
+                if ($content !== false) {
+                    $all = array_filter(explode("\n", $content));
+                    $lines = array_slice(array_map(function ($raw) {
+                        preg_match('/^\[([^\]]+)\]/', $raw, $m);
+                        return ['raw' => $raw, 'time' => $m[1] ?? ''];
+                    }, $all), -100);
+                    $enabled = true;
+                }
+                break;
+            }
+        }
+        
+        return [
+            'error_log' => [
+                'enabled' => $enabled,
+                'message' => $enabled ? '' : 'Optional: ensure log file exists and is readable. Laravel: storage/logs/laravel.log',
+                'lines' => $lines,
+                'count' => count($lines),
+            ],
+            'access_summary' => [
+                'by_status' => [],
+                'top_urls' => [],
+                'total_requests' => 0,
+            ],
+        ];
+    }
+    
+    /**
+     * Recommendations endpoint - merge performance, SEO, security (no reinstall: same API class)
+     */
+    public function getRecommendations(): array {
+        $perf = $this->getPerformance();
+        $seo = $this->getSEO();
+        $sec = $this->getSecurity();
+        $withSource = [];
+        foreach ($perf['recommendations'] ?? [] as $r) {
+            $withSource[] = ['text' => $r, 'source' => 'performance'];
+        }
+        foreach ($seo['recommendations'] ?? [] as $r) {
+            $withSource[] = ['text' => $r, 'source' => 'seo'];
+        }
+        foreach ($sec['recommendations'] ?? [] as $r) {
+            $withSource[] = ['text' => $r, 'source' => 'security'];
+        }
+        return ['recommendations' => $withSource, 'count' => count($withSource)];
+    }
+    
+    /**
      * Send JSON response
      */
     public function sendJson(array $data, int $statusCode = 200): void {

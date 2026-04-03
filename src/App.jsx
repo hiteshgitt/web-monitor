@@ -233,9 +233,30 @@ const WebMonitorDashboard = () => {
         onNavigate={handleCommandPaletteNavigate}
       />
       {error && error.includes('Backend server') && (
-        <div className="mx-4 mt-4 rounded-2xl p-4 md:p-6 shadow-medium border-l-4 animate-slide-up bg-gradient-to-r from-orange-50 to-amber-50 border-orange-500 text-orange-800">
-          <p className="text-sm md:text-base font-semibold">{error}</p>
-          <p className="text-xs md:text-sm mt-2 opacity-75 font-medium">Real-time data unavailable. Showing last known state.</p>
+        <div className="mx-6 mt-6 overflow-hidden rounded-[2.5rem] bg-white shadow-2xl border border-rose-100 flex flex-col md:flex-row items-stretch animate-slide-up">
+          <div className="bg-rose-500 w-full md:w-24 flex items-center justify-center p-6 text-white shrink-0">
+             <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20">
+               <AlertTriangle size={24} />
+             </div>
+          </div>
+          <div className="p-6 flex-1 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <h3 className="text-sm font-black text-gray-900 uppercase tracking-[0.2em] mb-1 italic">
+                {error.includes('Too many requests') || error.includes('Rate limit') ? 'Rate Limit Exceeded' : 'Monitoring Interrupted'}
+              </h3>
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-widest opacity-70">
+                {error.includes('Too many requests') || error.includes('Rate limit') 
+                  ? 'Request frequency too high. Backend access is temporarily restricted.'
+                  : 'Backend server is unreachable. Displaying last known cached state.'}
+              </p>
+            </div>
+            <button 
+              onClick={loadWebsites}
+              className="px-8 py-3 rounded-2xl bg-[#2D1BFF] text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-blue-700 active:scale-95 transition-all flex items-center gap-2 whitespace-nowrap"
+            >
+              Retry Connection <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
       )}
           {selectedWebsite ? (

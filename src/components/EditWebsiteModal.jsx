@@ -96,12 +96,12 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 mobile-safe-bottom">
-      <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mobile-scroll animate-slide-up">
+      <div className="bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mobile-scroll animate-slide-up">
         {/* Header */}
         <div className="sticky top-0 bg-white z-10 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <Settings size={24} className="text-blue-600" />
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Edit Website Settings</h2>
+            <Settings size={24} className="text-[#2D1BFF]" />
+            <h2 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">Edit Settings</h2>
           </div>
           <button
             onClick={onClose}
@@ -210,7 +210,7 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 px-4 py-3.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors touch-target"
+                className="flex-[2] px-4 py-4 bg-[#2D1BFF] text-white rounded-2xl font-bold shadow-lg hover:shadow-xl active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed no-select"
               >
                 {loading ? 'Saving...' : 'Save Changes'}
               </button>

@@ -316,11 +316,11 @@ const AddWebsiteModal = ({ isOpen, onClose, onAdd }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 mobile-safe-bottom">
-      <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-lg w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mobile-scroll animate-slide-up sm:animate-slide-up">
+      <div className="bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl max-w-lg w-full max-h-[95vh] sm:max-h-[80vh] overflow-y-auto mobile-scroll animate-slide-up sm:animate-slide-up">
         {/* Elegant Header */}
         <div className="sticky top-0 bg-gradient-to-r from-gray-50 to-white z-10 flex items-center justify-between px-5 sm:px-7 py-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+            <div className="w-10 h-10 rounded-xl bg-[#2D1BFF] flex items-center justify-center shadow-lg">
               <Sparkles size={20} className="text-white" />
             </div>
             <div>
@@ -430,7 +430,7 @@ const AddWebsiteModal = ({ isOpen, onClose, onAdd }) => {
               </button>
               <button
                 type="submit"
-                className="flex-1 px-5 py-3.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 text-white rounded-xl font-semibold shadow-md hover:shadow-lg active:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed no-select"
+                className="flex-[2] px-5 py-4 bg-[#2D1BFF] text-white rounded-2xl font-bold shadow-lg hover:shadow-xl active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed no-select"
                 disabled={loading}
               >
                 {loading ? (

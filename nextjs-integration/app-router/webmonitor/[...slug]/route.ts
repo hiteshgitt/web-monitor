@@ -383,6 +383,57 @@ function detectPackageManager(projectRoot: string): string {
   return 'unknown';
 }
 
+// Logs endpoint - read app log file if present (no reinstall: same route file)
+async function getLogs() {
+  const projectRoot = process.cwd();
+  const possibleLogPaths = [
+    path.join(projectRoot, 'logs', 'error.log'),
+    path.join(projectRoot, 'log', 'error.log'),
+    path.join(projectRoot, '.next', 'server', 'app', 'api', 'webmonitor', 'logs.txt'),
+  ];
+  let lines: { raw: string; time: string }[] = [];
+  let enabled = false;
+  for (const logPath of possibleLogPaths) {
+    try {
+      if (fs.existsSync(logPath)) {
+        const content = fs.readFileSync(logPath, 'utf8');
+        const all = content.split('\n').filter(Boolean);
+        lines = all.slice(-100).map((raw) => ({
+          raw,
+          time: raw.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? '',
+        }));
+        enabled = true;
+        break;
+      }
+    } catch {
+      // skip
+    }
+  }
+  return {
+    error_log: {
+      enabled,
+      message: enabled ? '' : 'Optional: create a logs/error.log file or use a logging service. Dashboard will show it here.',
+      lines,
+      count: lines.length,
+    },
+    access_summary: {
+      by_status: {},
+      top_urls: [],
+      total_requests: 0,
+    },
+  };
+}
+
+// Recommendations endpoint - merge performance, SEO, security (no reinstall: same route file)
+async function getRecommendations() {
+  const [perf, seo, sec] = await Promise.all([getPerformance(), getSEO(), getSecurity()]);
+  const withSource: { text: string; source: string }[] = [];
+  (perf.recommendations || []).forEach((r: string) => withSource.push({ text: r, source: 'performance' }));
+  (seo.recommendations || []).forEach((r: string) => withSource.push({ text: r, source: 'seo' }));
+  (sec.recommendations || []).forEach((r: string) => withSource.push({ text: r, source: 'security' }));
+  return { recommendations: withSource, count: withSource.length };
+}
+
 // Handle CORS preflight (OPTIONS) requests
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, {
@@ -439,9 +490,15 @@ export async function GET(request: NextRequest) {
       case 'libraries':
         data = await getLibraries();
         break;
+      case 'logs':
+        data = await getLogs();
+        break;
+      case 'recommendations':
+        data = await getRecommendations();
+        break;
       default:
         return NextResponse.json(
-          { error: 'Endpoint not found. Available: health, analytics, performance, seo, security, libraries' },
+          { error: 'Endpoint not found. Available: health, analytics, performance, seo, security, libraries, logs, recommendations' },
           { 
             status: 404,
             headers: {

@@ -59,12 +59,14 @@ class WebMonitorController extends Controller
             'seo' => $this->api->getSEO(),
             'security' => $this->api->getSecurity(),
             'packages' => $this->getComposerPackages(),
+            'logs' => $this->api->getLogs(),
+            'recommendations' => $this->api->getRecommendations(),
             default => null
         };
         
         if ($data === null) {
             return response()->json([
-                'error' => 'Endpoint not found. Available: health, analytics, performance, seo, security, packages'
+                'error' => 'Endpoint not found. Available: health, analytics, performance, seo, security, packages, logs, recommendations'
             ], 404)->withHeaders([
                 'Access-Control-Allow-Origin' => '*',
                 'Access-Control-Allow-Methods' => 'GET, OPTIONS',

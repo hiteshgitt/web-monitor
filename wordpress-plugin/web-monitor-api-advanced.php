@@ -224,8 +224,8 @@ function webmonitor_advanced_extract_api_key($request) {
     return $api_key;
 }
 
-// API Key validation function
-function webmonitor_advanced_validate_api_key($request) {
+// API Key verification function
+function webmonitor_advanced_verify_api_key($request) {
     // TEMPORARILY DISABLED FOR DEBUGGING
     return true;
     
@@ -295,6 +295,132 @@ function webmonitor_advanced_register_routes() {
         'callback' => 'webmonitor_advanced_alerts',
         'permission_callback' => '__return_true'
     ));
+    
+    register_rest_route('webmonitor-advanced/v1', '/logs', array(
+        'methods' => 'GET',
+        'callback' => 'webmonitor_advanced_logs',
+        'permission_callback' => '__return_true'
+    ));
+    
+    register_rest_route('webmonitor-advanced/v1', '/recommendations', array(
+        'methods' => 'GET',
+        'callback' => 'webmonitor_advanced_recommendations',
+        'permission_callback' => '__return_true'
+    ));
+}
+
+// Log each API request for access summary (no SSH/cPanel needed)
+add_action('init', 'webmonitor_advanced_maybe_log_request', 1);
+function webmonitor_advanced_maybe_log_request() {
+    // Only log requests to our API (avoid logging every page view)
+    if (strpos($_SERVER['REQUEST_URI'], 'webmonitor-advanced') === false) {
+        return;
+    }
+    $log = get_option('webmonitor_request_log', array());
+    if (!is_array($log)) $log = array();
+    $entry = array(
+        'time' => current_time('mysql'),
+        'url' => isset($_SERVER['REQUEST_URI']) ? sanitize_text_field($_SERVER['REQUEST_URI']) : '',
+        'method' => isset($_SERVER['REQUEST_METHOD']) ? sanitize_text_field($_SERVER['REQUEST_METHOD']) : 'GET',
+        'ip' => isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field($_SERVER['REMOTE_ADDR']) : '',
+        'status' => 200
+    );
+    array_unshift($log, $entry);
+    $log = array_slice($log, 0, 200);
+    update_option('webmonitor_request_log', $log, false);
+}
+
+function webmonitor_advanced_logs($request) {
+    webmonitor_advanced_verify_api_key($request);
+    
+    $error_log_lines = array();
+    // Consider enabled if WP_DEBUG + WP_DEBUG_LOG are on, or if debug.log exists and is readable
+    $debug_log_on = defined('WP_DEBUG') && WP_DEBUG && defined('WP_DEBUG_LOG') && WP_DEBUG_LOG;
+    $log_file = defined('WP_DEBUG_LOG') && WP_DEBUG_LOG && is_string(WP_DEBUG_LOG)
+        ? WP_DEBUG_LOG
+        : (defined('WP_CONTENT_DIR') ? WP_CONTENT_DIR . '/debug.log' : dirname(__FILE__, 2) . '/debug.log');
+    $log_file_exists = file_exists($log_file) && is_readable($log_file);
+    $error_log_enabled = ($debug_log_on || $log_file_exists);
+
+    $log_message = '';
+    if (!$debug_log_on && !$log_file_exists) {
+        $log_message = 'Logging is DISABLED. Please add define("WP_DEBUG", true); and define("WP_DEBUG_LOG", true); to your wp-config.php.';
+    } elseif ($debug_log_on && !$log_file_exists) {
+        $log_message = 'Logging is ENABLED, but the log file has not been created yet at ' . str_replace(ABSPATH, '', $log_file) . '. WordPress only creates this file when the first error occurs.';
+    } elseif ($log_file_exists && !is_readable($log_file)) {
+        $log_message = 'Log file found at ' . str_replace(ABSPATH, '', $log_file) . ' but it is NOT READABLE by the web server. Check file permissions.';
+    }
+        $lines = @file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines !== false) {
+            $lines = array_slice($lines, -200);
+            foreach ($lines as $line) {
+                $error_log_lines[] = array(
+                    'raw' => $line,
+                    'time' => preg_match('/^\[([^\]]+)\]/', $line, $m) ? $m[1] : ''
+                );
+            }
+        }
+    }
+    
+    // Access summary from our request log (stored by plugin)
+    $request_log = get_option('webmonitor_request_log', array());
+    if (!is_array($request_log)) $request_log = array();
+    
+    $by_status = array();
+    $by_url = array();
+    foreach ($request_log as $entry) {
+        $s = isset($entry['status']) ? (int) $entry['status'] : 200;
+        $by_status[$s] = (isset($by_status[$s]) ? $by_status[$s] : 0) + 1;
+        $url = isset($entry['url']) ? $entry['url'] : '';
+        if ($url) {
+            $by_url[$url] = (isset($by_url[$url]) ? $by_url[$url] : 0) + 1;
+        }
+    }
+    arsort($by_url);
+    $top_urls = array();
+    $i = 0;
+    foreach ($by_url as $url => $count) {
+        if ($i >= 20) break;
+        $top_urls[] = array('url' => $url, 'count' => $count);
+        $i++;
+    }
+    
+    return array(
+        'error_log' => array(
+            'enabled' => $error_log_enabled,
+            'log_file_path' => str_replace(ABSPATH, '', $log_file),
+            'message' => $log_message,
+            'lines' => array_slice($error_log_lines, -100),
+            'count' => count($error_log_lines)
+        ),
+        'access_summary' => array(
+            'by_status' => $by_status,
+            'top_urls' => $top_urls,
+            'total_requests' => count($request_log)
+        )
+    );
+}
+
+function webmonitor_advanced_recommendations($request) {
+    webmonitor_advanced_verify_api_key($request);
+    
+    $perf = webmonitor_advanced_performance($request);
+    $seo = webmonitor_advanced_seo($request);
+    $sec = webmonitor_advanced_security($request);
+    
+    $with_source = array();
+    foreach (array('performance' => (isset($perf['recommendations']) ? $perf['recommendations'] : array()), 'seo' => (isset($seo['recommendations']) ? $seo['recommendations'] : array()), 'security' => (isset($sec['recommendations']) ? $sec['recommendations'] : array())) as $src => $list) {
+        foreach ((array) $list as $r) {
+            if (is_string($r)) {
+                $with_source[] = array('text' => $r, 'source' => $src);
+            }
+        }
+    }
+    
+    return array(
+        'recommendations' => $with_source,
+        'count' => count($with_source)
+    );
 }
 
 function webmonitor_advanced_health_check($request) {

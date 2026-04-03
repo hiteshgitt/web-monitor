@@ -1,6 +1,7 @@
 const axios = require('axios');
 const Website = require('../models/Website');
 const MonitoringData = require('../models/MonitoringData');
+const Incident = require('../models/Incident');
 const analyticsService = require('./analyticsService');
 const performanceService = require('./performanceService');
 const securityService = require('./securityService');
@@ -69,6 +70,9 @@ class MonitoringService {
       });
       
       await monitoringData.save();
+
+      // Track incidents (downtime) when status is not healthy
+      await this.recordIncident(website._id, result.status, result.error?.message || '', new Date());
       
       // Update website status with all dynamic data
       website.status = result.status;
@@ -158,6 +162,33 @@ class MonitoringService {
       });
       
       await monitoringData.save();
+      await this.recordIncident(website._id, 'error', error.message, new Date());
+    }
+  }
+
+  async recordIncident(websiteId, status, message, timestamp) {
+    const isHealthy = status === 'healthy';
+    const open = await Incident.findOne({ websiteId, endedAt: null }).sort({ startedAt: -1 });
+    if (isHealthy) {
+      if (open) {
+        open.endedAt = timestamp;
+        await open.save();
+      }
+    } else {
+      if (open) {
+        open.lastChecked = timestamp;
+        open.status = status;
+        open.message = message || open.message;
+        await open.save();
+      } else {
+        await Incident.create({
+          websiteId,
+          startedAt: timestamp,
+          status,
+          message: message || '',
+          lastChecked: timestamp
+        });
+      }
     }
   }
 
@@ -188,50 +219,77 @@ class MonitoringService {
     }
   }
 
+  // Build WordPress REST URL: pretty (wp-json) or fallback (?rest_route=) when rewrites fail
+  _wpApiUrl(wpBase, endpoint, useRestRoute = false) {
+    if (useRestRoute) {
+      return `${wpBase}/?rest_route=/webmonitor-advanced/v1/${endpoint}`;
+    }
+    return `${wpBase}/wp-json/webmonitor-advanced/v1/${endpoint}`;
+  }
+
   // WordPress health check – return "error"/"offline" if API doesn't exist
   async checkWordPress(website) {
+    const wpBase = (website.url || '').replace(/\/$/, '');
+    if (!wpBase) {
+      return { status: 'error', error: { message: 'Website URL is missing.', code: 'INVALID_URL' } };
+    }
+    const auth = { timeout: 10000, headers: { 'Authorization': `Bearer ${website.apiKey}` } };
+    const validateStatus = (s) => s < 500;
+
+    const tryFetch = async (useRestRoute) => {
+      const u = (ep) => this._wpApiUrl(wpBase, ep, useRestRoute);
+      return Promise.all([
+        axios.get(u('health'), { ...auth, validateStatus }),
+        axios.get(u('analytics'), auth),
+        axios.get(u('performance'), auth),
+        axios.get(u('seo'), auth),
+        axios.get(u('security'), auth)
+      ]);
+    };
+
     try {
-        // Get all dynamic data from the advanced plugin
-        const [healthResponse, analyticsResponse, performanceResponse, seoResponse, securityResponse] = await Promise.all([
-          axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/health`, {
-            timeout: 10000,
-            headers: {
-              'Authorization': `Bearer ${website.apiKey}`
-            },
-            validateStatus: (s) => s < 500
-          }),
-          axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/analytics`, {
-            timeout: 10000,
-            headers: {
-              'Authorization': `Bearer ${website.apiKey}`
-            }
-          }),
-          axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/performance`, {
-            timeout: 10000,
-            headers: {
-              'Authorization': `Bearer ${website.apiKey}`
-            }
-          }),
-          axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/seo`, {
-            timeout: 10000,
-            headers: {
-              'Authorization': `Bearer ${website.apiKey}`
-            }
-          }),
-          axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/security`, {
-            timeout: 10000,
-            headers: {
-              'Authorization': `Bearer ${website.apiKey}`
-            }
-          })
-        ]);
+      let healthResponse, analyticsResponse, performanceResponse, seoResponse, securityResponse;
+      let responses;
       
-      // Check if health endpoint exists (404 = API not installed)
+      try {
+        responses = await tryFetch(false);
+      } catch (networkError) {
+        console.error(`[Monitor] Connection error for ${website.url}:`, networkError.message);
+        return {
+          status: 'offline',
+          error: {
+            message: `Site unreachable: ${networkError.message}`,
+            code: networkError.code || 'CONNECTION_FAILED'
+          }
+        };
+      }
+
+      healthResponse = responses[0];
+      analyticsResponse = responses[1];
+      performanceResponse = responses[2];
+      seoResponse = responses[3];
+      securityResponse = responses[4];
+
+      // If 404 with pretty URL, retry with ?rest_route= (works when rewrites fail despite Post name)
+      if (healthResponse.status === 404) {
+        try {
+          responses = await tryFetch(true);
+          healthResponse = responses[0];
+          analyticsResponse = responses[1];
+          performanceResponse = responses[2];
+          seoResponse = responses[3];
+          securityResponse = responses[4];
+        } catch (e) {
+          // ignore retry errors, use original 404
+        }
+      }
+
+      // Check if health endpoint exists (404 = API not installed or site offline)
       if (healthResponse.status === 404) {
         return {
-          status: 'error',
+          status: 'offline',
           error: {
-            message: 'WordPress Web Monitor plugin not found. Install the plugin first.',
+            message: 'WordPress Web Monitor plugin not found or site is returning 404.',
             code: 'API_NOT_FOUND'
           }
         };
@@ -249,7 +307,7 @@ class MonitoringService {
       
       if (healthResponse.status !== 200) {
         return {
-          status: 'error',
+          status: 'offline',
           error: {
             message: `API returned status ${healthResponse.status}`,
             code: 'API_ERROR'
@@ -786,11 +844,8 @@ class MonitoringService {
       // Get plugins/packages data
       try {
         if (website.platform === 'wordpress') {
-          const pluginsResponse = await axios.get(`${website.url}/wp-json/webmonitor-advanced/v1/plugins`, {
-            timeout: 10000,
-            headers: { 'Authorization': `Bearer ${website.apiKey}` }
-          });
-          pluginsData = pluginsResponse.data;
+          const pluginsResponse = await this._fetchWordPressEndpoint(website, 'plugins');
+          if (pluginsResponse && pluginsResponse.data) pluginsData = pluginsResponse.data;
         } else if (website.platform === 'nextjs') {
           // Next.js libraries handled separately
         } else if (website.platform === 'laravel' || website.platform === 'codeigniter' || website.platform === 'php') {
@@ -809,6 +864,15 @@ class MonitoringService {
         pluginsData = null;
       }
 
+      let logsData = null;
+      let recommendationsData = null;
+      try {
+        logsData = await this.getLogs(website);
+        recommendationsData = await this.getRecommendations(website);
+      } catch (e) {
+        console.error('Logs/recommendations fetch error:', e.message);
+      }
+
       let serverInfo = null;
       try {
         serverInfo = await this.getServerInfo(website);
@@ -823,6 +887,8 @@ class MonitoringService {
         security: securityData,
         aiInsights: aiInsights,
         plugins: pluginsData,
+        logs: logsData,
+        recommendations: recommendationsData,
         serverInfo,
         timestamp: new Date(),
         website: {
@@ -840,6 +906,91 @@ class MonitoringService {
       apiError.originalError = error;
       throw apiError;
     }
+  }
+
+  async _fetchWordPressEndpoint(website, endpoint) {
+    const wpBase = (website.url || '').replace(/\/$/, '');
+    const opts = {
+      timeout: 10000,
+      headers: { 'Authorization': `Bearer ${website.apiKey}` },
+      validateStatus: (s) => s < 500
+    };
+    let res = await axios.get(this._wpApiUrl(wpBase, endpoint, false), opts).catch(() => null);
+    if (!res || res.status === 404) {
+      res = await axios.get(this._wpApiUrl(wpBase, endpoint, true), opts).catch(() => null);
+    }
+    return res;
+  }
+
+  async getLogs(website) {
+    const fallback = { error_log: { enabled: false, message: '' }, access_summary: {} };
+    try {
+      if (website.platform === 'wordpress') {
+        const res = await this._fetchWordPressEndpoint(website, 'logs');
+        if (res && res.data) return res.data;
+        return fallback;
+      }
+      if (website.platform === 'nextjs') {
+        const base = website.url.replace(/\/$/, '');
+        const res = await axios.get(`${base}/api/webmonitor/logs`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        });
+        return res.data || fallback;
+      }
+      if (['laravel', 'codeigniter', 'php'].includes(website.platform)) {
+        const base = website.url.replace(/\/$/, '');
+        const res = await axios.get(`${base}/api/webmonitor/logs`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        });
+        return res.data || fallback;
+      }
+    } catch (error) {
+      console.error('Logs fetch error:', error.message);
+      fallback.error_log.message = error.message || 'Logs endpoint not available. Add /api/webmonitor/logs to your integration.';
+    }
+    return fallback;
+  }
+
+  async getRecommendations(website) {
+    const fallback = { recommendations: [], count: 0 };
+    try {
+      if (website.platform === 'wordpress') {
+        const res = await this._fetchWordPressEndpoint(website, 'recommendations');
+        if (res && res.data) return res.data;
+        return fallback;
+      }
+      if (website.platform === 'nextjs') {
+        const base = website.url.replace(/\/$/, '');
+        const res = await axios.get(`${base}/api/webmonitor/recommendations`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        });
+        return res.data || fallback;
+      }
+      if (['laravel', 'codeigniter', 'php'].includes(website.platform)) {
+        const base = website.url.replace(/\/$/, '');
+        const res = await axios.get(`${base}/api/webmonitor/recommendations`, {
+          timeout: 10000,
+          headers: { 'Authorization': `Bearer ${website.apiKey}` }
+        });
+        return res.data || fallback;
+      }
+    } catch (error) {
+      console.error('Recommendations fetch error:', error.message);
+    }
+    return fallback;
+  }
+
+  async getIncidents(websiteId, days = 30) {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    const incidents = await Incident.find({
+      websiteId,
+      $or: [{ startedAt: { $gte: since } }, { endedAt: null }]
+    }).sort({ startedAt: -1 }).limit(100).lean();
+    return incidents;
   }
 
   // Enhanced Next.js check with all advanced features

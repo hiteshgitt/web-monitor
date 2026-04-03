@@ -64,6 +64,7 @@ export const useNotifications = () => {
     refreshAlerts: () => notificationService.fetchAllAlerts(),
     clearNotifications: () => notificationService.clearNotifications(),
     markAsRead: (alertId) => notificationService.markAsRead(alertId),
+    markAllAsSeen: () => notificationService.markAllAsSeen(),
     getNotificationCountForWebsite: (websiteId) => notificationService.getNotificationCountForWebsite(websiteId),
     getAlertsForWebsite: (websiteId) => notificationService.getAlertsForWebsite(websiteId),
     getAlertsByWebsite: () => notificationService.getAlertsByWebsite()
