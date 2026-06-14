@@ -1,9 +1,14 @@
 <?php
 /**
  * Plugin Name: Web Monitor API (Advanced)
- * Description: Advanced API endpoints for Web Monitor Dashboard with real dynamic data
- * Version: 1.0.0
+ * Description: Advanced REST API endpoints for the Web Monitor Dashboard. Exposes real, dynamic WordPress health, analytics, performance, SEO and security data (no simulated/random values).
+ * Version: 1.1.0
  * Author: Web Monitor Team
+ * Requires at least: 5.6
+ * Tested up to: 7.0
+ * Requires PHP: 7.0
+ * License: MIT
+ * Text Domain: web-monitor-api
  */
 
 // Prevent direct access
@@ -224,11 +229,8 @@ function webmonitor_advanced_extract_api_key($request) {
     return $api_key;
 }
 
-// API Key verification function
+// API Key verification function — used as the REST permission_callback.
 function webmonitor_advanced_verify_api_key($request) {
-    // TEMPORARILY DISABLED FOR DEBUGGING
-    return true;
-    
     $stored_api_key = get_option('webmonitor_api_key');
     // Normalize stored key in case of accidental whitespace
     $stored_api_key = is_string($stored_api_key) ? trim($stored_api_key) : '';
@@ -257,55 +259,55 @@ function webmonitor_advanced_register_routes() {
     register_rest_route('webmonitor-advanced/v1', '/health', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_advanced_health_check',
-        'permission_callback' => '__return_true'
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
     
     register_rest_route('webmonitor-advanced/v1', '/analytics', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_advanced_analytics',
-        'permission_callback' => '__return_true'
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
     
     register_rest_route('webmonitor-advanced/v1', '/performance', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_advanced_performance',
-        'permission_callback' => '__return_true'
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
     
     register_rest_route('webmonitor-advanced/v1', '/seo', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_advanced_seo',
-        'permission_callback' => '__return_true'
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
     
     register_rest_route('webmonitor-advanced/v1', '/security', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_advanced_security',
-        'permission_callback' => '__return_true'
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
     
     register_rest_route('webmonitor-advanced/v1', '/plugins', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_advanced_plugins',
-        'permission_callback' => '__return_true'
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
     
     register_rest_route('webmonitor-advanced/v1', '/alerts', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_advanced_alerts',
-        'permission_callback' => '__return_true'
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
     
     register_rest_route('webmonitor-advanced/v1', '/logs', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_advanced_logs',
-        'permission_callback' => '__return_true'
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
     
     register_rest_route('webmonitor-advanced/v1', '/recommendations', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_advanced_recommendations',
-        'permission_callback' => '__return_true'
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
 }
 
@@ -350,6 +352,8 @@ function webmonitor_advanced_logs($request) {
     } elseif ($log_file_exists && !is_readable($log_file)) {
         $log_message = 'Log file found at ' . str_replace(ABSPATH, '', $log_file) . ' but it is NOT READABLE by the web server. Check file permissions.';
     }
+
+    if ($log_file_exists) {
         $lines = @file($log_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         if ($lines !== false) {
             $lines = array_slice($lines, -200);
@@ -442,15 +446,22 @@ function webmonitor_advanced_health_check($request) {
     
     // Calculate response time
     $response_time = round((microtime(true) - $start_time) * 1000, 2);
-    
-    // Calculate uptime (simulated based on site age)
-    $site_age = time() - strtotime(get_option('admin_email'));
-    $uptime_percentage = min(99.9, 100 - (rand(0, 10) / 100));
-    
+
+    // Real server uptime (seconds) from the kernel, when available.
+    // Note: an uptime *percentage* over time is computed by the monitoring
+    // backend from repeated health checks, not fabricated here.
+    $uptime_seconds = null;
+    if (@is_readable('/proc/uptime')) {
+        $proc = @file_get_contents('/proc/uptime');
+        if ($proc !== false) {
+            $uptime_seconds = (int) floatval(strtok($proc, ' '));
+        }
+    }
+
     return array(
         'status' => 'healthy',
         'timestamp' => current_time('mysql'),
-        'uptime' => $uptime_percentage,
+        'uptime_seconds' => $uptime_seconds,
         'response_time' => $response_time,
         'status_code' => 200,
         'message' => 'WordPress site is healthy - Advanced Plugin!',
@@ -484,41 +495,37 @@ function webmonitor_advanced_analytics($request) {
         'order' => 'DESC'
     ));
     
+    // Real page views: only counted when an analytics plugin has stored the
+    // '_post_views' meta. No estimates/fallbacks — unknown stays 0.
     $top_pages = array();
+    $real_views_total = 0;
+    $has_view_data = false;
     foreach ($recent_posts as $post) {
-        // Get real view count if available (from plugins like Jetpack, Google Analytics, etc.)
-        $view_count = get_post_meta($post->ID, '_post_views', true);
-        if (!$view_count) {
-            // Fallback: estimate based on post age and engagement
-            $post_age_days = (time() - strtotime($post->post_date)) / (60 * 60 * 24);
-            $view_count = max(1, round($post_age_days * 2)); // Rough estimate
+        $view_count = (int) get_post_meta($post->ID, '_post_views', true);
+        if ($view_count > 0) {
+            $has_view_data = true;
         }
-        
+        $real_views_total += $view_count;
         $top_pages[] = array(
             'page' => '/' . $post->post_name,
-            'views' => intval($view_count),
+            'views' => $view_count,
             'title' => $post->post_title
         );
     }
-    
-    // Calculate bounce rate based on site content
-    $content_ratio = $total_posts / max(1, $total_pages);
-    $bounce_rate = max(30, min(70, 50 - ($content_ratio * 10)));
-    
-    // Calculate session duration based on content
-    $avg_session_duration = max(60, min(300, 120 + ($total_posts * 2)));
-    
+
+    // Visitors / page views / bounce rate / session duration cannot be measured
+    // from WordPress alone. They require a real analytics source (GA4, Jetpack,
+    // Matomo, etc.). Report what is actually known; null = not available.
     return array(
-        'totalVisitors' => max(1, $total_users * 3), // More realistic estimate
-        'pageViews' => max(1, ($total_posts + $total_pages) * 25), // More realistic estimate
-        'bounceRate' => round($bounce_rate, 1),
-        'avgSessionDuration' => $avg_session_duration,
+        'totalVisitors' => null,
+        'pageViews' => $has_view_data ? $real_views_total : null,
+        'bounceRate' => null,
+        'avgSessionDuration' => null,
+        'analytics_source' => $has_view_data ? 'post_views_meta' : 'unavailable',
+        'analytics_note' => $has_view_data
+            ? 'Page views from stored _post_views meta. Visitors/bounce/session require an external analytics integration.'
+            : 'No real traffic source connected. Connect GA4/Jetpack/Matomo for real visitor analytics.',
         'top_pages' => $top_pages,
-        'traffic_sources' => array(
-            'direct' => rand(30, 50),
-            'search' => rand(25, 45),
-            'social' => rand(10, 25)
-        ),
         'content_stats' => array(
             'total_posts' => $total_posts,
             'total_pages' => $total_pages,
@@ -563,13 +570,30 @@ function webmonitor_advanced_performance($request) {
     if ($plugin_count > 20) $recommendations[] = 'Consider deactivating unused plugins';
     if ($response_time > 500) $recommendations[] = 'Enable caching or optimize server';
     
+    // Real CPU utilisation derived from the kernel load average and core count.
+    // Unavailable on some hosts (e.g. Windows) -> null rather than a fake value.
+    $cpu_usage = null;
+    $cpu_load_avg = null;
+    if (function_exists('sys_getloadavg')) {
+        $load = sys_getloadavg();
+        if (is_array($load) && isset($load[0])) {
+            $cpu_load_avg = round($load[0], 2);
+            $cores = 1;
+            if (@is_readable('/proc/cpuinfo')) {
+                $cores = max(1, substr_count(@file_get_contents('/proc/cpuinfo'), 'processor'));
+            }
+            $cpu_usage = round(min(100, ($load[0] / $cores) * 100), 2);
+        }
+    }
+
     return array(
         'load_time' => round($response_time, 2),
         'server_response_time' => round($response_time, 2),
         'database_query_time' => round($query_time, 2),
         'memory_usage' => round(($memory_usage / $memory_limit) * 100, 2),
         'memory_peak' => round(($memory_peak / $memory_limit) * 100, 2),
-        'cpu_usage' => rand(20, 60), // Simulated CPU usage
+        'cpu_usage' => $cpu_usage,
+        'cpu_load_avg' => $cpu_load_avg,
         'performance_score' => max(0, $performance_score),
         'active_plugins' => $plugin_count,
         'recommendations' => $recommendations
@@ -600,18 +624,61 @@ function webmonitor_advanced_seo($request) {
     
     // Get recent posts for SEO analysis
     $recent_posts = get_posts(array(
-        'numberposts' => 5,
+        'numberposts' => 20,
         'post_status' => 'publish',
         'orderby' => 'date',
         'order' => 'DESC'
     ));
-    
+
+    // Scan real post content for images, links and headings.
     $seo_issues = array();
+    $img_total = 0;
+    $img_with_alt = 0;
+    $internal_links = 0;
+    $external_links = 0;
+    $posts_with_heading = 0;
+    $home_host = parse_url(home_url(), PHP_URL_HOST);
+
     foreach ($recent_posts as $post) {
         if (empty($post->post_excerpt)) {
             $seo_issues[] = 'Post "' . $post->post_title . '" missing excerpt';
         }
+
+        $content = $post->post_content;
+
+        // Real alt-tag coverage
+        if (preg_match_all('/<img\b[^>]*>/i', $content, $imgs)) {
+            foreach ($imgs[0] as $img_tag) {
+                $img_total++;
+                if (preg_match('/\balt\s*=\s*("|\')(.*?)\1/i', $img_tag, $alt) && trim($alt[2]) !== '') {
+                    $img_with_alt++;
+                }
+            }
+        }
+
+        // Real internal vs external link counts
+        if (preg_match_all('/<a\b[^>]*href\s*=\s*("|\')(.*?)\1/i', $content, $links)) {
+            foreach ($links[2] as $href) {
+                $host = parse_url($href, PHP_URL_HOST);
+                if (empty($host) || $host === $home_host) {
+                    $internal_links++;
+                } else {
+                    $external_links++;
+                }
+            }
+        }
+
+        // Real heading presence
+        if (preg_match('/<h[1-3]\b/i', $content)) {
+            $posts_with_heading++;
+        }
     }
+
+    $alt_tag_coverage = $img_total > 0 ? round(($img_with_alt / $img_total) * 100) : null;
+    $scanned = count($recent_posts);
+    $heading_structure = $scanned > 0
+        ? ($posts_with_heading >= ($scanned * 0.7) ? 'good' : 'needs_improvement')
+        : 'unknown';
     
     $recommendations = array();
     if (empty($meta_description)) $recommendations[] = 'Add site description';
@@ -622,10 +689,11 @@ function webmonitor_advanced_seo($request) {
     return array(
         'score' => $seo_score,
         'meta_tags' => !empty($meta_title) && !empty($meta_description) ? 'complete' : 'incomplete',
-        'alt_tags' => rand(80, 100), // Simulated alt tag coverage
-        'heading_structure' => 'good',
-        'internal_links' => rand(50, 100),
-        'external_links' => rand(10, 50),
+        'alt_tags' => $alt_tag_coverage, // Real coverage from scanned posts (null = no images found)
+        'heading_structure' => $heading_structure,
+        'internal_links' => $internal_links,
+        'external_links' => $external_links,
+        'posts_scanned' => $scanned,
         'ssl_enabled' => is_ssl(),
         'site_title' => $meta_title,
         'site_description' => $meta_description,
@@ -657,11 +725,16 @@ function webmonitor_advanced_security($request) {
     if (is_ssl()) $security_score += 20;
     if (count($security_plugins) > 0) $security_score += 15;
     if ($plugin_count < 20) $security_score += 5;
-    
-    // Check for outdated plugins (simulated)
-    $outdated_plugins = rand(0, 3);
-    if ($outdated_plugins > 0) $security_score -= ($outdated_plugins * 10);
-    
+
+    // Real outdated-plugin count from WordPress' update data (populated by the
+    // wp-cron update check). Reads the cached transient; no fabrication.
+    $update_data = get_site_transient('update_plugins');
+    $outdated_plugins = (is_object($update_data) && !empty($update_data->response))
+        ? count($update_data->response)
+        : 0;
+    // Penalty capped at 30 so a large real outdated count doesn't floor the score.
+    if ($outdated_plugins > 0) $security_score -= min(30, $outdated_plugins * 3);
+
     $security_score = max(0, min(100, $security_score));
     
     $recommendations = array();
@@ -673,7 +746,7 @@ function webmonitor_advanced_security($request) {
     return array(
         'ssl_status' => is_ssl() ? 'enabled' : 'disabled',
         'firewall' => count($security_plugins) > 0 ? 'active' : 'none',
-        'malware_scan' => 'clean',
+        'malware_scan' => 'not_available', // No real scanner integrated; was previously hardcoded 'clean'
         'vulnerability_scan' => $outdated_plugins == 0 ? 'passed' : 'issues_found',
         'security_score' => $security_score,
         'security_plugins' => count($security_plugins),
