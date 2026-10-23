@@ -119,6 +119,12 @@ const AuthPage = ({ mode }) => {
             </button>
           </form>
 
+          {isSignup && (
+            <p className="text-[12px] text-ink-muted mt-4 text-center">
+              By creating an account you agree to the <Link to="/terms" className="font-semibold text-brand-600 hover:text-brand-800">Terms</Link> and <Link to="/privacy" className="font-semibold text-brand-600 hover:text-brand-800">Privacy Policy</Link>.
+            </p>
+          )}
+
           <p className="text-sm text-ink-muted mt-8 text-center">
             {isSignup ? 'Already have an account?' : 'New to Web Monitor?'}{' '}
             <Link to={isSignup ? '/login' : '/signup'} state={location.state} className="font-bold text-brand-600 hover:text-brand-800">

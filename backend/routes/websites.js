@@ -3,6 +3,7 @@ const router = express.Router();
 const Website = require('../models/Website');
 const MonitoringData = require('../models/MonitoringData');
 const AnalyticsData = require('../models/AnalyticsData');
+const Incident = require('../models/Incident');
 const monitoringService = require('../services/monitoringService');
 const { loadOwnedWebsite } = require('../middleware/auth');
 
@@ -107,7 +108,13 @@ router.put('/:id', async (req, res) => {
 // Delete website
 router.delete('/:id', async (req, res) => {
   try {
-    await Website.deleteOne({ _id: req.website._id });
+    // Remove the site's history too, so deleting really deletes (privacy policy relies on this)
+    await Promise.all([
+      MonitoringData.deleteMany({ websiteId: req.website._id }),
+      Incident.deleteMany({ websiteId: req.website._id }),
+      AnalyticsData.deleteMany({ websiteId: req.website._id }),
+      Website.deleteOne({ _id: req.website._id })
+    ]);
     res.json({ message: 'Website deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

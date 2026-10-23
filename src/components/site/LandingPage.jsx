@@ -390,6 +390,8 @@ const LandingPage = () => {
           <nav className="flex gap-6 text-sm font-semibold text-ink-muted">
             {NAV.map((item) => <a key={item.href} href={item.href} className="hover:text-brand-600">{item.label}</a>)}
             <Link to="/login" className="hover:text-brand-600">Sign in</Link>
+            <Link to="/privacy" className="hover:text-brand-600">Privacy</Link>
+            <Link to="/terms" className="hover:text-brand-600">Terms</Link>
           </nav>
           <p className="text-sm text-ink-muted">© {new Date().getFullYear()} Ruyalab</p>
         </div>
