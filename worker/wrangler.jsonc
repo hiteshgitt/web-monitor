@@ -20,7 +20,7 @@
     {
       "binding": "DB",
       "database_name": "web-monitor",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "d282ae1e-596f-4441-86b5-1769d9696b02",
       "migrations_dir": "migrations"
     }
   ],

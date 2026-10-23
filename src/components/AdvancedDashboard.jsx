@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, AreaChart, Area, ScatterChart, Scatter, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
@@ -60,8 +60,9 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
   const [aiQuery, setAiQuery] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiMessages, setAiMessages] = useState([
-    { type: 'ai', text: `Hello! I'm Zealot, your AI assistant for ${selectedWebsite.name}. Ask me anything about this site's analytics, performance, SEO, or security. You can also paste an error message or fix suggestion and I'll explain how it relates to your data.` }
+    { type: 'ai', text: `Ask about ${selectedWebsite.name}. I answer from this site's monitoring data. You can also paste an error or a fix and I'll relate it to the site.` }
   ]);
+  const aiScrollRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [advancedData, setAdvancedData] = useState(null);
   const [dateRange, setDateRange] = useState('7daysAgo');
@@ -259,6 +260,12 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
       setCardOrder(['uptime', 'response', 'visitors', 'security']);
     }
   }, [selectedWebsite?._id, dateRange]);
+
+  useEffect(() => {
+    const el = aiScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [aiMessages, aiLoading, showAI]);
 
   const { latencySeries } = useMonitoringHistory(selectedWebsite?._id, 24);
 
@@ -487,22 +494,14 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
 
       if (!res.ok) {
         const errMsg = data?.error || data?.message || data?.details?.message || `Request failed (${res.status})`;
-        let errorText = `Zealot is unavailable: ${errMsg}`;
-        if (res.status === 404) {
-          errorText += '\n\nPossible issues:\n- API endpoint not found\n- Invalid website ID\n- Backend route not registered';
-        } else if (res.status === 503) {
-          errorText += '\n\nCheck that GOOGLE_AI_API_KEY is set in backend/config.env and the backend was restarted.';
-        } else if (res.status === 401 || res.status === 403) {
-          errorText += '\n\nAPI key may be invalid or expired. Verify your Google Gemini API key.';
-        }
-        setAiMessages(prev => [...prev, { type: 'ai', text: errorText }]);
+        setAiMessages(prev => [...prev, { type: 'ai', text: errMsg }]);
         return;
       }
 
       const answer = (data && (data.answer ?? data.response)) || (typeof data === 'string' ? data : 'No answer returned.');
       setAiMessages(prev => [...prev, { type: 'ai', text: answer }]);
     } catch (err) {
-      setAiMessages(prev => [...prev, { type: 'ai', text: `Zealot request failed: ${err.message}. Ensure the backend is running and an AI API key is configured (OPENAI_API_KEY, ANTHROPIC_API_KEY, or GOOGLE_AI_API_KEY).` }]);
+      setAiMessages(prev => [...prev, { type: 'ai', text: `Zealot could not reply: ${err.message}` }]);
     } finally {
       setAiLoading(false);
     }
@@ -1861,14 +1860,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
           };
 
           const list = getFilteredList(pluginView);
-          const showList = list.length > 0 || pluginView === 'All';
-          const displayList = showList && list.length === 0 && pluginView === 'All'
-            ? [
-                { name: 'Advanced Monitoring Core', version: '2.4.1', status: 'active', author: 'UpTower' },
-                { name: 'Security Shield Pro', version: '1.0.5', status: 'active', author: 'Web Monitor' },
-                { name: 'Performance Optimizer', version: '3.2.0', status: 'active', author: 'Google' }
-              ]
-            : list;
+          const displayList = list;
 
           return (
             <div className="space-y-6">
@@ -1930,7 +1922,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                         const version = item.version || item.installed_version || item.current_version || '—';
                         const author = item.author || item.author_name || item.maintainer || (isPackages ? 'Composer' : isLibraries ? 'npm' : 'Plugin Author');
                         const newVersion = item.new_version || item.latest_version || item.update_version;
-                        const isActive = item.is_active || item.status === 'active' || (!isPackages && !isLibraries);
+                        const isActive = item.is_active === true || item.status === 'active';
                         const isOutdated = item.is_outdated || item.update_available || item.has_update;
 
                         return (
@@ -1991,57 +1983,79 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
 
       {/* Zealot Panel */}
       {showAI && (
-        <div className="fixed inset-x-4 bottom-24 bg-white rounded-2xl shadow-card max-h-96 flex flex-col z-50">
-          <div className="bg-linear-to-r from-purple-600 to-brand-600 text-white p-4 rounded-t-2xl flex justify-between items-center">
-            <h3 className="font-bold">Zealot - Advanced Analytics</h3>
-            <button onClick={() => setShowAI(false)}>
-              <X size={20} />
+        <div className="fixed z-50 bottom-24 right-4 sm:right-6 w-[min(400px,calc(100vw-2rem))] h-[min(560px,calc(100vh-8rem))] bg-white rounded-3xl shadow-card border border-brand-100 flex flex-col overflow-hidden">
+          <div className="shrink-0 bg-linear-to-r from-purple-600 to-brand-600 text-white px-4 py-3 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
+              <Brain size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-extrabold tracking-tight leading-none">Zealot</h3>
+              <p className="text-[11px] text-white/80 truncate mt-1">{selectedWebsite?.name}</p>
+            </div>
+            <button type="button" onClick={() => setShowAI(false)} className="p-2 rounded-xl hover:bg-white/15" aria-label="Close Zealot">
+              <X size={18} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div ref={aiScrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-brand-50/50">
             {aiMessages.map((msg, idx) => (
               <div key={idx} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] p-3 rounded-lg ${
+                <div className={`max-w-[85%] px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
                   msg.type === 'user'
-                    ? 'bg-brand-600 text-white rounded-br-none'
-                    : 'bg-brand-100 text-ink rounded-bl-none'
+                    ? 'bg-brand-600 text-white rounded-2xl rounded-br-md'
+                    : 'bg-white text-ink border border-brand-100 rounded-2xl rounded-bl-md shadow-sm'
                 }`}>
-                  <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                  {msg.text}
                 </div>
               </div>
             ))}
+            {aiMessages.length === 1 && !aiLoading && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {['Which plugins need an update?', 'What should I fix first?', 'How is uptime looking?'].map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => submitQueryToZealot(prompt)}
+                    className="px-3 py-1.5 rounded-full bg-white border border-brand-100 text-[11px] font-bold text-ink-soft hover:border-brand-300 hover:text-ink"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
             {aiLoading && (
               <div className="flex justify-start">
-                <div className="max-w-[80%] p-3 rounded-lg bg-brand-100 text-ink-soft rounded-bl-none flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-400 border-t-transparent" />
-                  <span className="text-sm">Fetching site data and asking Zealot...</span>
+                <div className="px-3.5 py-2.5 rounded-2xl rounded-bl-md bg-white border border-brand-100 text-ink-soft text-sm flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-brand-300 border-t-transparent" />
+                  Looking at this site…
                 </div>
               </div>
             )}
           </div>
-          <div className="p-4 border-t">
-            <div className="flex gap-2">
-              <input
-                type="text"
+          <form onSubmit={handleAISubmit} className="shrink-0 p-3 border-t border-brand-100 bg-white">
+            <div className="flex items-end gap-2">
+              <textarea
+                rows={2}
                 value={aiQuery}
                 onChange={(e) => setAiQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleAISubmit(e)}
-                placeholder="Ask a question or paste an error/fix/issue..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleAISubmit(e);
+                  }
+                }}
+                placeholder="Ask about this site, or paste an error…"
                 disabled={aiLoading}
-                className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-brand-500 disabled:opacity-60 disabled:bg-brand-50"
+                className="flex-1 resize-none p-3 text-sm border border-brand-100 rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-brand-500 disabled:opacity-60 disabled:bg-brand-50"
               />
               <button
-                onClick={handleAISubmit}
+                type="submit"
                 disabled={aiLoading || !aiQuery.trim()}
-                className="px-4 py-3 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="h-11 px-4 bg-brand-600 text-white text-sm font-bold rounded-2xl hover:bg-brand-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Send
               </button>
             </div>
-            <p className="text-xs text-ink-muted mt-1 px-1">
-              Zealot uses this site&apos;s real data. You can ask questions or paste issues/fixes for context-specific answers.
-            </p>
-          </div>
+          </form>
         </div>
       )}
 

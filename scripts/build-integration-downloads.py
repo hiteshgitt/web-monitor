@@ -82,7 +82,12 @@ def main():
                 archive.write(source, target)
             for target, text in spec.get('extra', {}).items():
                 archive.writestr(target, text)
-            archive.writestr('README.txt', spec['readme'])
+            # Keep the readme inside the first folder. A file beside that folder makes
+            # WordPress treat the zip root as the plugin and report "No valid plugins were found."
+            top_dirs = {target.split('/', 1)[0] for target in spec['files']}
+            top_dirs.update(target.split('/', 1)[0] for target in spec.get('extra', {}))
+            readme_path = f'{next(iter(top_dirs))}/README.txt' if len(top_dirs) == 1 else 'README.txt'
+            archive.writestr(readme_path, spec['readme'])
         print(f'{name}: {(OUT / name).stat().st_size // 1024} KB')
 
 

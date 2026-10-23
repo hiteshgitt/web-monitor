@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Web Monitor",
+    "slug": "web-monitor",
+    "scheme": "webmonitor",
+    "version": "1.0.2",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ruyalab.webmonitor"
+    },
+    "android": {
+      "package": "com.ruyalab.webmonitor",
+      "versionCode": 3,
+      "adaptiveIcon": {
+        "backgroundColor": "#5868cf",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.111600729792-qmdiib16v9bsibq288nho36drdm4piu5"
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ac817521-9e87-4618-9159-63b4c02e585c"
+      }
+    },
+    "owner": "hiteshgml"
+  }
+}

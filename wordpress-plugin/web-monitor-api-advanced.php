@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Web Monitor API (Advanced)
  * Description: Advanced REST API endpoints for the Web Monitor Dashboard. Exposes real, dynamic WordPress health, analytics, performance, SEO and security data (no simulated/random values).
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Web Monitor Team
  * Requires at least: 5.6
  * Tested up to: 7.0
@@ -737,12 +737,8 @@ function webmonitor_advanced_security($request) {
     if (count($security_plugins) > 0) $security_score += 15;
     if ($plugin_count < 20) $security_score += 5;
 
-    // Real outdated-plugin count from WordPress' update data (populated by the
-    // wp-cron update check). Reads the cached transient; no fabrication.
-    $update_data = get_site_transient('update_plugins');
-    $outdated_plugins = (is_object($update_data) && !empty($update_data->response))
-        ? count($update_data->response)
-        : 0;
+    // Same list WordPress shows on Plugins → Installed Plugins.
+    $outdated_plugins = count(webmonitor_plugin_updates());
     // Penalty capped at 30 so a large real outdated count doesn't floor the score.
     if ($outdated_plugins > 0) $security_score -= min(30, $outdated_plugins * 3);
 
@@ -768,10 +764,31 @@ function webmonitor_advanced_security($request) {
     );
 }
 
+// Plugins WordPress itself has an update for. Keyed by plugin file, value is the new version.
+// This is the list behind the "There is a new version" notices in wp-admin.
+function webmonitor_plugin_updates() {
+    $update_data = get_site_transient('update_plugins');
+    $updates = array();
+    if (!is_object($update_data) || empty($update_data->response) || !is_array($update_data->response)) {
+        return $updates;
+    }
+    foreach ($update_data->response as $file => $update) {
+        $new_version = '';
+        if (is_object($update) && !empty($update->new_version)) {
+            $new_version = (string) $update->new_version;
+        } elseif (is_array($update) && !empty($update['new_version'])) {
+            $new_version = (string) $update['new_version'];
+        }
+        $updates[$file] = $new_version;
+    }
+    return $updates;
+}
+
 function webmonitor_advanced_plugins($request) {
     // Get all plugins and active list
     $active_plugins = get_option('active_plugins', array());
     $all_plugins = get_plugins();
+    $updates = webmonitor_plugin_updates();
 
     $all = array();
     $active = array();
@@ -796,21 +813,24 @@ function webmonitor_advanced_plugins($request) {
         if (strpos($lower_name, 'test') !== false) { $is_potentially_unused = true; $unused_reasons[] = 'Test plugin'; }
         if (strpos($lower_name, 'demo') !== false) { $is_potentially_unused = true; $unused_reasons[] = 'Demo plugin'; }
 
-        // Outdated check based on last modified timestamp
         $plugin_path = WP_PLUGIN_DIR . '/' . $plugin_file;
         $last_modified = file_exists($plugin_path) ? filemtime($plugin_path) : 0;
-        $days_since_update = $last_modified ? (time() - $last_modified) / (60 * 60 * 24) : null;
-        $is_outdated = $days_since_update !== null && $days_since_update > 365;
-        if ($is_outdated) { $unused_reasons[] = 'Not updated in over a year'; }
+        $is_outdated = array_key_exists($plugin_file, $updates);
+        $new_version = $is_outdated ? $updates[$plugin_file] : null;
+        if ($is_outdated) {
+            $unused_reasons[] = $new_version ? "Update available ({$new_version})" : 'Update available';
+        }
 
         $info = array(
             'name' => $plugin_name,
             'version' => $plugin_version,
+            'new_version' => $new_version,
             'description' => $plugin_description,
             'author' => $plugin_author,
             'file' => $plugin_file,
             'is_active' => $is_active,
             'is_outdated' => $is_outdated,
+            'update_available' => $is_outdated,
             'potentially_unused' => $is_potentially_unused,
             'unused_reasons' => $unused_reasons,
             'last_modified' => $last_modified ? date('Y-m-d', $last_modified) : 'Unknown'
@@ -833,6 +853,7 @@ function webmonitor_advanced_plugins($request) {
         'inactive_plugins' => $inactive,
         'outdated_plugins' => $outdated,
         'potentially_unused_plugins' => $potentially_unused,
+        'security_status' => count($outdated) > 0 ? 'Updates' : 'Protected',
         'recommendations' => array(
             'Review inactive and potentially unused plugins',
             'Update outdated plugins to the latest versions',
@@ -913,19 +934,8 @@ function webmonitor_advanced_alerts($request) {
         );
     }
     
-    // 3. Outdated Plugins Check
-    $all_plugins = get_plugins();
-    $outdated_count = 0;
-    foreach ($all_plugins as $plugin_file => $plugin_data) {
-        if (!in_array($plugin_file, $active_plugins)) continue;
-        
-        $plugin_path = WP_PLUGIN_DIR . '/' . $plugin_file;
-        $last_modified = file_exists($plugin_path) ? filemtime($plugin_path) : 0;
-        $days_since_update = $last_modified ? (time() - $last_modified) / (60 * 60 * 24) : null;
-        if ($days_since_update !== null && $days_since_update > 365) {
-            $outdated_count++;
-        }
-    }
+    // 3. Plugins WordPress has an update for (active and inactive)
+    $outdated_count = count(webmonitor_plugin_updates());
     
     if ($outdated_count > 0) {
         $alerts[] = array(

@@ -1,7 +1,7 @@
 // Zealot assistant (Pro): answers questions about one site using its real monitoring data, via Google Gemini
 import { ApiError } from './util.js';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.5-flash';
 
 export async function askZealot(env, query, site) {
   if (!env.GOOGLE_AI_API_KEY) {
