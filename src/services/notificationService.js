@@ -4,7 +4,8 @@
  */
 
 // Use relative URL in development (via Vite proxy) or absolute URL in production
-const API_BASE_URL = import.meta.env.DEV ? '/api' : 'http://localhost:5000/api';
+import { API_BASE_URL } from '../config/api';
+import { apiFetch, getToken } from './session';
 const NOTIFICATION_STORAGE_KEY = 'webmonitor_notifications';
 const LAST_CHECK_KEY = 'webmonitor_last_check';
 
@@ -70,16 +71,15 @@ class NotificationService {
 
   // Fetch alerts from all websites
   async fetchAllAlerts() {
-    if (this.isChecking) return;
+    // Nothing to poll until someone is signed in
+    if (this.isChecking || !getToken()) return;
     
     this.isChecking = true;
     try {
       // Fetch all websites
-      const websitesResponse = await fetch(`${API_BASE_URL}/websites`, {
+      const websitesResponse = await apiFetch(`${API_BASE_URL}/websites`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        mode: 'cors',
-        credentials: 'include'
+        headers: { 'Content-Type': 'application/json' }
       });
 
       if (!websitesResponse.ok) {
@@ -186,7 +186,7 @@ class NotificationService {
     // SEO Issues Alert
     if (website.seo?.seoIssues && website.seo.seoIssues.length > 0) {
       alerts.push({
-        id: `${website._id}-seo-${alertId++}`,
+        id: `${website._id}-seo-${alertId}`,
         type: 'seo',
         priority: 'medium',
         title: 'SEO Issues Found',

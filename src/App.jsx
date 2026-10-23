@@ -1,20 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import HomePage from './components/HomePage';
-import WebsiteDashboard from './components/WebsiteDashboard';
-import AdvancedDashboard from './components/AdvancedDashboard';
+import React, { useState, useEffect, useCallback } from 'react';
+import AppShell from './components/shell/AppShell';
 import ApiService from './services/api';
 import notificationService from './services/notificationService';
 import { useToast } from './hooks/useToast.jsx';
 import CommandPalette from './components/CommandPalette';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+
+const LIVE_REFRESH_MS = 30000; // backend checks each site every 60s
 
 const WebMonitorDashboard = () => {
   const [selectedWebsite, setSelectedWebsite] = useState(null);
   const [websites, setWebsites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [dashboardMode, setDashboardMode] = useState('basic'); // 'basic' or 'advanced'
+  // Tab shown in the site detail ('Overview', ..., 'Advanced')
+  const [detailTab, setDetailTab] = useState('Overview');
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const { ToastContainer, success, error: showError } = useToast();
+
+  // 'advanced' opens the site's Advanced tab (Pro content, or the Pro preview for free plans)
+  const handleSelectWebsite = useCallback((website, mode = 'basic') => {
+    setSelectedWebsite(website);
+    setDetailTab(mode === 'advanced' ? 'Advanced' : 'Overview');
+  }, []);
 
   // Register service worker and initialize notifications
   useEffect(() => {
@@ -85,11 +93,11 @@ const WebMonitorDashboard = () => {
       window.removeEventListener('switch-to-advanced', handleSwitchToAdvanced);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [websites]);
+  }, [websites, handleSelectWebsite]);
 
   // Load websites from MongoDB API
   useEffect(() => {
-    loadWebsites();
+    loadWebsites({ initial: true });
     
     // Check backend health periodically
     const healthCheckInterval = setInterval(async () => {
@@ -102,7 +110,7 @@ const WebMonitorDashboard = () => {
           }
           return prevError;
         });
-      } catch (err) {
+      } catch {
         // Backend is offline
         const cachedWebsites = ApiService.getCachedWebsites();
         if (cachedWebsites && cachedWebsites.length > 0) {
@@ -116,15 +124,31 @@ const WebMonitorDashboard = () => {
     return () => clearInterval(healthCheckInterval);
   }, []);
 
-  const loadWebsites = async () => {
+  // Pull the latest monitoring results in the background so the open view stays live
+  useEffect(() => {
+    const liveRefreshInterval = setInterval(async () => {
+      try {
+        const websitesData = (await ApiService.getWebsites()) || [];
+        setWebsites(websitesData);
+        setSelectedWebsite(prev => (prev ? websitesData.find(w => w._id === prev._id) || prev : prev));
+      } catch {
+        // Backend outages are reported by the health-check interval above
+      }
+    }, LIVE_REFRESH_MS);
+
+    return () => clearInterval(liveRefreshInterval);
+  }, []);
+
+  // The first load shows the loading screen; later refreshes update in place
+  async function loadWebsites({ initial = false } = {}) {
     try {
-      setLoading(true);
+      if (initial) setLoading(true);
       setError(null);
       
       // First check backend health
       try {
         await ApiService.healthCheck();
-      } catch (healthErr) {
+      } catch {
         // Backend is offline, use cache
         const cachedWebsites = ApiService.getCachedWebsites();
         if (cachedWebsites && cachedWebsites.length > 0) {
@@ -146,9 +170,7 @@ const WebMonitorDashboard = () => {
       setError(null);
       
       setWebsites(websitesData || []);
-      if (websitesData && websitesData.length > 0) {
-        success(`Loaded ${websitesData.length} website${websitesData.length !== 1 ? 's' : ''}`);
-      }
+      setSelectedWebsite(prev => (prev ? (websitesData || []).find(w => w._id === prev._id) || null : prev));
     } catch (err) {
       // Try to get cached websites
       const cachedWebsites = ApiService.getCachedWebsites();
@@ -163,15 +185,23 @@ const WebMonitorDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSelectWebsite = (website, mode = 'basic') => {
-    setSelectedWebsite(website);
-    setDashboardMode(mode);
-  };
+  }
 
   const handleBackToHome = () => {
     setSelectedWebsite(null);
+    setDetailTab('Overview');
+  };
+
+  const handleDeleteWebsite = async (website) => {
+    try {
+      await ApiService.deleteWebsite(website._id);
+      setSelectedWebsite(null);
+      success(`${website.name} removed`);
+      await loadWebsites();
+    } catch (err) {
+      console.error('Error deleting website:', err);
+      showError(`Failed to remove ${website.name}. Please try again.`);
+    }
   };
 
   const handleCommandPaletteNavigate = (command) => {
@@ -185,18 +215,17 @@ const WebMonitorDashboard = () => {
         break;
       case 'analytics':
         if (selectedWebsite) {
-          setDashboardMode('advanced');
-          // Could dispatch event to switch to analytics tab
+          setDetailTab('Advanced');
         }
         break;
       case 'performance':
         if (selectedWebsite) {
-          setDashboardMode('advanced');
+          setDetailTab('Advanced');
         }
         break;
       case 'security':
         if (selectedWebsite) {
-          setDashboardMode('advanced');
+          setDetailTab('Advanced');
         }
         break;
       case 'settings':
@@ -212,13 +241,11 @@ const WebMonitorDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center animate-fade-in">
-          <div className="relative">
-            <div className="animate-spin rounded-full h-12 w-12 border-3 border-gray-200 border-t-gray-900 mx-auto mb-4"></div>
-          </div>
-          <p className="text-gray-700 font-semibold text-base">Loading websites...</p>
-          <p className="text-gray-500 text-sm mt-1">Please wait</p>
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
+        <div className="bg-white rounded-3xl shadow-card px-12 py-10 text-center animate-fade-in">
+          <div className="w-12 h-12 rounded-full border-4 border-brand-100 border-t-brand-600 animate-spin mx-auto mb-4" />
+          <p className="text-ink font-bold">Loading your sites…</p>
+          <p className="text-ink-muted text-sm mt-1">Fetching the latest checks</p>
         </div>
       </div>
     );
@@ -233,52 +260,38 @@ const WebMonitorDashboard = () => {
         onNavigate={handleCommandPaletteNavigate}
       />
       {error && error.includes('Backend server') && (
-        <div className="mx-6 mt-6 overflow-hidden rounded-[2.5rem] bg-white shadow-2xl border border-rose-100 flex flex-col md:flex-row items-stretch animate-slide-up">
-          <div className="bg-rose-500 w-full md:w-24 flex items-center justify-center p-6 text-white shrink-0">
-             <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20">
-               <AlertTriangle size={24} />
-             </div>
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-xl bg-white rounded-2xl shadow-frame border border-bad-soft flex items-center gap-4 p-3 pl-4 animate-slide-up">
+          <div className="w-10 h-10 rounded-xl bg-bad-soft text-bad flex items-center justify-center shrink-0">
+            <AlertTriangle size={20} />
           </div>
-          <div className="p-6 flex-1 flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="text-center md:text-left">
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-[0.2em] mb-1 italic">
-                {error.includes('Too many requests') || error.includes('Rate limit') ? 'Rate Limit Exceeded' : 'Monitoring Interrupted'}
-              </h3>
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-widest opacity-70">
-                {error.includes('Too many requests') || error.includes('Rate limit') 
-                  ? 'Request frequency too high. Backend access is temporarily restricted.'
-                  : 'Backend server is unreachable. Displaying last known cached state.'}
-              </p>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold text-ink">
+              {error.includes('Too many requests') || error.includes('Rate limit') ? 'Rate limit exceeded' : 'Monitoring interrupted'}
             </div>
-            <button 
-              onClick={loadWebsites}
-              className="px-8 py-3 rounded-2xl bg-[#2D1BFF] text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-blue-700 active:scale-95 transition-all flex items-center gap-2 whitespace-nowrap"
-            >
-              Retry Connection <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            </button>
+            <div className="text-xs text-ink-muted">
+              {error.includes('Too many requests') || error.includes('Rate limit')
+                ? 'Too many requests. Backend access is temporarily restricted.'
+                : 'Backend unreachable. Showing the last known state.'}
+            </div>
           </div>
+          <button type="button" onClick={() => loadWebsites()} className="btn-primary h-9! px-4! shrink-0">
+            <RefreshCw size={13} /> Retry
+          </button>
         </div>
       )}
-          {selectedWebsite ? (
-            dashboardMode === 'advanced' ? (
-              <AdvancedDashboard
-                selectedWebsite={selectedWebsite}
-                onBackToHome={handleBackToHome}
-              />
-            ) : (
-              <WebsiteDashboard
-                selectedWebsite={selectedWebsite}
-                onBackToHome={handleBackToHome}
-              />
-            )
-          ) : (
-            <HomePage
-              websites={websites}
-              onSelectWebsite={handleSelectWebsite}
-              onRefresh={loadWebsites}
-              loading={loading}
-            />
-          )}
+        <AppShell
+          websites={websites}
+          selectedWebsite={selectedWebsite}
+          loading={loading}
+          onSelectWebsite={handleSelectWebsite}
+          onClearSelection={handleBackToHome}
+          onRefresh={loadWebsites}
+          onDeleteWebsite={handleDeleteWebsite}
+          onOpenAdvanced={(website) => handleSelectWebsite(website, 'advanced')}
+          onOpenCommandPalette={() => setShowCommandPalette(true)}
+          detailTab={detailTab}
+          onDetailTabChange={setDetailTab}
+        />
     </div>
   );
 };

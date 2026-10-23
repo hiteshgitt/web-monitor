@@ -3,19 +3,34 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config({ path: './config.env' });
+require('dotenv').config({ path: './config.env', quiet: true });
 
 const websiteRoutes = require('./routes/websites');
 const advancedRoutes = require('./routes/advanced');
+const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
+const { requireAuth, requirePro, requireAdmin } = require('./middleware/auth');
 const monitoringService = require('./services/monitoringService');
+const MonitoringData = require('./models/MonitoringData');
+
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  console.error('JWT_SECRET must be set in config.env (at least 32 random characters)');
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Behind nginx/a load balancer, use the real client IP (needed for per-user rate limiting)
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', parseInt(process.env.TRUST_PROXY, 10) || 1);
+}
+
 // CORS configuration - MUST be before other middleware
+// CORS_ORIGINS: comma-separated dashboard origins, e.g. https://monitor.example.com
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://yourdomain.com'] 
+  origin: process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
     : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -33,7 +48,8 @@ app.use(helmet({
 // Rate limiting - Relaxed in development to prevent false-offline errors
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 100 : 10000, // 10,000 requests in dev
+  // The dashboard polls every 30-60s per open tab, so allow well above that per IP
+  limit: parseInt(process.env.RATE_LIMIT_MAX, 10) || (process.env.NODE_ENV === 'production' ? 1000 : 10000),
   message: { error: 'Too many requests', message: 'Rate limit exceeded during high-frequency monitoring.' }
 });
 app.use(limiter);
@@ -44,8 +60,10 @@ app.use(express.urlencoded({ extended: true }));
 
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/webmonitor')
-.then(() => {
+.then(async () => {
   console.log('Connected to MongoDB');
+  // Replace the old plain timestamp index with the retention (TTL) index
+  await MonitoringData.syncIndexes();
   
   // Start monitoring service after database connection
   monitoringService.startMonitoring();
@@ -55,9 +73,20 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/webmonito
   process.exit(1);
 });
 
+// Sign-in endpoints get a much lower limit to slow down password guessing
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: parseInt(process.env.AUTH_RATE_LIMIT_MAX, 10) || 30,
+  skip: (req) => req.method === 'GET',
+  message: { error: 'Too many sign-in attempts. Please wait a few minutes and try again.' }
+});
+
 // Routes
-app.use('/api/websites', websiteRoutes);
-app.use('/api/advanced', advancedRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/websites', requireAuth, websiteRoutes);
+// Advanced view is the paid Pro tier
+app.use('/api/advanced', requireAuth, requirePro, advancedRoutes);
+app.use('/api/admin', requireAuth, requireAdmin, adminRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -101,7 +130,7 @@ app.use((err, req, res, next) => {
 });
 
 // 404 handler
-app.use('*', (req, res) => {
+app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
@@ -121,7 +150,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');
   monitoringService.stopMonitoring();
-  mongoose.connection.close(() => {
+  mongoose.connection.close().then(() => {
     console.log('MongoDB connection closed');
     process.exit(0);
   });

@@ -458,13 +458,24 @@ function webmonitor_advanced_health_check($request) {
         }
     }
 
+    // Report what the checks above actually found instead of always "healthy"
+    $status = 'healthy';
+    $message = 'WordPress site is healthy - Advanced Plugin!';
+    if ($db_status !== 'connected') {
+        $status = 'error';
+        $message = 'Database connection check failed';
+    } elseif ($memory_percentage >= 90) {
+        $status = 'warning';
+        $message = 'Memory usage is above 90% of the PHP memory limit';
+    }
+
     return array(
-        'status' => 'healthy',
+        'status' => $status,
         'timestamp' => current_time('mysql'),
         'uptime_seconds' => $uptime_seconds,
         'response_time' => $response_time,
         'status_code' => 200,
-        'message' => 'WordPress site is healthy - Advanced Plugin!',
+        'message' => $message,
         'site_url' => home_url(),
         'wordpress_version' => get_bloginfo('version'),
         'plugin_version' => '1.0.0 (Advanced)',

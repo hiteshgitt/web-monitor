@@ -1,6 +1,117 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-brand-50: #f3f5fd;
+  --color-brand-100: #e6eafb;
+  --color-brand-200: #ccd4f6;
+  --color-brand-300: #aab7f0;
+  --color-brand-400: #8799e8;
+  --color-brand-500: #6c80e0;
+  --color-brand-600: #5868cf;
+  --color-brand-700: #4653ae;
+  --color-brand-800: #363f86;
+  --color-brand-900: #262d5f;
+
+  --color-ink: #1f2557;
+  --color-ink-soft: #4a5079;
+  --color-ink-muted: #8a90b2;
+  --color-ink-faint: #b9bdd4;
+
+  --color-canvas: #eef1fb;
+
+  --color-good: #3cc48c;
+  --color-good-soft: #e3f7ee;
+
+  --color-warn: #e3b23c;
+  --color-warn-soft: #fbf3df;
+
+  --color-bad: #e5536a;
+  --color-bad-soft: #fce7ea;
+
+  --font-sans: 'Nunito Sans', system-ui, sans-serif;
+  --font-display: 'Nunito Sans', system-ui, sans-serif;
+
+  --shadow-soft:
+    0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
+  --shadow-medium:
+    0 4px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 30px -5px rgba(0, 0, 0, 0.05);
+  --shadow-large:
+    0 10px 40px -10px rgba(0, 0, 0, 0.15), 0 20px 50px -10px rgba(0, 0, 0, 0.1);
+  --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.3);
+  --shadow-glow-purple: 0 0 20px rgba(168, 85, 247, 0.3);
+  --shadow-card: 0 6px 24px -10px rgba(70, 83, 174, 0.28);
+  --shadow-card-hover: 0 16px 40px -14px rgba(70, 83, 174, 0.45);
+  --shadow-frame: 0 40px 80px -30px rgba(38, 45, 95, 0.45);
+  --shadow-btn: 0 8px 20px -8px rgba(88, 104, 207, 0.8);
+  --shadow-good: 0 14px 30px -12px rgba(60, 196, 140, 0.7);
+
+  --animate-shimmer: shimmer 2s infinite linear;
+  --animate-float: float 3s ease-in-out infinite;
+  --animate-slide-up: slideUp 0.5s ease-out;
+  --animate-fade-in: fadeIn 0.3s ease-out;
+
+  --backdrop-blur-xs: 2px;
+
+  --radius-4xl: 2rem;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+/* UI refresh building blocks */
+
+@utility label-caps {
+  /* Small uppercase section/field labels */
+  @apply text-[11px] font-bold uppercase tracking-[0.12em] text-ink-muted;
+}
+
+@utility panel {
+  @apply bg-white rounded-2xl shadow-card border border-brand-100/70;
+}
+
+@utility btn-primary {
+  @apply inline-flex items-center justify-center gap-2 px-5 h-10 rounded-xl text-[12px] font-bold uppercase tracking-[0.08em] text-white
+      bg-linear-to-r from-brand-500 to-brand-600 shadow-btn transition-all duration-200
+      hover:-translate-y-0.5 hover:shadow-card-hover active:translate-y-0 disabled:opacity-60 disabled:hover:translate-y-0;
+}
+
+@utility btn-ghost {
+  @apply inline-flex items-center justify-center w-10 h-10 rounded-xl text-brand-600 transition-all duration-200
+      hover:bg-brand-50 hover:text-brand-700 active:scale-95;
+}
+
+@utility chip {
+  @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-bold;
+}
+
+@utility soft-scroll {
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    @apply bg-brand-200 rounded-full;
+  }
+}
 
 /* Modern Design System - Mobile-First Audit App Style */
 @layer base {
@@ -9,16 +120,17 @@
   }
   
   body {
-    @apply bg-[#F9FAFB];
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    @apply bg-canvas;
+    font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
-    color: #111827;
+    color: #1F2557;
   }
   
   html {
     overflow-x: hidden;
+    scroll-behavior: smooth;
   }
 }
 

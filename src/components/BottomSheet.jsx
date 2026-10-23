@@ -32,11 +32,11 @@ const BottomSheet = ({ isOpen, onClose, title, children, className = '' }) => {
         
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-200">
-            <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+          <div className="flex items-center justify-between px-5 pb-3 border-b border-brand-100">
+            <h2 className="text-lg font-bold text-ink">{title}</h2>
             <button
               onClick={onClose}
-              className="p-2 -mr-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 -mr-2 text-ink-muted hover:text-ink-soft hover:bg-brand-100 rounded-lg transition-colors"
             >
               <X size={20} />
             </button>
@@ -53,11 +53,11 @@ const BottomSheet = ({ isOpen, onClose, title, children, className = '' }) => {
       <div className={`hidden sm:flex fixed inset-0 items-center justify-center z-50 p-4`}>
         <div className={`bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col ${className}`}>
           {title && (
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-brand-100">
+              <h2 className="text-xl font-bold text-ink">{title}</h2>
               <button
                 onClick={onClose}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 text-ink-muted hover:text-ink-soft hover:bg-brand-100 rounded-lg transition-colors"
               >
                 <X size={20} />
               </button>

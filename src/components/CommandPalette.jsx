@@ -72,8 +72,8 @@ const CommandPalette = ({ isOpen, onClose, onNavigate }) => {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 p-4 border-b border-gray-200">
-          <Search className="text-gray-400" size={20} />
+        <div className="flex items-center gap-3 p-4 border-b border-brand-100">
+          <Search className="text-ink-muted" size={20} />
           <input
             ref={inputRef}
             type="text"
@@ -83,13 +83,13 @@ const CommandPalette = ({ isOpen, onClose, onNavigate }) => {
               setSearchQuery(e.target.value);
               setSelectedIndex(0);
             }}
-            className="flex-1 outline-none text-gray-900 placeholder-gray-400"
+            className="flex-1 outline-hidden text-ink placeholder-gray-400"
           />
           <button
             onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-1 hover:bg-brand-100 rounded-lg transition-colors"
           >
-            <X size={18} className="text-gray-400" />
+            <X size={18} className="text-ink-muted" />
           </button>
         </div>
 
@@ -107,18 +107,18 @@ const CommandPalette = ({ isOpen, onClose, onNavigate }) => {
                   }}
                   className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
                     index === selectedIndex
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'hover:bg-gray-50 text-gray-700'
+                      ? 'bg-brand-50 text-brand-700'
+                      : 'hover:bg-brand-50 text-ink-soft'
                   }`}
                 >
-                  <Icon size={18} className={index === selectedIndex ? 'text-indigo-600' : 'text-gray-400'} />
+                  <Icon size={18} className={index === selectedIndex ? 'text-brand-600' : 'text-ink-muted'} />
                   <span className="flex-1 font-medium">{cmd.label}</span>
-                  <ArrowRight size={16} className={index === selectedIndex ? 'text-indigo-600' : 'text-gray-300'} />
+                  <ArrowRight size={16} className={index === selectedIndex ? 'text-brand-600' : 'text-ink-faint'} />
                 </button>
               );
             })
           ) : (
-            <div className="px-4 py-8 text-center text-gray-400">
+            <div className="px-4 py-8 text-center text-ink-muted">
               <p>No commands found</p>
               <p className="text-sm mt-1">Try a different search term</p>
             </div>
@@ -126,20 +126,20 @@ const CommandPalette = ({ isOpen, onClose, onNavigate }) => {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2 border-t border-gray-200 bg-gray-50 flex items-center justify-between text-xs text-gray-500">
+        <div className="px-4 py-2 border-t border-brand-100 bg-brand-50 flex items-center justify-between text-xs text-ink-muted">
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs">↑</kbd>
-              <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs">↓</kbd>
+              <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded-sm text-xs">↑</kbd>
+              <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded-sm text-xs">↓</kbd>
               <span>Navigate</span>
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs">Enter</kbd>
+              <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded-sm text-xs">Enter</kbd>
               <span>Select</span>
             </span>
           </div>
           <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded text-xs">Esc</kbd>
+            <kbd className="px-1.5 py-0.5 bg-white border border-gray-300 rounded-sm text-xs">Esc</kbd>
             <span>Close</span>
           </span>
         </div>

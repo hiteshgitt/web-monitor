@@ -4,8 +4,8 @@ import React from 'react';
 export const CustomTooltip = ({ active, payload, label, formatter }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[120px]">
-        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">{label}</p>
+      <div className="bg-white dark:bg-gray-800 border border-brand-100 dark:border-gray-700 rounded-lg shadow-lg p-3 min-w-[120px]">
+        <p className="text-sm font-semibold text-ink dark:text-gray-100 mb-2">{label}</p>
         {payload.map((entry, index) => (
           <div key={index} className="flex items-center justify-between gap-3 mb-1 last:mb-0">
             <div className="flex items-center gap-2">
@@ -13,9 +13,9 @@ export const CustomTooltip = ({ active, payload, label, formatter }) => {
                 className="w-3 h-3 rounded-full" 
                 style={{ backgroundColor: entry.color }}
               ></div>
-              <span className="text-xs text-gray-600 dark:text-gray-400">{entry.name || entry.dataKey}</span>
+              <span className="text-xs text-ink-soft dark:text-ink-muted">{entry.name || entry.dataKey}</span>
             </div>
-            <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
+            <span className="text-sm font-bold text-ink dark:text-gray-100">
               {formatter ? formatter(entry.value, entry.name) : entry.value}
             </span>
           </div>

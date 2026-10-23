@@ -3,8 +3,9 @@
  * Use this instead of hardcoded URLs throughout the application
  */
 
-// Use relative URL in development (via Vite proxy) or absolute URL in production
-export const API_BASE_URL = import.meta.env.DEV ? '/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5000/api');
+// Same-origin '/api' by default (Vite proxy in dev, nginx in production).
+// Set VITE_API_URL at build time only if the API lives on a different domain.
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 /**
  * Get the full API URL for an endpoint

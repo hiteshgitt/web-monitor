@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const websiteSchema = new mongoose.Schema({
+  // Customer who added the site; every API query is scoped to it
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true
+  },
   name: {
     type: String,
     required: true,
@@ -15,7 +21,7 @@ const websiteSchema = new mongoose.Schema({
   platform: {
     type: String,
     required: true,
-    enum: ['wordpress', 'nextjs', 'laravel', 'codeigniter', 'other']
+    enum: ['wordpress', 'nextjs', 'laravel', 'codeigniter', 'php', 'other']
   },
   apiKey: {
     type: String,
@@ -28,13 +34,13 @@ const websiteSchema = new mongoose.Schema({
   },
   uptime: {
     type: Number,
-    default: 100,
+    default: null,
     min: 0,
     max: 100
   },
   responseTime: {
     type: Number,
-    default: 0
+    default: null
   },
   lastChecked: {
     type: Date,
@@ -67,61 +73,61 @@ const websiteSchema = new mongoose.Schema({
   analytics: {
     totalVisitors: {
       type: Number,
-      default: 0
+      default: null
     },
     totalPageViews: {
       type: Number,
-      default: 0
+      default: null
     },
     bounceRate: {
       type: Number,
-      default: 0
+      default: null
     },
     avgSessionDuration: {
       type: Number,
-      default: 0
+      default: null
     },
     seoScore: {
       type: Number,
-      default: 0
+      default: null
     },
     securityScore: {
       type: Number,
-      default: 0
+      default: null
     }
   },
   performance: {
     loadTime: {
       type: Number,
-      default: 0
+      default: null
     },
     serverResponseTime: {
       type: Number,
-      default: 0
+      default: null
     },
     databaseQueryTime: {
       type: Number,
-      default: 0
+      default: null
     },
     memoryUsage: {
       type: Number,
-      default: 0
+      default: null
     },
     memoryPeak: {
       type: Number,
-      default: 0
+      default: null
     },
     cpuUsage: {
       type: Number,
-      default: 0
+      default: null
     },
     performanceScore: {
       type: Number,
-      default: 0
+      default: null
     },
     activePlugins: {
       type: Number,
-      default: 0
+      default: null
     },
     recommendations: [{
       type: String
@@ -130,7 +136,7 @@ const websiteSchema = new mongoose.Schema({
   seo: {
     score: {
       type: Number,
-      default: 0
+      default: null
     },
     metaTags: {
       type: String,
@@ -138,7 +144,7 @@ const websiteSchema = new mongoose.Schema({
     },
     altTags: {
       type: Number,
-      default: 0
+      default: null
     },
     headingStructure: {
       type: String,
@@ -146,11 +152,11 @@ const websiteSchema = new mongoose.Schema({
     },
     internalLinks: {
       type: Number,
-      default: 0
+      default: null
     },
     externalLinks: {
       type: Number,
-      default: 0
+      default: null
     },
     sslEnabled: {
       type: Boolean,
@@ -166,7 +172,7 @@ const websiteSchema = new mongoose.Schema({
     },
     totalContent: {
       type: Number,
-      default: 0
+      default: null
     },
     seoIssues: [{
       type: String
@@ -194,19 +200,19 @@ const websiteSchema = new mongoose.Schema({
     },
     securityScore: {
       type: Number,
-      default: 0
+      default: null
     },
     securityPlugins: {
       type: Number,
-      default: 0
+      default: null
     },
     totalPlugins: {
       type: Number,
-      default: 0
+      default: null
     },
     outdatedPlugins: {
       type: Number,
-      default: 0
+      default: null
     },
     wordpressVersion: {
       type: String,
@@ -227,12 +233,20 @@ const websiteSchema = new mongoose.Schema({
 });
 
 // Update the updatedAt field before saving
-websiteSchema.pre('save', function(next) {
+websiteSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 
 // Index for better performance
+// Never send the site's API key to the browser; expose only its last 4 characters
+websiteSchema.set('toJSON', {
+  transform(doc, ret) {
+    ret.apiKeyLast4 = ret.apiKey ? String(ret.apiKey).slice(-4) : null;
+    delete ret.apiKey;
+    return ret;
+  }
+});
+
 websiteSchema.index({ url: 1 });
 websiteSchema.index({ status: 1 });
 websiteSchema.index({ platform: 1 });

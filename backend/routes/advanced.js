@@ -8,6 +8,10 @@ const analyticsService = require('../services/analyticsService');
 const performanceService = require('../services/performanceService');
 const securityService = require('../services/securityService');
 const aiInsightsService = require('../services/aiInsightsService');
+const { loadOwnedWebsite } = require('../middleware/auth');
+
+// Only the signed-in customer's own sites (mounted behind requireAuth + requirePro)
+router.param('id', loadOwnedWebsite);
 
 // Get comprehensive website data with all advanced features
 router.get('/comprehensive/:id', async (req, res) => {

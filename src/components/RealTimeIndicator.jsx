@@ -13,7 +13,7 @@ const RealTimeIndicator = ({ isLive = true, pulse = true }) => {
           <div className={`absolute inset-0 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-rose-500'} animate-ping opacity-75`}></div>
         )}
       </div>
-      <span className={`text-xs font-black italic uppercase tracking-widest ${isLive ? 'text-emerald-400' : 'text-rose-500'}`}>
+      <span className={`text-xs font-extrabold uppercase tracking-widest ${isLive ? 'text-emerald-400' : 'text-rose-500'}`}>
         {isLive ? 'Live' : 'Offline'}
       </span>
     </div>

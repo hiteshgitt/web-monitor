@@ -7,10 +7,32 @@ const performanceService = require('./performanceService');
 const securityService = require('./securityService');
 const aiInsightsService = require('./aiInsightsService');
 
+const VALID_STATUSES = ['healthy', 'warning', 'error', 'offline'];
+// A check counts towards uptime when the site answered and its monitor API responded
+const UP_STATUSES = ['healthy', 'warning'];
+
+// GET that records the round-trip time (ms) as seen by the monitor
+async function timedGet(url, options) {
+  const start = process.hrtime.bigint();
+  const response = await axios.get(url, options);
+  response.elapsedMs = Math.round(Number(process.hrtime.bigint() - start) / 1e6);
+  return response;
+}
+
+// Integrations may report their own status words; anything unknown is treated as a warning
+function normalizeStatus(status) {
+  if (!status) return 'healthy';
+  return VALID_STATUSES.includes(status) ? status : 'warning';
+}
+
+// AI insights cost API quota (Gemini free tier: ~20 requests/day), so reuse them per site
+const AI_CACHE_MS = (parseFloat(process.env.AI_INSIGHTS_CACHE_HOURS) || 12) * 60 * 60 * 1000;
+
 class MonitoringService {
   constructor() {
     this.isRunning = false;
     this.interval = null;
+    this.aiInsightsCache = new Map(); // websiteId -> { at, data }
   }
 
   // Start monitoring all websites
@@ -51,42 +73,38 @@ class MonitoringService {
   // Check individual website
   async checkWebsite(website) {
     try {
-      const startTime = Date.now();
-      
-      // Simulate different platform checks
       const result = await this.performHealthCheck(website);
-      
-      const responseTime = Date.now() - startTime;
-      
-      // Save monitoring data
+      const isUp = UP_STATUSES.includes(result.status);
+
+      // Save monitoring data (uptime here is this single check: 100 = up, 0 = down)
       const monitoringData = new MonitoringData({
         websiteId: website._id,
         status: result.status,
-        responseTime: result.responseTime || responseTime,
-        statusCode: result.statusCode || 200,
-        uptime: result.uptime || 100,
+        responseTime: isUp ? (result.responseTime ?? 0) : 0,
+        statusCode: result.statusCode ?? 0,
+        uptime: isUp ? 100 : 0,
         error: result.error,
         metrics: result.metrics
       });
-      
+
       await monitoringData.save();
 
       // Track incidents (downtime) when status is not healthy
       await this.recordIncident(website._id, result.status, result.error?.message || '', new Date());
-      
+
       // Update website status with all dynamic data
       website.status = result.status;
-      website.responseTime = result.responseTime || responseTime;
-      website.uptime = result.uptime || 100;
+      website.responseTime = isUp ? (result.responseTime ?? null) : null;
+      website.uptime = await this.computeUptimePercent(website._id, 30);
       website.lastChecked = new Date();
-      
-      // Update analytics data
+
+      // Update analytics data (null = not measurable without an analytics integration)
       if (result.analytics) {
         website.analytics = {
-          totalVisitors: result.analytics.totalVisitors || 0,
-          totalPageViews: result.analytics.totalPageViews || 0,
-          bounceRate: result.analytics.bounceRate || 0,
-          avgSessionDuration: result.analytics.avgSessionDuration || 0,
+          totalVisitors: result.analytics.totalVisitors ?? null,
+          totalPageViews: result.analytics.totalPageViews ?? null,
+          bounceRate: result.analytics.bounceRate ?? null,
+          avgSessionDuration: result.analytics.avgSessionDuration ?? null,
           seoScore: result.seo?.score || 0,
           securityScore: result.security?.securityScore || 0
         };
@@ -166,6 +184,16 @@ class MonitoringService {
     }
   }
 
+  // Share of checks in the window where the site was up, as a percentage (null if no checks yet)
+  async computeUptimePercent(websiteId, days = 30) {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const [total, up] = await Promise.all([
+      MonitoringData.countDocuments({ websiteId, timestamp: { $gte: since } }),
+      MonitoringData.countDocuments({ websiteId, timestamp: { $gte: since }, status: { $in: UP_STATUSES } })
+    ]);
+    return total > 0 ? Math.round((up / total) * 1000) / 10 : null;
+  }
+
   async recordIncident(websiteId, status, message, timestamp) {
     const isHealthy = status === 'healthy';
     const open = await Incident.findOne({ websiteId, endedAt: null }).sort({ startedAt: -1 });
@@ -190,6 +218,19 @@ class MonitoringService {
         });
       }
     }
+  }
+
+  // One-off check used when adding/editing a site; nothing is saved
+  async verifyConnection({ url, platform, apiKey }) {
+    const result = await this.performHealthCheck({ url: (url || '').replace(/\/$/, ''), platform, apiKey });
+    const ok = UP_STATUSES.includes(result.status) && !result.error;
+    return {
+      ok,
+      status: result.status,
+      responseTime: result.responseTime ?? null,
+      code: result.error?.code || null,
+      message: ok ? 'Connection verified' : (result.error?.message || `Site reported status "${result.status}"`)
+    };
   }
 
   // Perform health check based on platform
@@ -233,26 +274,26 @@ class MonitoringService {
     if (!wpBase) {
       return { status: 'error', error: { message: 'Website URL is missing.', code: 'INVALID_URL' } };
     }
-    const auth = { timeout: 10000, headers: { 'Authorization': `Bearer ${website.apiKey}` } };
-    const validateStatus = (s) => s < 500;
-
-    const tryFetch = async (useRestRoute) => {
-      const u = (ep) => this._wpApiUrl(wpBase, ep, useRestRoute);
-      return Promise.all([
-        axios.get(u('health'), { ...auth, validateStatus }),
-        axios.get(u('analytics'), auth),
-        axios.get(u('performance'), auth),
-        axios.get(u('seo'), auth),
-        axios.get(u('security'), auth)
-      ]);
+    const opts = {
+      timeout: 10000,
+      headers: { 'Authorization': `Bearer ${website.apiKey}` },
+      validateStatus: (s) => s < 500
     };
 
     try {
-      let healthResponse, analyticsResponse, performanceResponse, seoResponse, securityResponse;
-      let responses;
-      
+      // Health is fetched on its own so its round-trip time isn't skewed by the parallel data requests
+      let healthResponse;
+      let useRestRoute = false;
       try {
-        responses = await tryFetch(false);
+        healthResponse = await timedGet(this._wpApiUrl(wpBase, 'health'), opts);
+        // If 404 with pretty URL, retry with ?rest_route= (works when rewrites fail despite Post name)
+        if (healthResponse.status === 404) {
+          const retry = await timedGet(this._wpApiUrl(wpBase, 'health', true), opts).catch(() => null);
+          if (retry && retry.status !== 404) {
+            healthResponse = retry;
+            useRestRoute = true;
+          }
+        }
       } catch (networkError) {
         console.error(`[Monitor] Connection error for ${website.url}:`, networkError.message);
         return {
@@ -264,30 +305,11 @@ class MonitoringService {
         };
       }
 
-      healthResponse = responses[0];
-      analyticsResponse = responses[1];
-      performanceResponse = responses[2];
-      seoResponse = responses[3];
-      securityResponse = responses[4];
-
-      // If 404 with pretty URL, retry with ?rest_route= (works when rewrites fail despite Post name)
-      if (healthResponse.status === 404) {
-        try {
-          responses = await tryFetch(true);
-          healthResponse = responses[0];
-          analyticsResponse = responses[1];
-          performanceResponse = responses[2];
-          seoResponse = responses[3];
-          securityResponse = responses[4];
-        } catch (e) {
-          // ignore retry errors, use original 404
-        }
-      }
-
       // Check if health endpoint exists (404 = API not installed or site offline)
       if (healthResponse.status === 404) {
         return {
           status: 'offline',
+          statusCode: 404,
           error: {
             message: 'WordPress Web Monitor plugin not found or site is returning 404.',
             code: 'API_NOT_FOUND'
@@ -295,9 +317,10 @@ class MonitoringService {
         };
       }
       
-      if (healthResponse.status === 401) {
+      if (healthResponse.status === 401 || healthResponse.status === 403) {
         return {
           status: 'error',
+          statusCode: healthResponse.status,
           error: {
             message: 'Invalid API key. Check your WordPress API key.',
             code: 'INVALID_API_KEY'
@@ -305,58 +328,61 @@ class MonitoringService {
         };
       }
       
-      if (healthResponse.status !== 200) {
+      if (healthResponse.status !== 200 || typeof healthResponse.data !== 'object') {
         return {
           status: 'offline',
+          statusCode: healthResponse.status,
           error: {
             message: `API returned status ${healthResponse.status}`,
             code: 'API_ERROR'
           }
         };
       }
-      
+
+      const [analyticsResponse, performanceResponse, seoResponse, securityResponse] = await Promise.all(
+        ['analytics', 'performance', 'seo', 'security'].map((ep) =>
+          axios.get(this._wpApiUrl(wpBase, ep, useRestRoute), opts).catch(() => null)
+        )
+      );
+      // A section whose endpoint failed is left out so the last good values are kept
+      const dataOf = (r) => (r && r.status === 200 && r.data && typeof r.data === 'object' ? r.data : null);
+
       const healthData = healthResponse.data;
-      const analyticsData = analyticsResponse.data;
-      const performanceData = performanceResponse.data;
-      const seoData = seoResponse.data;
-      const securityData = securityResponse.data;
+      const analyticsData = dataOf(analyticsResponse);
+      const performanceData = dataOf(performanceResponse);
+      const seoData = dataOf(seoResponse);
+      const securityData = dataOf(securityResponse);
       
       return {
-        status: healthData.status || 'healthy',
-        responseTime: healthData.response_time || 0,
+        status: normalizeStatus(healthData.status),
+        responseTime: healthResponse.elapsedMs,
         statusCode: healthResponse.status,
-        uptime: healthData.uptime || 100,
         metrics: {
-          loadTime: healthData.response_time || 0,
-          sslValid: website.url.startsWith('https://'),
-          database: healthData.checks?.database || 'unknown',
-          memory: healthData.checks?.memory || 'unknown',
-          plugins: healthData.checks?.plugins || 'unknown',
-          memoryUsage: healthData.checks?.memory_usage || '0%',
-          memoryLimit: healthData.checks?.memory_limit || 'unknown'
+          loadTime: healthResponse.elapsedMs,
+          serverProcessingTime: healthData.response_time ?? null,
+          sslValid: website.url.startsWith('https://')
         },
-        analytics: {
-          totalVisitors: analyticsData.visitors || 0,
-          totalPageViews: analyticsData.page_views || 0,
-          bounceRate: analyticsData.bounce_rate || 0,
-          avgSessionDuration: analyticsData.avg_session_duration || 0,
+        analytics: analyticsData && {
+          totalVisitors: analyticsData.totalVisitors ?? null,
+          totalPageViews: analyticsData.pageViews ?? null,
+          bounceRate: analyticsData.bounceRate ?? null,
+          avgSessionDuration: analyticsData.avgSessionDuration ?? null,
           topPages: analyticsData.top_pages || [],
-          trafficSources: analyticsData.traffic_sources || {},
           contentStats: analyticsData.content_stats || {}
         },
-        performance: {
+        performance: performanceData && {
           loadTime: performanceData.load_time || 0,
           serverResponseTime: performanceData.server_response_time || 0,
           databaseQueryTime: performanceData.database_query_time || 0,
           memoryUsage: performanceData.memory_usage || 0,
           memoryPeak: performanceData.memory_peak || 0,
-          cpuUsage: performanceData.cpu_usage || 0,
-          performanceScore: performanceData.performance_score || 0,
+          cpuUsage: performanceData.cpu_usage ?? null,
+          performanceScore: performanceData.performance_score ?? null,
           activePlugins: performanceData.active_plugins || 0,
           recommendations: performanceData.recommendations || []
         },
-        seo: {
-          score: seoData.score || 0,
+        seo: seoData && {
+          score: seoData.score ?? null,
           metaTags: seoData.meta_tags || 'incomplete',
           altTags: seoData.alt_tags || 0,
           headingStructure: seoData.heading_structure || 'unknown',
@@ -369,12 +395,12 @@ class MonitoringService {
           seoIssues: seoData.seo_issues || [],
           recommendations: seoData.recommendations || []
         },
-        security: {
+        security: securityData && {
           sslStatus: securityData.ssl_status || 'disabled',
           firewall: securityData.firewall || 'none',
           malwareScan: securityData.malware_scan || 'unknown',
           vulnerabilityScan: securityData.vulnerability_scan || 'unknown',
-          securityScore: securityData.security_score || 0,
+          securityScore: securityData.security_score ?? null,
           securityPlugins: securityData.security_plugins || 0,
           totalPlugins: securityData.total_plugins || 0,
           outdatedPlugins: securityData.outdated_plugins || 0,
@@ -383,17 +409,11 @@ class MonitoringService {
         }
       };
     } catch (error) {
-      // If API doesn't exist or connection fails, return error/offline
-      const isConnectionError = error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('timeout');
-      const is404 = error.response?.status === 404;
-      
       return {
-        status: isConnectionError ? 'offline' : (is404 ? 'error' : 'error'),
+        status: 'error',
         error: {
-          message: is404 
-            ? 'WordPress Web Monitor plugin not found. Install the plugin first.'
-            : error.message,
-          code: isConnectionError ? 'CONNECTION_FAILED' : (is404 ? 'API_NOT_FOUND' : 'WP_CHECK_FAILED')
+          message: error.message,
+          code: 'WP_CHECK_FAILED'
         }
       };
     }
@@ -402,7 +422,7 @@ class MonitoringService {
   // Next.js health check – return "error"/"offline" if API doesn't exist
   async checkNextJS(website) {
     try {
-      const response = await axios.get(`${website.url}/api/webmonitor/health`, {
+      const response = await timedGet(`${website.url}/api/webmonitor/health`, {
         timeout: 10000,
         headers: {
           'Authorization': `Bearer ${website.apiKey}`
@@ -454,12 +474,12 @@ class MonitoringService {
       const data = response.data;
       
       return {
-        status: data.status || 'healthy',
-        responseTime: data.response_time || 0,
+        status: normalizeStatus(data.status),
+        responseTime: response.elapsedMs,
         statusCode: response.status,
-        uptime: data.uptime || 100,
         metrics: {
-          loadTime: data.response_time || 0,
+          loadTime: response.elapsedMs,
+          serverProcessingTime: data.response_time ?? null,
           sslValid: website.url.startsWith('https://'),
           nextjsVersion: data.nextjs_version,
           nodeVersion: data.node_version
@@ -481,7 +501,7 @@ class MonitoringService {
   async checkLaravel(website) {
     try {
       const baseUrl = (website.url || '').replace(/\/$/, '');
-      const healthResponse = await axios.get(`${baseUrl}/api/webmonitor/health`, {
+      const healthResponse = await timedGet(`${baseUrl}/api/webmonitor/health`, {
         timeout: 10000,
         headers: { 'Authorization': `Bearer ${website.apiKey}` },
         validateStatus: (s) => s < 500 // Don't throw on 4xx, check status explicitly
@@ -531,7 +551,7 @@ class MonitoringService {
       }
 
       const data = healthResponse.data;
-      let status = data.status || 'healthy';
+      let status = normalizeStatus(data.status);
       let apiPackagesAvailable = true;
 
       // Only check packages if health works - if packages missing, show warning
@@ -553,12 +573,12 @@ class MonitoringService {
 
       return {
         status,
-        responseTime: data.response_time || 0,
+        responseTime: healthResponse.elapsedMs,
         statusCode: healthResponse.status,
-        uptime: data.uptime || 100,
         apiPackagesAvailable,
         metrics: {
-          loadTime: data.response_time || 0,
+          loadTime: healthResponse.elapsedMs,
+          serverProcessingTime: data.response_time ?? null,
           sslValid: (website.url || '').startsWith('https://'),
           phpVersion: data.php_version,
           laravelVersion: data.framework_version,
@@ -582,7 +602,7 @@ class MonitoringService {
   async checkCodeIgniter(website) {
     try {
       const baseUrl = (website.url || '').replace(/\/$/, '');
-      const healthResponse = await axios.get(`${baseUrl}/api/webmonitor/health`, {
+      const healthResponse = await timedGet(`${baseUrl}/api/webmonitor/health`, {
         timeout: 10000,
         headers: { 'Authorization': `Bearer ${website.apiKey}` },
         validateStatus: (s) => s < 500
@@ -630,7 +650,7 @@ class MonitoringService {
       }
 
       const data = healthResponse.data;
-      let status = data.status || 'healthy';
+      let status = normalizeStatus(data.status);
       let apiPackagesAvailable = true;
 
       try {
@@ -651,12 +671,12 @@ class MonitoringService {
 
       return {
         status,
-        responseTime: data.response_time || 0,
+        responseTime: healthResponse.elapsedMs,
         statusCode: healthResponse.status,
-        uptime: data.uptime || 100,
         apiPackagesAvailable,
         metrics: {
-          loadTime: data.response_time || 0,
+          loadTime: healthResponse.elapsedMs,
+          serverProcessingTime: data.response_time ?? null,
           sslValid: (website.url || '').startsWith('https://'),
           phpVersion: data.php_version,
           codeigniterVersion: data.framework_version,
@@ -678,22 +698,22 @@ class MonitoringService {
   // Generic health check – URL reachable but no API; show "error" since no API connection
   async checkGeneric(website) {
     try {
-      const response = await axios.get(website.url, {
+      const response = await timedGet(website.url, {
         timeout: 10000
       });
       // URL is reachable but no API = error (not warning, since API is required)
       return {
         status: 'error',
-        responseTime: response.headers['x-response-time'] || 0,
+        responseTime: response.elapsedMs,
         statusCode: response.status,
-        uptime: response.status === 200 ? 100 : 95,
         apiConnected: false,
         error: {
           message: 'No API integration detected. Add API integration to enable monitoring.',
           code: 'NO_API'
         },
         metrics: {
-          loadTime: response.headers['x-response-time'] || 0,
+          loadTime: response.elapsedMs,
+          serverProcessingTime: null,
           sslValid: (website.url || '').startsWith('https://')
         }
       };
@@ -736,18 +756,7 @@ class MonitoringService {
       downtimeHours[keys[i]] = Math.round(counts * intervalHours * 100) / 100;
     }
 
-    const totalChecks30d = await MonitoringData.countDocuments({
-      websiteId: website._id,
-      timestamp: { $gte: windows[2].start }
-    });
-    const downChecks30d = await MonitoringData.countDocuments({
-      websiteId: website._id,
-      timestamp: { $gte: windows[2].start },
-      status: { $in: ['offline', 'error'] }
-    });
-    const uptimePercent = totalChecks30d > 0
-      ? Math.round((1 - downChecks30d / totalChecks30d) * 1000) / 10
-      : (website.uptime != null ? website.uptime : null);
+    const uptimePercent = await this.computeUptimePercent(website._id, 30);
 
     let diskSpace = null;
     let bandwidth = null;
@@ -769,7 +778,7 @@ class MonitoringService {
 
     return {
       downtimeHours,
-      uptimePercent: uptimePercent != null ? uptimePercent : website.uptime,
+      uptimePercent,
       lastChecked: website.lastChecked || null,
       status: website.status || 'unknown',
       checkIntervalMinutes: Math.round(intervalMs / 60000),
@@ -825,12 +834,23 @@ class MonitoringService {
       }
       
       try {
-        aiInsights = await aiInsightsService.getComprehensiveAIAnalysis({
-          ...website,
-          analytics: advancedAnalytics,
-          performance: performanceData,
-          security: securityData
-        });
+        // Spreading a mongoose document doesn't copy its fields, so work from a plain object.
+        // External services win when configured; otherwise use the site's own integration data.
+        const plain = typeof website.toObject === 'function' ? website.toObject() : website;
+        const cacheKey = String(website._id);
+        const cached = this.aiInsightsCache.get(cacheKey);
+        if (cached && Date.now() - cached.at < AI_CACHE_MS) {
+          aiInsights = { ...cached.data, cachedAt: new Date(cached.at) };
+        } else {
+          aiInsights = await aiInsightsService.getComprehensiveAIAnalysis({
+            ...plain,
+            analytics: advancedAnalytics,
+            performance: performanceData?.error ? plain.performance : performanceData,
+            security: securityData?.error ? plain.security : securityData
+          });
+          // Failures throw above and are never cached, so the next load retries
+          this.aiInsightsCache.set(cacheKey, { at: Date.now(), data: aiInsights });
+        }
       } catch (error) {
         console.error('AI insights service error:', error.message);
         // Don't use mock data - let error propagate or handle gracefully

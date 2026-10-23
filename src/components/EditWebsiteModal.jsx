@@ -19,7 +19,7 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
         name: website.name || '',
         url: website.url || '',
         platform: website.platform || 'wordpress',
-        apiKey: website.apiKey || ''
+        apiKey: '' // the real key never reaches the browser; blank keeps the stored one
       });
       setError('');
       setSuccess('');
@@ -41,37 +41,21 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
     setLoading(true);
 
     try {
-      if (!formData.name || !formData.url || !formData.apiKey) {
+      if (!formData.name || !formData.url) {
         setError('Please fill in all required fields');
         setLoading(false);
         return;
       }
 
-      // Test API connection with new values
-      let testUrl = formData.url.replace(/\/$/, '');
-      try {
-        const healthEndpoint = formData.platform === 'wordpress' 
-          ? `${testUrl}/wp-json/webmonitor-advanced/v1/health`
-          : `${testUrl}/api/webmonitor/health`;
-        
-        const response = await fetch(healthEndpoint, {
-          method: 'GET',
-          headers: { 'Authorization': `Bearer ${formData.apiKey}` }
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            setError('Invalid API key. Please check your API key.');
-          } else if (response.status === 404) {
-            setError('API endpoint not found. Check URL and ensure integration is installed.');
-          } else {
-            setError(`Connection failed: ${response.status} ${response.statusText}`);
-          }
-          setLoading(false);
-          return;
-        }
-      } catch (err) {
-        setError(`Unable to connect: ${err.message}. Check URL and server status.`);
+      // Test the connection server-side with the new values (stored key if left blank)
+      const check = await ApiService.verifyWebsite({
+        url: formData.url,
+        platform: formData.platform,
+        apiKey: formData.apiKey,
+        websiteId: website._id
+      });
+      if (!check.ok) {
+        setError(check.message || 'Connection failed. Check URL and API key.');
         setLoading(false);
         return;
       }
@@ -98,14 +82,14 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 mobile-safe-bottom">
       <div className="bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto mobile-scroll animate-slide-up">
         {/* Header */}
-        <div className="sticky top-0 bg-white z-10 flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+        <div className="sticky top-0 bg-white z-10 flex items-center justify-between p-4 sm:p-6 border-b border-brand-100">
           <div className="flex items-center gap-3">
-            <Settings size={24} className="text-[#2D1BFF]" />
-            <h2 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">Edit Settings</h2>
+            <Settings size={24} className="text-brand-600" />
+            <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">Edit Settings</h2>
           </div>
           <button
             onClick={onClose}
-            className="touch-target p-2 text-gray-400 active:text-gray-600 hover:text-gray-600 transition-colors rounded-lg active:bg-gray-100 no-select"
+            className="touch-target p-2 text-ink-muted active:text-ink-soft hover:text-ink-soft transition-colors rounded-lg active:bg-brand-100 no-select"
           >
             <X size={22} className="sm:w-6 sm:h-6" />
           </button>
@@ -128,7 +112,7 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Website Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink-soft mb-2">
                 Website Name *
               </label>
               <input
@@ -137,14 +121,14 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
                 value={formData.name}
                 onChange={handleChange}
                 placeholder="My Website"
-                className="w-full px-4 py-3.5 touch-target border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                className="w-full px-4 py-3.5 touch-target border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-500 text-base"
                 required
               />
             </div>
 
             {/* Website URL */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink-soft mb-2">
                 Website URL *
               </label>
               <input
@@ -153,21 +137,21 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
                 value={formData.url}
                 onChange={handleChange}
                 placeholder="https://mysite.com"
-                className="w-full px-4 py-3.5 touch-target border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                className="w-full px-4 py-3.5 touch-target border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-500 text-base"
                 required
               />
             </div>
 
             {/* Platform */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink-soft mb-2">
                 Platform *
               </label>
               <select
                 name="platform"
                 value={formData.platform}
                 onChange={handleChange}
-                className="w-full px-4 py-3.5 touch-target border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-base bg-white"
+                className="w-full px-4 py-3.5 touch-target border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-500 text-base bg-white"
                 required
               >
                 <option value="wordpress">WordPress</option>
@@ -181,20 +165,20 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
 
             {/* API Key */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                API Key *
+              <label className="block text-sm font-medium text-ink-soft mb-2">
+                API Key
               </label>
               <input
-                type="text"
+                type="password"
                 name="apiKey"
                 value={formData.apiKey}
                 onChange={handleChange}
-                placeholder="Enter your API key"
-                className="w-full px-4 py-3.5 touch-target border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
-                required
+                placeholder={website.apiKeyLast4 ? `Current key ends in ${website.apiKeyLast4}` : 'Enter your API key'}
+                autoComplete="off"
+                className="w-full px-4 py-3.5 touch-target border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-500 text-sm font-mono"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Update your API key if it has changed. The connection will be tested before saving.
+              <p className="text-xs text-ink-muted mt-1">
+                Leave blank to keep the current key. The connection will be tested before saving.
               </p>
             </div>
 
@@ -203,14 +187,14 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors touch-target"
+                className="flex-1 px-4 py-3.5 bg-brand-100 text-ink-soft rounded-xl font-semibold hover:bg-gray-200 transition-colors touch-target"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-[2] px-4 py-4 bg-[#2D1BFF] text-white rounded-2xl font-bold shadow-lg hover:shadow-xl active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed no-select"
+                className="flex-2 px-4 py-4 bg-brand-600 text-white rounded-2xl font-bold shadow-lg hover:shadow-xl active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed no-select"
               >
                 {loading ? 'Saving...' : 'Save Changes'}
               </button>

@@ -1,4 +1,5 @@
 const axios = require('axios');
+const MonitoringData = require('../models/MonitoringData');
 
 class AIInsightsService {
   constructor() {
@@ -15,7 +16,7 @@ class AIInsightsService {
       throw error;
     }
 
-    const prompt = this.buildAnalyticsPrompt(analyticsData, website);
+    const prompt = this.withRawData(this.buildAnalyticsPrompt(analyticsData, website), analyticsData, ['insights', 'recommendations', 'predictions']);
     
     try {
       const insights = await this.callAI(prompt);
@@ -31,36 +32,56 @@ class AIInsightsService {
   }
 
   // Parse methods for AI responses
+  // Missing sections stay empty: the dashboard must never show advice the AI didn't give.
+  toList(value) {
+    if (Array.isArray(value)) return value.map(String);
+    if (value == null || value === '') return [];
+    return [String(value)];
+  }
+
   parseAnalyticsInsights(insights) {
     return {
-      insights: insights.insights || ['Analytics data shows consistent performance'],
-      recommendations: insights.recommendations || ['Continue monitoring key metrics'],
-      predictions: insights.predictions || ['Expected stable growth']
+      insights: this.toList(insights.insights ?? insights.answer),
+      recommendations: this.toList(insights.recommendations),
+      predictions: this.toList(insights.predictions)
     };
   }
 
   parsePerformanceInsights(insights) {
     return {
-      insights: insights.insights || ['Performance metrics are within acceptable ranges'],
-      recommendations: insights.recommendations || ['Monitor performance trends'],
-      impact: insights.impact || ['Performance improvements will benefit user experience']
+      insights: this.toList(insights.insights ?? insights.answer),
+      recommendations: this.toList(insights.recommendations),
+      impact: this.toList(insights.impact)
     };
   }
 
   parseSEOInsights(insights) {
     return {
-      insights: insights.insights || ['SEO performance is good'],
-      recommendations: insights.recommendations || ['Continue SEO best practices'],
-      priorities: insights.priorities || ['Focus on content optimization']
+      insights: this.toList(insights.insights ?? insights.answer),
+      recommendations: this.toList(insights.recommendations),
+      priorities: this.toList(insights.priorities)
     };
   }
 
   parseSecurityInsights(insights) {
     return {
-      insights: insights.insights || ['Security posture is strong'],
-      recommendations: insights.recommendations || ['Maintain security monitoring'],
-      riskAssessment: insights.riskAssessment || ['Risk level is acceptable']
+      insights: this.toList(insights.insights ?? insights.answer),
+      recommendations: this.toList(insights.recommendations),
+      riskAssessment: this.toList(insights.riskAssessment ?? insights.risk_assessment)
     };
+  }
+
+  // The prompt templates use the external services' field names, which site integrations don't
+  // share; so drop template lines with no value and always include the real data and reply shape.
+  withRawData(prompt, data, listKeys) {
+    const template = prompt.split('\n').filter((line) => !/undefined|null\/100/.test(line)).join('\n');
+    return `${template}
+
+    Actual data (JSON). Base every statement only on these values and do not assume anything not present.
+    Times are in milliseconds; memory and CPU values are percentages; altTags and link fields are counts:
+    ${JSON.stringify(data, null, 2)}
+
+    Reply with only a JSON object with these keys, each an array of short strings: ${listKeys.join(', ')}.`;
   }
 
   // AI-Powered Performance Insights
@@ -71,7 +92,7 @@ class AIInsightsService {
       throw error;
     }
 
-    const prompt = this.buildPerformancePrompt(performanceData, website);
+    const prompt = this.withRawData(this.buildPerformancePrompt(performanceData, website), performanceData, ['insights', 'recommendations', 'impact']);
     
     try {
       const insights = await this.callAI(prompt);
@@ -94,7 +115,7 @@ class AIInsightsService {
       throw error;
     }
 
-    const prompt = this.buildSEOPrompt(seoData, website);
+    const prompt = this.withRawData(this.buildSEOPrompt(seoData, website), seoData, ['insights', 'recommendations', 'priorities']);
     
     try {
       const insights = await this.callAI(prompt);
@@ -117,7 +138,7 @@ class AIInsightsService {
       throw error;
     }
 
-    const prompt = this.buildSecurityPrompt(securityData, website);
+    const prompt = this.withRawData(this.buildSecurityPrompt(securityData, website), securityData, ['insights', 'recommendations', 'riskAssessment']);
     
     try {
       const insights = await this.callAI(prompt);
@@ -135,10 +156,10 @@ class AIInsightsService {
   // Predictive Analytics
   async generatePredictiveAnalytics(historicalData, website) {
     const predictions = {
-      traffic: await this.predictTraffic(historicalData),
-      performance: await this.predictPerformance(historicalData),
-      security: await this.predictSecurityRisks(historicalData),
-      revenue: await this.predictRevenue(historicalData)
+      traffic: await this.predictTraffic(website),
+      performance: await this.predictPerformance(website),
+      security: await this.predictSecurityRisks(website),
+      revenue: await this.predictRevenue(website)
     };
 
     return predictions;
@@ -180,16 +201,13 @@ class AIInsightsService {
   }
 
   // Automated Recommendations
+  // Recommendations reported by the site's own integration checks
   async generateAutomatedRecommendations(websiteData) {
-    const recommendations = {
-      performance: await this.generatePerformanceRecommendations(websiteData),
-      seo: await this.generateSEORecommendations(websiteData),
-      security: await this.generateSecurityRecommendations(websiteData),
-      content: await this.generateContentRecommendations(websiteData),
-      marketing: await this.generateMarketingRecommendations(websiteData)
+    return {
+      performance: this.toList(websiteData.performance?.recommendations),
+      seo: this.toList(websiteData.seo?.recommendations),
+      security: this.toList(websiteData.security?.recommendations)
     };
-
-    return recommendations;
   }
 
   // Competitive Analysis
@@ -215,6 +233,9 @@ class AIInsightsService {
       throw error;
     }
 
+    // Providers are tried in order; a failing one (bad key, quota, outage) falls through to the next
+    let lastError = null;
+
     // Try OpenAI first
     if (this.openaiApiKey) {
       try {
@@ -233,7 +254,7 @@ class AIInsightsService {
         return JSON.parse(response.data.choices[0].message.content);
       } catch (error) {
         console.error('OpenAI API Error:', error.message);
-        throw error;
+        lastError = error;
       }
     }
 
@@ -255,7 +276,7 @@ class AIInsightsService {
         return JSON.parse(response.data.content[0].text);
       } catch (error) {
         console.error('Anthropic API Error:', error.message);
-        throw error;
+        lastError = error;
       }
     }
 
@@ -266,9 +287,12 @@ class AIInsightsService {
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.googleAIApiKey}`,
           {
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { 
-              maxOutputTokens: 1000,
-              temperature: 0.7
+            generationConfig: {
+              maxOutputTokens: 2048,
+              temperature: 0.4,
+              responseMimeType: 'application/json',
+              // Thinking tokens count against maxOutputTokens and can truncate the JSON
+              thinkingConfig: { thinkingBudget: 0 }
             }
           },
           {
@@ -285,16 +309,18 @@ class AIInsightsService {
         
         // Try to parse as JSON, fallback to plain text
         try {
-          return JSON.parse(text);
+          return JSON.parse(text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, ''));
         } catch (parseError) {
           // If not JSON, return as plain text wrapped in a structure
           return { answer: text };
         }
       } catch (error) {
         console.error('Google AI API Error:', error.response?.data || error.message);
-        throw error;
+        lastError = error;
       }
     }
+
+    if (lastError) throw lastError;
 
     const error = new Error('No AI service available. Please configure at least one AI API key.');
     error.statusCode = 503;
@@ -518,43 +544,70 @@ If the user asked a question, answer using this data. If they pasted an error, f
   }
 
   // Prediction Methods
-  async predictTraffic(historicalData) {
-    // In a real implementation, use machine learning models
+  // Only trends that can be derived from real data are reported; anything that would need
+  // traffic or sales data returns { available: false } instead of a made-up number.
+  async predictTraffic() {
     return {
-      nextWeek: Math.floor(Math.random() * 1000) + 5000,
-      nextMonth: Math.floor(Math.random() * 5000) + 20000,
-      confidence: Math.floor(Math.random() * 20) + 80,
-      trend: Math.random() > 0.5 ? 'increasing' : 'decreasing',
-      factors: ['seasonal trends', 'content performance', 'marketing campaigns']
+      available: false,
+      reason: 'Traffic forecasting needs a connected analytics source (e.g. Google Analytics).'
     };
   }
 
-  async predictPerformance(historicalData) {
+  async predictPerformance(website) {
+    if (!website?._id) {
+      return { available: false, reason: 'No monitoring history for this site.' };
+    }
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const checks = await MonitoringData.find({
+      websiteId: website._id,
+      timestamp: { $gte: since },
+      status: { $in: ['healthy', 'warning'] },
+      responseTime: { $ne: null }
+    }).sort({ timestamp: 1 }).select('responseTime').lean();
+
+    if (checks.length < 20) {
+      return {
+        available: false,
+        reason: `Not enough monitoring history yet (${checks.length} successful checks in the last 7 days, need 20).`
+      };
+    }
+
+    // Compare the older half of the window with the newer half
+    const half = Math.floor(checks.length / 2);
+    const avg = (list) => list.reduce((sum, c) => sum + c.responseTime, 0) / list.length;
+    const earlier = avg(checks.slice(0, half));
+    const recent = avg(checks.slice(half));
+    const changePercent = earlier > 0 ? Math.round(((recent - earlier) / earlier) * 1000) / 10 : 0;
+
     return {
-      expectedScore: Math.floor(Math.random() * 20) + 80,
-      bottlenecks: ['database queries', 'image optimization', 'caching'],
-      improvements: ['CDN implementation', 'code optimization', 'server upgrade'],
-      timeline: '2-4 weeks',
-      confidence: Math.floor(Math.random() * 20) + 75
+      available: true,
+      basis: `${checks.length} successful checks over the last 7 days`,
+      earlierAvgResponseMs: Math.round(earlier),
+      recentAvgResponseMs: Math.round(recent),
+      changePercent,
+      trend: changePercent > 10 ? 'slowing' : changePercent < -10 ? 'improving' : 'stable'
     };
   }
 
-  async predictSecurityRisks(historicalData) {
+  async predictSecurityRisks(website) {
+    const security = website?.security;
+    const score = security?.securityScore ?? security?.overallSecurityScore;
+    if (!security || security.error || score == null) {
+      return { available: false, reason: 'No security data available for this site.' };
+    }
     return {
-      riskLevel: Math.random() > 0.7 ? 'high' : 'medium',
-      potentialThreats: ['malware injection', 'DDoS attacks', 'data breaches'],
-      prevention: ['security updates', 'firewall configuration', 'monitoring'],
-      timeline: '1-2 weeks',
-      confidence: Math.floor(Math.random() * 20) + 70
+      available: true,
+      basis: `Security score ${score}/100 reported by the site integration`,
+      riskLevel: score < 50 ? 'high' : score < 75 ? 'medium' : 'low',
+      outdatedPlugins: security.outdatedPlugins ?? null,
+      sslEnabled: security.sslStatus ? security.sslStatus === 'enabled' : null
     };
   }
 
-  async predictRevenue(historicalData) {
+  async predictRevenue() {
     return {
-      nextMonth: Math.floor(Math.random() * 10000) + 5000,
-      growthRate: Math.floor(Math.random() * 20) + 10,
-      factors: ['traffic growth', 'conversion optimization', 'pricing strategy'],
-      confidence: Math.floor(Math.random() * 20) + 75
+      available: false,
+      reason: 'Revenue forecasting needs a connected sales or e-commerce data source.'
     };
   }
 
@@ -738,10 +791,7 @@ If the user asked a question, answer using this data. If they pasted an error, f
     let score = 0;
     let factors = 0;
 
-    if (websiteData.analytics) {
-      score += Math.min(websiteData.analytics.bounceRate, 100);
-      factors++;
-    }
+    // Bounce rate isn't a health score (higher is worse), so it is not averaged in here
     if (websiteData.performance) {
       score += websiteData.performance.performanceScore || 0;
       factors++;

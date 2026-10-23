@@ -1,5 +1,6 @@
-// Use relative URL in development (via Vite proxy) or absolute URL in production
-const API_BASE_URL = import.meta.env.DEV ? '/api' : 'http://localhost:5000/api';
+import { API_BASE_URL } from '../config/api';
+import { apiFetch } from './session';
+
 const CACHE_KEY = 'webmonitor_websites_cache';
 const CACHE_TIMESTAMP_KEY = 'webmonitor_websites_cache_timestamp';
 
@@ -49,14 +50,13 @@ class ApiService {
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
     try {
-      const response = await fetch(`${API_BASE_URL}/websites`, {
+      const response = await apiFetch(`${API_BASE_URL}/websites`, {
         signal: controller.signal,
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
         // When using Vite proxy, no need for CORS mode
-        ...(import.meta.env.DEV ? {} : { mode: 'cors', credentials: 'include' })
       });
       clearTimeout(timeoutId);
       
@@ -78,12 +78,12 @@ class ApiService {
       }
       
       // Re-throw with more context
-      throw new Error(`Backend connection failed: ${error.message}`);
+      throw new Error(`Backend connection failed: ${error.message}`, { cause: error });
     }
   }
 
   static async getWebsite(id) {
-    const response = await fetch(`${API_BASE_URL}/websites/${id}`);
+    const response = await apiFetch(`${API_BASE_URL}/websites/${id}`);
     if (!response.ok) {
       throw new Error('Failed to fetch website');
     }
@@ -91,7 +91,7 @@ class ApiService {
   }
 
   static async createWebsite(websiteData) {
-    const response = await fetch(`${API_BASE_URL}/websites`, {
+    const response = await apiFetch(`${API_BASE_URL}/websites`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -99,13 +99,14 @@ class ApiService {
       body: JSON.stringify(websiteData),
     });
     if (!response.ok) {
-      throw new Error('Failed to create website');
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to create website');
     }
     return response.json();
   }
 
   static async updateWebsite(id, websiteData) {
-    const response = await fetch(`${API_BASE_URL}/websites/${id}`, {
+    const response = await apiFetch(`${API_BASE_URL}/websites/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -113,13 +114,14 @@ class ApiService {
       body: JSON.stringify(websiteData),
     });
     if (!response.ok) {
-      throw new Error('Failed to update website');
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to update website');
     }
     return response.json();
   }
 
   static async deleteWebsite(id) {
-    const response = await fetch(`${API_BASE_URL}/websites/${id}`, {
+    const response = await apiFetch(`${API_BASE_URL}/websites/${id}`, {
       method: 'DELETE',
     });
     if (!response.ok) {
@@ -128,9 +130,17 @@ class ApiService {
     return response.json();
   }
 
+  static async getIncidents(websiteId, days = 30) {
+    const response = await apiFetch(`${API_BASE_URL}/websites/${websiteId}/incidents?days=${days}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch incidents');
+    }
+    return response.json();
+  }
+
   // Monitoring endpoints
-  static async getMonitoringData(websiteId, hours = 24) {
-    const response = await fetch(`${API_BASE_URL}/websites/${websiteId}/monitoring?hours=${hours}`);
+  static async getMonitoringData(websiteId, hours = 24, limit = 100) {
+    const response = await apiFetch(`${API_BASE_URL}/websites/${websiteId}/monitoring?hours=${hours}&limit=${limit}`);
     if (!response.ok) {
       throw new Error('Failed to fetch monitoring data');
     }
@@ -138,15 +148,31 @@ class ApiService {
   }
 
   static async getAnalyticsData(websiteId, days = 30) {
-    const response = await fetch(`${API_BASE_URL}/websites/${websiteId}/analytics?days=${days}`);
+    const response = await apiFetch(`${API_BASE_URL}/websites/${websiteId}/analytics?days=${days}`);
     if (!response.ok) {
       throw new Error('Failed to fetch analytics data');
     }
     return response.json();
   }
 
+  // Server-side check of a site's integration; resolves to { ok, status, message, responseTime }
+  static async verifyWebsite({ url, platform, apiKey, websiteId }) {
+    const response = await apiFetch(`${API_BASE_URL}/websites/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url, platform, apiKey, websiteId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok && !data.message) {
+      throw new Error(`Verification failed: ${response.status}`);
+    }
+    return data;
+  }
+
   static async testWebsiteConnection(websiteId) {
-    const response = await fetch(`${API_BASE_URL}/websites/${websiteId}/test`, {
+    const response = await apiFetch(`${API_BASE_URL}/websites/${websiteId}/test`, {
       method: 'POST',
     });
     if (!response.ok) {
