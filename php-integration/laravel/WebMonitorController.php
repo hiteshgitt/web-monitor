@@ -24,10 +24,8 @@ class WebMonitorController extends Controller
     
     public function __construct()
     {
-        // Load the common PHP API class
-        require_once base_path('vendor/../SAP Analytics/php-integration/common/WebMonitorAPI.php');
-        // Or if placed in app/Http/Controllers:
-        // require_once __DIR__ . '/../../../../php-integration/common/WebMonitorAPI.php';
+        // WebMonitorAPI.php ships next to this controller (app/Http/Controllers/)
+        require_once __DIR__ . '/WebMonitorAPI.php';
         
         $this->api = new \WebMonitorAPI();
     }

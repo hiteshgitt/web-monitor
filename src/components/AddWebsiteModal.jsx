@@ -170,6 +170,7 @@ const AddWebsiteModal = ({ isOpen, onClose, onAdd }) => {
                 <option value="laravel">Laravel</option>
                 <option value="codeigniter">CodeIgniter</option>
                 <option value="php">Core PHP</option>
+                <option value="other">Custom (any stack)</option>
               </select>
             </div>
 

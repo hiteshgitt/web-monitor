@@ -62,7 +62,9 @@ const StatusCard = ({ site, availability }) => {
   }[tone];
   const detail = UP_STATUSES.includes(site.status)
     ? `Responded in ${formatMs(site.responseTime)} · ${formatPercent(availability)} of checks passed in 24h`
-    : (site.lastError || 'The latest check did not get a valid response from the site integration.');
+    : tone === 'muted'
+      ? 'Checks run every minute; the first result will appear here shortly.'
+      : (site.lastError || 'The latest check did not get a valid response from the site integration.');
 
   return (
     <div className={`relative overflow-hidden rounded-2xl p-4 text-white bg-linear-to-br ${styles.bg} ${styles.shadow}`}>

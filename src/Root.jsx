@@ -6,6 +6,7 @@ import AdminPage from './components/admin/AdminPage';
 import App from './App';
 import LandingPage from './components/site/LandingPage';
 import LegalPage from './components/site/LegalPage';
+import IntegrationsPage from './components/site/IntegrationsPage';
 
 const FullScreenLoader = () => (
   <div className="min-h-screen bg-canvas flex items-center justify-center">
@@ -28,6 +29,7 @@ const Root = () => (
     <AuthProvider>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/integrations" element={<IntegrationsPage />} />
         <Route path="/privacy" element={<LegalPage doc="privacy" />} />
         <Route path="/terms" element={<LegalPage doc="terms" />} />
         <Route path="/login" element={<AuthPage mode="login" />} />

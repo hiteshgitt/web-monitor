@@ -31,3 +31,7 @@ dist-ssr
 backend/config.env
 backend/*.env
 !backend/config.env.example
+
+# Cloudflare Worker (local dev state and secrets)
+worker/.wrangler
+worker/.dev.vars

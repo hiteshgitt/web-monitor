@@ -158,8 +158,8 @@ const EditWebsiteModal = ({ isOpen, onClose, website, onUpdate }) => {
                 <option value="nextjs">Next.js</option>
                 <option value="laravel">Laravel</option>
                 <option value="codeigniter">CodeIgniter</option>
-                <option value="php">PHP (generic)</option>
-                <option value="other">Other</option>
+                <option value="php">Core PHP</option>
+                <option value="other">Custom (any stack)</option>
               </select>
             </div>
 

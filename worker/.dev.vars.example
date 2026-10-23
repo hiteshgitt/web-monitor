@@ -1,0 +1,5 @@
+# Local development secrets (copy to .dev.vars; never commit .dev.vars)
+JWT_SECRET=paste-output-of-openssl-rand-hex-48
+GOOGLE_AI_API_KEY=
+# Optional: extra admin emails for local testing
+# ADMIN_EMAILS=hiteshgml@gmail.com

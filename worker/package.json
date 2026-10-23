@@ -1,0 +1,27 @@
+{
+  "name": "web-monitor-worker",
+  "private": true,
+  "type": "module",
+  "description": "Web Monitor on Cloudflare: website + dashboard (static assets), API, D1 database and the every-minute monitor (cron)",
+  "scripts": {
+    "build:web": "npm --prefix .. run build",
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "npm run build:web && wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply web-monitor --local",
+    "db:migrate:remote": "wrangler d1 migrations apply web-monitor --remote"
+  },
+  "dependencies": {
+    "hono": "^4.13.13",
+    "jose": "^6.2.13"
+  },
+  "devDependencies": {
+    "wrangler": "^4.152.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261019.1": true
+  }
+}

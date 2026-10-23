@@ -20,11 +20,8 @@ class WebMonitorController extends ResourceController
     
     public function __construct()
     {
-        // Load the common PHP API class
-        // Adjust path based on your installation
-        require_once ROOTPATH . '../php-integration/common/WebMonitorAPI.php';
-        // Or if placed in app/Controllers:
-        // require_once __DIR__ . '/../../../../php-integration/common/WebMonitorAPI.php';
+        // WebMonitorAPI.php ships next to this controller (app/Controllers/)
+        require_once __DIR__ . '/WebMonitorAPI.php';
         
         $this->api = new \WebMonitorAPI();
     }

@@ -19,16 +19,19 @@
  * }
  */
 
-require_once __DIR__ . '/../common/WebMonitorAPI.php';
+// WebMonitorAPI.php ships next to this file (e.g. both in your-site/api/)
+require_once __DIR__ . '/WebMonitorAPI.php';
 
-// Load environment variables (if using .env file)
-if (file_exists(__DIR__ . '/../../.env')) {
-    $lines = file(__DIR__ . '/../../.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+// Load WEBMONITOR_API_KEY from a .env file in this folder or the site root (the folder above)
+foreach ([__DIR__ . '/.env', __DIR__ . '/../.env'] as $envFile) {
+    if (!file_exists($envFile)) continue;
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
-        if (strpos(trim($line), '#') === 0) continue;
+        if (strpos(trim($line), '#') === 0 || strpos($line, '=') === false) continue;
         list($key, $value) = explode('=', $line, 2);
         $_ENV[trim($key)] = trim($value);
     }
+    break;
 }
 
 $api = new WebMonitorAPI();

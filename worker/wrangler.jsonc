@@ -1,0 +1,54 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "web-monitor",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+
+  // Website + dashboard (Vite build). /api/* goes to the Worker; every other path is a static file,
+  // with unknown paths falling back to index.html for the single-page app (/app, /login, /privacy ...).
+  "assets": {
+    "directory": "../dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Serve at webmonitor.ruyalab.com (ruyalab.com is on this Cloudflare account); DNS + HTTPS are automatic
+  "routes": [{ "pattern": "webmonitor.ruyalab.com", "custom_domain": true }],
+
+  // Create with: npx wrangler d1 create web-monitor  (then paste the printed database_id here)
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "web-monitor",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // The monitor: one run per minute (the daily cleanup happens inside the 00:05 UTC run)
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+
+  // Slows down password guessing on the sign-in endpoints (per visitor IP)
+  "ratelimits": [
+    {
+      "name": "AUTH_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ],
+
+  // Non-secret settings. Secrets (JWT_SECRET, GOOGLE_AI_API_KEY) are set with `wrangler secret put`.
+  "vars": {
+    "ADMIN_EMAILS": "hiteshgml@gmail.com",
+    "GOOGLE_CLIENT_ID": "111600729792-qmdiib16v9bsibq288nho36drdm4piu5.apps.googleusercontent.com",
+    "MONITORING_RETENTION_DAYS": "90",
+    "DETAILS_REFRESH_MINUTES": "30",
+    "JWT_EXPIRES_DAYS": "30",
+    // Extra origins allowed to call the API (e.g. the mobile app later), comma-separated
+    "ALLOWED_ORIGINS": ""
+  },
+
+  "observability": { "enabled": true }
+}

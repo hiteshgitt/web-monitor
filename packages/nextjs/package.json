@@ -1,0 +1,51 @@
+{
+  "name": "@ruyalab/webmonitor-nextjs",
+  "version": "1.0.0",
+  "description": "Connect a Next.js site to Web Monitor (webmonitor.ruyalab.com): uptime, performance, SEO and security checks.",
+  "keywords": [
+    "nextjs",
+    "monitoring",
+    "uptime",
+    "health-check",
+    "webmonitor"
+  ],
+  "homepage": "https://webmonitor.ruyalab.com/integrations#nextjs",
+  "license": "MIT",
+  "author": "Ruyalab",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./app-router": {
+      "types": "./index.d.ts",
+      "default": "./src/app-router.js"
+    },
+    "./pages-router": {
+      "types": "./index.d.ts",
+      "default": "./src/pages-router.js"
+    }
+  },
+  "bin": {
+    "webmonitor-nextjs": "./bin/webmonitor-nextjs.js"
+  },
+  "files": [
+    "src",
+    "bin",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "next": ">=13.4"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

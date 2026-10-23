@@ -158,6 +158,7 @@ const LandingPage = () => {
             {NAV.map((item) => (
               <a key={item.href} href={item.href} className={`text-sm font-bold transition-colors ${scrolled ? 'text-ink-soft hover:text-brand-600' : 'text-white/85 hover:text-white'}`}>{item.label}</a>
             ))}
+            <Link to="/integrations" className={`text-sm font-bold transition-colors ${scrolled ? 'text-ink-soft hover:text-brand-600' : 'text-white/85 hover:text-white'}`}>Integrations</Link>
           </nav>
           <div className="hidden md:flex items-center gap-3">
             {signedIn ? (
@@ -178,6 +179,7 @@ const LandingPage = () => {
             {NAV.map((item) => (
               <a key={item.href} href={item.href} onClick={() => setMenuOpen(false)} className="block py-2.5 font-bold text-ink-soft">{item.label}</a>
             ))}
+            <Link to="/integrations" className="block py-2.5 font-bold text-ink-soft">Integrations</Link>
             <div className="flex gap-2 pt-3">
               {signedIn ? <Link to="/app" className="btn-primary flex-1">Open dashboard</Link> : (
                 <>
@@ -226,10 +228,13 @@ const LandingPage = () => {
           <span className="label-caps">Works with</span>
           <div className="flex flex-wrap justify-center gap-3">
             {PLATFORMS.map((p) => (
-              <span key={p.id} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-canvas text-sm font-bold text-ink-soft hover:bg-brand-50 hover:-translate-y-0.5 transition-all">
+              <Link key={p.id} to={`/integrations#${p.id}`} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-canvas text-sm font-bold text-ink-soft hover:bg-brand-50 hover:text-brand-700 hover:-translate-y-0.5 transition-all">
                 <PlatformIcon platform={p.id} className="w-5 h-5" /> {p.name}
-              </span>
+              </Link>
             ))}
+            <Link to="/integrations#custom" className="flex items-center gap-2 px-4 py-2 rounded-xl bg-canvas text-sm font-bold text-ink-soft hover:bg-brand-50 hover:text-brand-700 hover:-translate-y-0.5 transition-all">
+              + Any stack
+            </Link>
           </div>
         </div>
       </section>
@@ -279,6 +284,9 @@ const LandingPage = () => {
               </Reveal>
             ))}
           </div>
+          <Reveal className="mt-12 text-center">
+            <Link to="/integrations" className="btn-primary !h-12 !px-7">Setup guides & downloads <ArrowRight size={16} /></Link>
+          </Reveal>
         </div>
       </section>
 
@@ -389,6 +397,7 @@ const LandingPage = () => {
           </div>
           <nav className="flex gap-6 text-sm font-semibold text-ink-muted">
             {NAV.map((item) => <a key={item.href} href={item.href} className="hover:text-brand-600">{item.label}</a>)}
+            <Link to="/integrations" className="hover:text-brand-600">Integrations</Link>
             <Link to="/login" className="hover:text-brand-600">Sign in</Link>
             <Link to="/privacy" className="hover:text-brand-600">Privacy</Link>
             <Link to="/terms" className="hover:text-brand-600">Terms</Link>

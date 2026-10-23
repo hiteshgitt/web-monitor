@@ -1,0 +1,17 @@
+{
+    "name": "ruyalab/webmonitor-codeigniter",
+    "description": "Connect a CodeIgniter 4 app to Web Monitor (webmonitor.ruyalab.com): uptime, performance, SEO and security checks.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["codeigniter", "codeigniter4", "monitoring", "uptime", "health-check", "webmonitor"],
+    "homepage": "https://webmonitor.ruyalab.com/integrations#codeigniter",
+    "authors": [{ "name": "Ruyalab" }],
+    "require": {
+        "php": "^8.1",
+        "codeigniter4/framework": "^4.4"
+    },
+    "autoload": {
+        "psr-4": { "Ruyalab\\WebMonitor\\": "src/" }
+    },
+    "minimum-stability": "stable"
+}
