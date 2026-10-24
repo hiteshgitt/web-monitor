@@ -1,32 +1,23 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router';
 import {
-  ArrowLeft, Search, Sparkles, Clock, Users, X, Globe, Ban, Trash2, CheckCircle2, AlertTriangle, UserPlus, Activity, ShieldOff,
+  Search, Sparkles, Clock, Users, X, Globe, Ban, Trash2, CheckCircle2, AlertTriangle, UserPlus, Activity, ShieldOff,
+  ShieldCheck, LogOut, Bell, ScrollText,
 } from 'lucide-react';
-import { API_BASE_URL } from '../../config/api';
-import { apiFetch } from '../../services/session';
+import { adminRequest as request } from '../../services/adminSession';
+import AdminAlerts from './AdminAlerts';
+import AuditLog from './AuditLog';
 import PlatformIcon from '../PlatformIcon';
 import {
   STATUS_LABEL, TONE, displayUrl, formatMs, formatPercent, platformLabel, statusTone, timeAgo,
 } from '../../utils/siteMetrics';
 
-const request = async (path, options = {}) => {
-  const response = await apiFetch(`${API_BASE_URL}/admin${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || 'Request failed');
-  return data;
-};
-
-const isWaiting = (u) => Boolean(u.upgradeRequestedAt) && u.plan !== 'pro' && u.role !== 'admin';
+const isWaiting = (u) => Boolean(u.upgradeRequestedAt) && u.plan !== 'pro';
 
 const FILTERS = [
   { id: 'all', label: 'All', match: () => true },
   { id: 'requests', label: 'Pro requests', match: isWaiting },
-  { id: 'pro', label: 'Pro', match: (u) => u.plan === 'pro' && u.role !== 'admin' },
-  { id: 'free', label: 'Free', match: (u) => u.plan !== 'pro' && u.role !== 'admin' },
+  { id: 'pro', label: 'Pro', match: (u) => u.plan === 'pro' },
+  { id: 'free', label: 'Free', match: (u) => u.plan !== 'pro' },
   { id: 'suspended', label: 'Suspended', match: (u) => u.status === 'suspended' },
 ];
 
@@ -44,7 +35,6 @@ const StatCard = ({ icon: Icon, label, value, sub, tone = 'bg-brand-50 text-bran
 };
 
 const PlanChip = ({ user }) => {
-  if (user.role === 'admin') return <span className="chip !text-[12px] bg-brand-600 text-white"><Sparkles size={12} /> Admin</span>;
   if (user.status === 'suspended') return <span className="chip !text-[12px] bg-bad-soft text-bad"><Ban size={12} /> Suspended</span>;
   if (user.plan === 'pro') return <span className="chip !text-[12px] bg-brand-50 text-brand-700"><Sparkles size={12} /> Pro</span>;
   if (isWaiting(user)) return <span className="chip !text-[12px] bg-warn-soft text-warn"><Clock size={12} /> Requested {timeAgo(user.upgradeRequestedAt)}</span>;
@@ -92,7 +82,6 @@ const CustomerPanel = ({ userId, onClose, onChanged }) => {
   };
 
   const user = detail?.user;
-  const isAdminAccount = user?.role === 'admin';
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-ink/30 backdrop-blur-[2px] animate-fade-in" onClick={onClose}>
@@ -126,38 +115,36 @@ const CustomerPanel = ({ userId, onClose, onChanged }) => {
                 ))}
               </dl>
 
-              {!isAdminAccount && (
-                <section className="space-y-2">
-                  <h3 className="label-caps">Plan</h3>
-                  {isWaiting(user) && !declining && (
-                    <div className="flex gap-2">
-                      <button type="button" disabled={!!busy} onClick={() => act('approve', { plan: 'pro' })} className="btn-primary flex-1 !h-10">
-                        <CheckCircle2 size={15} /> {busy === 'approve' ? 'Approving…' : 'Approve Pro'}
-                      </button>
-                      <button type="button" disabled={!!busy} onClick={() => setDeclining(true)} className="flex-1 h-10 rounded-xl border border-brand-200 text-ink-soft font-bold text-[12px] uppercase tracking-wider hover:bg-bad-soft hover:text-bad hover:border-bad-soft transition-colors">
-                        Decline
-                      </button>
-                    </div>
-                  )}
-                  {declining && (
-                    <div className="rounded-2xl border border-brand-100 p-3 space-y-2">
-                      <label htmlFor="decline-reason" className="text-[13px] font-semibold text-ink">Message to the customer (optional)</label>
-                      <textarea id="decline-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} rows={3} placeholder="e.g. Please send your billing details to hiteshgml@gmail.com first." className="w-full rounded-xl bg-canvas p-3 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-brand-300" />
-                      <div className="flex gap-2 justify-end">
-                        <button type="button" onClick={() => setDeclining(false)} className="h-9 px-4 rounded-lg text-[12px] font-bold uppercase tracking-wider text-ink-soft hover:bg-canvas">Cancel</button>
-                        <button type="button" disabled={!!busy} onClick={() => act('decline', { declineRequest: true, reason })} className="h-9 px-4 rounded-lg bg-bad text-white text-[12px] font-bold uppercase tracking-wider">
-                          {busy === 'decline' ? 'Declining…' : 'Decline request'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {!isWaiting(user) && (
-                    <button type="button" disabled={!!busy} onClick={() => act('plan', { plan: user.plan === 'pro' ? 'free' : 'pro' })} className={user.plan === 'pro' ? 'w-full h-10 rounded-xl border border-brand-200 text-ink-soft font-bold text-[12px] uppercase tracking-wider hover:bg-canvas' : 'btn-primary w-full !h-10'}>
-                      {busy === 'plan' ? 'Saving…' : user.plan === 'pro' ? 'Move to Free plan' : 'Make Pro'}
+              <section className="space-y-2">
+                <h3 className="label-caps">Plan</h3>
+                {isWaiting(user) && !declining && (
+                  <div className="flex gap-2">
+                    <button type="button" disabled={!!busy} onClick={() => act('approve', { plan: 'pro' })} className="btn-primary flex-1 !h-10">
+                      <CheckCircle2 size={15} /> {busy === 'approve' ? 'Approving…' : 'Approve Pro'}
                     </button>
-                  )}
-                </section>
-              )}
+                    <button type="button" disabled={!!busy} onClick={() => setDeclining(true)} className="flex-1 h-10 rounded-xl border border-brand-200 text-ink-soft font-bold text-[12px] uppercase tracking-wider hover:bg-bad-soft hover:text-bad hover:border-bad-soft transition-colors">
+                      Decline
+                    </button>
+                  </div>
+                )}
+                {declining && (
+                  <div className="rounded-2xl border border-brand-100 p-3 space-y-2">
+                    <label htmlFor="decline-reason" className="text-[13px] font-semibold text-ink">Message to the customer (optional)</label>
+                    <textarea id="decline-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} rows={3} placeholder="e.g. Please send your billing details to hiteshgml@gmail.com first." className="w-full rounded-xl bg-canvas p-3 text-sm text-ink focus:outline-hidden focus:ring-2 focus:ring-brand-300" />
+                    <div className="flex gap-2 justify-end">
+                      <button type="button" onClick={() => setDeclining(false)} className="h-9 px-4 rounded-lg text-[12px] font-bold uppercase tracking-wider text-ink-soft hover:bg-canvas">Cancel</button>
+                      <button type="button" disabled={!!busy} onClick={() => act('decline', { declineRequest: true, reason })} className="h-9 px-4 rounded-lg bg-bad text-white text-[12px] font-bold uppercase tracking-wider">
+                        {busy === 'decline' ? 'Declining…' : 'Decline request'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {!isWaiting(user) && (
+                  <button type="button" disabled={!!busy} onClick={() => act('plan', { plan: user.plan === 'pro' ? 'free' : 'pro' })} className={user.plan === 'pro' ? 'w-full h-10 rounded-xl border border-brand-200 text-ink-soft font-bold text-[12px] uppercase tracking-wider hover:bg-canvas' : 'btn-primary w-full !h-10'}>
+                    {busy === 'plan' ? 'Saving…' : user.plan === 'pro' ? 'Move to Free plan' : 'Make Pro'}
+                  </button>
+                )}
+              </section>
 
               <section>
                 <h3 className="label-caps">Sites ({detail.sites.length})</h3>
@@ -207,32 +194,30 @@ const CustomerPanel = ({ userId, onClose, onChanged }) => {
                 </section>
               )}
 
-              {!isAdminAccount && (
-                <section className="space-y-2 pt-2 border-t border-brand-100">
-                  <h3 className="label-caps pt-3">Account</h3>
-                  <button type="button" disabled={!!busy} onClick={() => act('status', { status: user.status === 'suspended' ? 'active' : 'suspended' })} className="w-full h-10 rounded-xl border border-brand-200 text-ink-soft font-bold text-[12px] uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-canvas">
-                    {user.status === 'suspended' ? <><CheckCircle2 size={15} /> Reactivate account</> : <><Ban size={15} /> Suspend account</>}
+              <section className="space-y-2 pt-2 border-t border-brand-100">
+                <h3 className="label-caps pt-3">Account</h3>
+                <button type="button" disabled={!!busy} onClick={() => act('status', { status: user.status === 'suspended' ? 'active' : 'suspended' })} className="w-full h-10 rounded-xl border border-brand-200 text-ink-soft font-bold text-[12px] uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-canvas">
+                  {user.status === 'suspended' ? <><CheckCircle2 size={15} /> Reactivate account</> : <><Ban size={15} /> Suspend account</>}
+                </button>
+                <p className="text-[12px] text-ink-muted">
+                  {user.status === 'suspended' ? 'The customer can’t sign in and their sites aren’t checked.' : 'Suspending signs the customer out, blocks sign-in and pauses checks on their sites.'}
+                </p>
+                {!confirmDelete ? (
+                  <button type="button" onClick={() => setConfirmDelete(true)} className="w-full h-10 rounded-xl text-bad font-bold text-[12px] uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-bad-soft">
+                    <Trash2 size={15} /> Delete customer
                   </button>
-                  <p className="text-[12px] text-ink-muted">
-                    {user.status === 'suspended' ? 'The customer can’t sign in and their sites aren’t checked.' : 'Suspending signs the customer out, blocks sign-in and pauses checks on their sites.'}
-                  </p>
-                  {!confirmDelete ? (
-                    <button type="button" onClick={() => setConfirmDelete(true)} className="w-full h-10 rounded-xl text-bad font-bold text-[12px] uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-bad-soft">
-                      <Trash2 size={15} /> Delete customer
-                    </button>
-                  ) : (
-                    <div className="rounded-2xl bg-bad-soft p-3 space-y-2">
-                      <p className="text-[13px] text-bad font-semibold">Delete {user.email}, their {detail.sites.length} site{detail.sites.length === 1 ? '' : 's'} and all history? This can’t be undone.</p>
-                      <div className="flex gap-2 justify-end">
-                        <button type="button" onClick={() => setConfirmDelete(false)} className="h-9 px-4 rounded-lg text-[12px] font-bold uppercase tracking-wider text-ink-soft hover:bg-white">Cancel</button>
-                        <button type="button" disabled={busy === 'delete'} onClick={remove} className="h-9 px-4 rounded-lg bg-bad text-white text-[12px] font-bold uppercase tracking-wider">
-                          {busy === 'delete' ? 'Deleting…' : 'Delete permanently'}
-                        </button>
-                      </div>
+                ) : (
+                  <div className="rounded-2xl bg-bad-soft p-3 space-y-2">
+                    <p className="text-[13px] text-bad font-semibold">Delete {user.email}, their {detail.sites.length} site{detail.sites.length === 1 ? '' : 's'} and all history? This can’t be undone.</p>
+                    <div className="flex gap-2 justify-end">
+                      <button type="button" onClick={() => setConfirmDelete(false)} className="h-9 px-4 rounded-lg text-[12px] font-bold uppercase tracking-wider text-ink-soft hover:bg-white">Cancel</button>
+                      <button type="button" disabled={busy === 'delete'} onClick={remove} className="h-9 px-4 rounded-lg bg-bad text-white text-[12px] font-bold uppercase tracking-wider">
+                        {busy === 'delete' ? 'Deleting…' : 'Delete permanently'}
+                      </button>
                     </div>
-                  )}
-                </section>
-              )}
+                  </div>
+                )}
+              </section>
             </>
           )}
         </div>
@@ -241,8 +226,11 @@ const CustomerPanel = ({ userId, onClose, onChanged }) => {
   );
 };
 
-// Admin: overview, customers, Pro requests and account controls
-const AdminPage = () => {
+// Super admin: overview, customers, Pro requests, account controls and the activity log
+const AdminPage = ({ admin, onSignOut }) => {
+  const [view, setView] = useState('customers');
+  const [showAlerts, setShowAlerts] = useState(false);
+  const [unread, setUnread] = useState(0);
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -278,20 +266,38 @@ const AdminPage = () => {
 
   return (
     <div className="min-h-screen bg-canvas">
-      <header className="bg-white border-b border-brand-100 px-4 sm:px-6 lg:px-10 py-5 flex flex-wrap items-center gap-4 justify-between">
-        <div className="flex items-center gap-3">
-          <Link to="/app" className="btn-ghost" aria-label="Back to dashboard"><ArrowLeft size={18} /></Link>
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Customers</h1>
-            <p className="text-sm text-ink-muted">Super admin · plans, Pro requests and accounts</p>
-          </div>
+      <header className="bg-linear-to-r from-brand-700 to-brand-900 text-white px-4 sm:px-6 lg:px-10 py-4 flex items-center gap-3">
+        <span className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0"><ShieldCheck size={20} /></span>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-lg font-extrabold leading-tight">Web Monitor · Super admin</h1>
+          <p className="text-[12px] text-white/70 truncate">Signed in as {admin?.email} · sessions end after 8 hours</p>
         </div>
-        <label className="flex items-center gap-2 bg-canvas rounded-xl px-4 h-11 w-full sm:w-72 focus-within:ring-2 focus-within:ring-brand-300">
-          <Search size={16} className="text-brand-500" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or email" className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-ink focus:outline-hidden" />
-        </label>
+        <button type="button" onClick={() => setShowAlerts(true)} className="relative w-10 h-10 rounded-xl hover:bg-white/15 flex items-center justify-center" aria-label="Admin alerts" title="Admin alerts">
+          <Bell size={19} />
+          {unread > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-bad text-white text-[10px] font-bold flex items-center justify-center">{unread > 9 ? '9+' : unread}</span>}
+        </button>
+        <button type="button" onClick={onSignOut} className="h-10 px-3 rounded-xl hover:bg-white/15 flex items-center gap-2 text-[13px] font-bold" aria-label="Sign out">
+          <LogOut size={17} /> <span className="hidden sm:inline">Sign out</span>
+        </button>
       </header>
 
+      <div className="bg-white border-b border-brand-100 px-4 sm:px-6 lg:px-10 py-3 flex flex-wrap items-center gap-3 justify-between">
+        <div className="flex gap-1.5">
+          {[['customers', 'Customers', Users], ['activity', 'Activity log', ScrollText]].map(([id, label, Icon]) => (
+            <button key={id} type="button" onClick={() => setView(id)} className={`h-9 px-4 rounded-xl text-[13px] font-bold flex items-center gap-2 transition-colors ${view === id ? 'bg-brand-600 text-white shadow-btn' : 'text-ink-soft hover:bg-brand-50'}`}>
+              <Icon size={15} /> {label}
+            </button>
+          ))}
+        </div>
+        {view === 'customers' && (
+          <label className="flex items-center gap-2 bg-canvas rounded-xl px-4 h-10 w-full sm:w-72 focus-within:ring-2 focus-within:ring-brand-300">
+            <Search size={16} className="text-brand-500" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or email" className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-ink focus:outline-hidden" />
+          </label>
+        )}
+      </div>
+
+      {view === 'activity' ? <main className="p-4 sm:p-6 lg:p-10"><AuditLog /></main> : (
       <main className="p-4 sm:p-6 lg:p-10 space-y-6">
         {error && <div className="text-sm font-semibold text-bad bg-bad-soft rounded-xl px-4 py-3">{error}</div>}
 
@@ -365,8 +371,10 @@ const AdminPage = () => {
           </table>
         </div>
       </main>
+      )}
 
       {openId && <CustomerPanel userId={openId} onClose={() => setOpenId(null)} onChanged={load} />}
+      <AdminAlerts open={showAlerts} onClose={() => setShowAlerts(false)} onUnread={setUnread} />
     </div>
   );
 };

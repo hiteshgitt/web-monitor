@@ -43,9 +43,9 @@ export function notificationStatement(db, { userId, websiteId = null, type, titl
     VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(newId(), userId, websiteId, type, title, body, at.toISOString());
 }
 
-// Notify every admin (new sign-up, Pro request)
-export async function notifyAdmins(db, alert, exceptUserId = '') {
-  const { results } = await db.prepare("SELECT id FROM users WHERE role = 'admin' AND id != ?").bind(exceptUserId).all();
+// Notify every super admin (new sign-up, Pro request)
+export async function notifyAdmins(db, alert) {
+  const { results } = await db.prepare('SELECT id FROM admins WHERE totp_enabled = 1').all();
   if (results.length === 0) return;
   await db.batch(results.map((admin) => notificationStatement(db, { ...alert, userId: admin.id })));
 }

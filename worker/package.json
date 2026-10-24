@@ -8,7 +8,8 @@
     "dev": "wrangler dev --test-scheduled",
     "deploy": "npm run build:web && wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply web-monitor --local",
-    "db:migrate:remote": "wrangler d1 migrations apply web-monitor --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply web-monitor --remote",
+    "admin:create": "node scripts/admin.mjs"
   },
   "dependencies": {
     "hono": "^4.13.13",

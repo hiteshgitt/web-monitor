@@ -48,7 +48,6 @@ export const AuthProvider = ({ children }) => {
     user,
     status,
     isPro: Boolean(user?.isPro),
-    isAdmin: user?.role === 'admin',
     login: (email, password) => postJson('/auth/login', { email, password }).then(startSession),
     register: (name, email, password) => postJson('/auth/register', { name, email, password }).then(startSession),
     loginWithGoogle: (credential) => postJson('/auth/google', { credential }).then(startSession),

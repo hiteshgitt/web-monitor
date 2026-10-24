@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AuthPage from './components/auth/AuthPage';
-import AdminPage from './components/admin/AdminPage';
+import AdminApp from './components/admin/AdminApp';
 import App from './App';
 import LandingPage from './components/site/LandingPage';
 import LegalPage from './components/site/LegalPage';
@@ -15,12 +15,11 @@ const FullScreenLoader = () => (
 );
 
 // Signed-in only; remembers where the user was going so sign-in can return there
-const RequireAuth = ({ children, adminOnly = false }) => {
-  const { status, isAdmin } = useAuth();
+const RequireAuth = ({ children }) => {
+  const { status } = useAuth();
   const location = useLocation();
   if (status === 'loading') return <FullScreenLoader />;
   if (status !== 'signed-in') return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (adminOnly && !isAdmin) return <Navigate to="/app" replace />;
   return children;
 };
 
@@ -34,7 +33,8 @@ const Root = () => (
         <Route path="/terms" element={<LegalPage doc="terms" />} />
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/signup" element={<AuthPage mode="signup" />} />
-        <Route path="/app/admin" element={<RequireAuth adminOnly><AdminPage /></RequireAuth>} />
+        {/* Super admin: separate accounts and sign-in, not linked from the website */}
+        <Route path="/ruyashield/*" element={<AdminApp />} />
         <Route path="/app/*" element={<RequireAuth><App /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>

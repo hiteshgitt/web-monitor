@@ -1,5 +1,7 @@
-// Admin only: customers, their plans (manual Pro for now), suspension and deletion, and an overview
+// Super admin only (requireAdmin): customers, their plans (manual Pro for now), suspension and deletion,
+// an overview, the activity log and the admin's own alerts. Every change is written to admin_audit.
 import { Hono } from 'hono';
+import { auditStatement } from '../lib/adminAuth.js';
 import { notificationStatement } from '../lib/alerts.js';
 import { serializeIncident, serializeUser, serializeWebsite } from '../lib/serialize.js';
 import { liveStatsFor } from '../lib/stats.js';
@@ -11,11 +13,6 @@ const loadCustomer = async (c) => {
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(c.req.param('id')).first();
   if (!user) throw new ApiError(404, 'User not found');
   return user;
-};
-
-// Admins are managed through ADMIN_EMAILS, not from the dashboard
-const assertNotAdmin = (user) => {
-  if (user.role === 'admin') throw new ApiError(400, 'Admin accounts are managed with ADMIN_EMAILS');
 };
 
 admin.get('/stats', async (c) => {
@@ -62,6 +59,7 @@ admin.get('/users', async (c) => {
 admin.get('/users/:id', async (c) => {
   const user = await loadCustomer(c);
   const db = c.env.DB;
+  await auditStatement(db, c.get('admin'), 'viewed', { targetId: user.id, targetEmail: user.email }).run();
   const { results: siteRows } = await db.prepare('SELECT * FROM websites WHERE owner_id = ? ORDER BY created_at DESC')
     .bind(user.id).all();
   const live = await liveStatsFor(db, siteRows.map((s) => s.id));
@@ -81,14 +79,17 @@ admin.patch('/users/:id', async (c) => {
   const db = c.env.DB;
   const now = nowIso();
   const statements = [];
+  const audit = (action, detail = '') => statements.push(
+    auditStatement(db, c.get('admin'), action, { targetId: user.id, targetEmail: user.email, detail }),
+  );
 
   if (body.plan !== undefined) {
     if (!['free', 'pro'].includes(body.plan)) throw new ApiError(400, 'plan must be "free" or "pro"');
-    assertNotAdmin(user);
     // Approving Pro also clears the pending request
     statements.push(db.prepare(`UPDATE users SET plan = ?1,
         upgrade_requested_at = CASE WHEN ?1 = 'pro' THEN NULL ELSE upgrade_requested_at END, updated_at = ?2
       WHERE id = ?3`).bind(body.plan, now, user.id));
+    audit(body.plan === 'pro' ? (user.upgrade_requested_at ? 'pro_approved' : 'plan_pro') : 'plan_free');
     if (body.plan === 'pro' && user.plan !== 'pro') {
       statements.push(notificationStatement(db, {
         userId: user.id, type: 'pro_approved', title: 'Pro is active',
@@ -96,18 +97,18 @@ admin.patch('/users/:id', async (c) => {
       }));
     }
   } else if (body.declineRequest) {
-    assertNotAdmin(user);
     if (!user.upgrade_requested_at) throw new ApiError(400, 'This customer has no pending Pro request');
     statements.push(db.prepare('UPDATE users SET upgrade_requested_at = NULL, upgrade_declined_at = ?1, updated_at = ?1 WHERE id = ?2')
       .bind(now, user.id));
+    audit('pro_declined', String(body.reason || '').trim());
     statements.push(notificationStatement(db, {
       userId: user.id, type: 'pro_declined', title: 'Pro request not approved',
       body: String(body.reason || '').trim().slice(0, 300) || 'Your Pro request was not approved this time. Contact hiteshgml@gmail.com for details.',
     }));
   } else if (body.status !== undefined) {
     if (!['active', 'suspended'].includes(body.status)) throw new ApiError(400, 'status must be "active" or "suspended"');
-    assertNotAdmin(user);
     statements.push(db.prepare('UPDATE users SET status = ?, updated_at = ? WHERE id = ?').bind(body.status, now, user.id));
+    audit(body.status === 'suspended' ? 'suspended' : 'reactivated');
     // Signed-out devices shouldn't keep getting this account's alerts
     if (body.status === 'suspended') statements.push(db.prepare('DELETE FROM push_devices WHERE user_id = ?').bind(user.id));
   } else {
@@ -122,7 +123,6 @@ admin.patch('/users/:id', async (c) => {
 // Deletes the customer and everything they own (sites, history, alerts, devices)
 admin.delete('/users/:id', async (c) => {
   const user = await loadCustomer(c);
-  assertNotAdmin(user);
   const db = c.env.DB;
   const ownSites = 'SELECT id FROM websites WHERE owner_id = ?';
   await db.batch([
@@ -133,8 +133,24 @@ admin.delete('/users/:id', async (c) => {
     db.prepare('DELETE FROM notifications WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM push_devices WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
+    auditStatement(db, c.get('admin'), 'deleted', { targetId: user.id, targetEmail: user.email }),
   ]);
   return c.json({ message: 'Customer deleted' });
+});
+
+// Activity log, newest first
+admin.get('/audit', async (c) => {
+  const limit = Math.min(Number(c.req.query('limit')) || 100, 200);
+  const { results } = await c.env.DB.prepare('SELECT * FROM admin_audit ORDER BY created_at DESC LIMIT ?').bind(limit).all();
+  return c.json(results.map((row) => ({
+    _id: row.id,
+    adminEmail: row.admin_email,
+    action: row.action,
+    targetId: row.target_id,
+    targetEmail: row.target_email,
+    detail: row.detail,
+    createdAt: row.created_at,
+  })));
 });
 
 export default admin;

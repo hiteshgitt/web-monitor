@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutGrid, Plus, Bell, Search, BarChart3, RefreshCw, Globe, Sparkles, Clock, ChevronRight, Users } from 'lucide-react';
+import { LayoutGrid, Plus, Bell, Search, BarChart3, RefreshCw, Globe, Sparkles, Clock, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import SiteList from './SiteList';
 import SiteDetail from './SiteDetail';
@@ -12,7 +12,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import UserMenu from './UserMenu';
 import Logo from '../Logo';
 import UpgradeModal from '../pro/UpgradeModal';
-import usePendingProRequests from '../../hooks/usePendingProRequests';
 
 const RailButton = ({ icon: Icon, label, onClick, active, badge, pro }) => (
   <button
@@ -50,8 +49,7 @@ const AppShell = ({
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   const [showAlertSettings, setShowAlertSettings] = useState(false);
   const { notifications, unread: notificationCount, markAllRead } = useNotifications();
-  const { isPro, isAdmin, user } = useAuth();
-  const pendingProRequests = usePendingProRequests(isAdmin);
+  const { isPro, user } = useAuth();
   const [showUpgrade, setShowUpgrade] = useState(false);
 
   useEffect(() => {
@@ -115,7 +113,6 @@ const AppShell = ({
           <RailButton icon={Bell} label="Alerts" badge={notificationCount} onClick={() => setShowNotifications(true)} />
           <RailButton icon={Search} label="Command palette (Ctrl+K)" onClick={onOpenCommandPalette} />
           <RailButton icon={Globe} label="Website" onClick={() => navigate('/')} />
-          {isAdmin && <RailButton icon={Users} label="Customers & Pro requests (admin)" badge={pendingProRequests} onClick={() => navigate('/app/admin')} />}
           {selectedWebsite && <RailButton icon={BarChart3} label="Advanced analytics (Pro)" pro={!isPro} onClick={() => onOpenAdvanced(selectedWebsite)} />}
           <div className="flex-1" />
           <RailButton icon={RefreshCw} label="Reload data" onClick={() => onRefresh?.()} />

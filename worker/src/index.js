@@ -4,13 +4,15 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
-import { authRateLimit, requireAdmin, requireAuth, requirePro } from './lib/auth.js';
+import { requireAdmin } from './lib/adminAuth.js';
+import { authRateLimit, requireAuth, requirePro } from './lib/auth.js';
 import { runMonitoringCycle } from './lib/monitor.js';
 import { ApiError } from './lib/util.js';
 import adminRoutes from './routes/admin.js';
+import adminAuthRoutes from './routes/adminAuth.js';
 import advancedRoutes from './routes/advanced.js';
 import authRoutes from './routes/auth.js';
-import notificationRoutes, { pushPull } from './routes/notifications.js';
+import { adminNotifications, customerNotifications, pushPull } from './routes/notifications.js';
 import websiteRoutes from './routes/websites.js';
 
 const app = new Hono().basePath('/api');
@@ -38,11 +40,15 @@ app.route('/advanced', advancedRoutes);
 
 app.use('/notifications', requireAuth);
 app.use('/notifications/*', requireAuth);
-app.route('/notifications', notificationRoutes);
+app.route('/notifications', customerNotifications);
 // Browser service workers fetch alert text here after a Web Push wake-up (pull_key, no sign-in token)
 app.route('/push', pushPull);
 
-app.use('/admin/*', requireAuth, requireAdmin);
+// Super admin (/ruyashield): own accounts, password + authenticator code, 8-hour sessions
+app.use('/admin-auth/*', authRateLimit);
+app.route('/admin-auth', adminAuthRoutes);
+app.use('/admin/*', requireAdmin);
+app.route('/admin/notifications', adminNotifications);
 app.route('/admin', adminRoutes);
 
 app.notFound((c) => c.json({ error: 'Route not found' }, 404));

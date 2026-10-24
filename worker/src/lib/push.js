@@ -61,8 +61,11 @@ export async function deliverPendingPush(env, maxRequests = 6, at = new Date()) 
   if (pending.length === 0) return { pushed: 0 };
 
   const userIds = [...new Set(pending.map((n) => n.user_id))];
+  // Recipients are customers or super admins; numbered parameters let both halves share one list
+  const recipients = userIds.map((_, i) => `?${i + 1}`).join(', ');
   const [users, devices] = await db.batch([
-    db.prepare(`SELECT id, notify_prefs FROM users WHERE id IN (${placeholders(userIds.length)})`).bind(...userIds),
+    db.prepare(`SELECT id, notify_prefs FROM users WHERE id IN (${recipients})
+      UNION ALL SELECT id, notify_prefs FROM admins WHERE id IN (${recipients})`).bind(...userIds),
     db.prepare(`SELECT * FROM push_devices WHERE user_id IN (${placeholders(userIds.length)})`).bind(...userIds),
   ]);
   const prefsByUser = new Map(users.results.map((u) => [u.id, notifyPrefs(u)]));

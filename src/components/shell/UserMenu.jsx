@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LogOut, Sparkles, Users, Globe, BellRing } from 'lucide-react';
+import { LogOut, Sparkles, Globe, BellRing } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const initials = (user) => (user?.name || user?.email || '?')
   .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('');
 
-// Avatar button with account details, plan, alert settings, admin link and sign-out
+// Avatar button with account details, plan, alert settings and sign-out
 const UserMenu = ({ onUpgrade, onAlertSettings, placement = 'right' }) => {
-  const { user, isPro, isAdmin, logout } = useAuth();
+  const { user, isPro, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -52,11 +52,6 @@ const UserMenu = ({ onUpgrade, onAlertSettings, placement = 'right' }) => {
           <button type="button" onClick={() => navigate('/')} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-brand-50">
             <Globe size={16} /> Website
           </button>
-          {isAdmin && (
-            <button type="button" onClick={() => navigate('/app/admin')} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-brand-50">
-              <Users size={16} /> Customers (admin)
-            </button>
-          )}
           <button type="button" onClick={logout} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-bad-soft hover:text-bad">
             <LogOut size={16} /> Sign out
           </button>

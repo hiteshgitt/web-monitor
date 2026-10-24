@@ -41,7 +41,8 @@
 
   // Non-secret settings. Secrets (JWT_SECRET, GOOGLE_AI_API_KEY, VAPID_PRIVATE_JWK) are set with `wrangler secret put`.
   "vars": {
-    "ADMIN_EMAILS": "hiteshgml@gmail.com",
+    // Super admin sessions (/ruyashield); admins are created with `npm run admin:create`
+    "ADMIN_SESSION_HOURS": "8",
     "GOOGLE_CLIENT_ID": "111600729792-qmdiib16v9bsibq288nho36drdm4piu5.apps.googleusercontent.com",
     "MONITORING_RETENTION_DAYS": "90",
     "DETAILS_REFRESH_MINUTES": "30",

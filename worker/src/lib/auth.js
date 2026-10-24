@@ -74,11 +74,6 @@ export async function requirePro(c, next) {
   await next();
 }
 
-export async function requireAdmin(c, next) {
-  if (c.get('user')?.role !== 'admin') throw new ApiError(403, 'Admins only');
-  await next();
-}
-
 // Loads the :id website if it belongs to the signed-in customer (sets c.var.website)
 export async function loadOwnedWebsite(c, next) {
   const website = await c.env.DB

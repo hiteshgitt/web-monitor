@@ -13,19 +13,16 @@ const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth
 
 const announceSignup = (c, user) => notifyAdmins(c.env.DB, {
   type: 'signup', title: 'New sign-up', body: `${user.name ? `${user.name} · ` : ''}${user.email}`,
-}, user.id).catch(() => {});
+}).catch(() => {});
 
-const adminEmails = (env) => (env.ADMIN_EMAILS || '')
-  .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
-
-// Shared post-sign-in steps: admin role from ADMIN_EMAILS, last login time, new token
+// Shared post-sign-in steps: last login time, new token. Customer sign-in never grants admin access;
+// super admins have their own accounts (see routes/adminAuth.js).
 async function finishSignIn(c, user) {
   assertActive(user);
   const now = nowIso();
-  const role = adminEmails(c.env).includes(user.email) ? 'admin' : user.role;
-  await c.env.DB.prepare('UPDATE users SET role = ?, last_login_at = ?, updated_at = ? WHERE id = ?')
-    .bind(role, now, now, user.id).run();
-  const fresh = { ...user, role, last_login_at: now, updated_at: now };
+  await c.env.DB.prepare('UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?')
+    .bind(now, now, user.id).run();
+  const fresh = { ...user, last_login_at: now, updated_at: now };
   return { token: await signToken(c.env, user.id), user: serializeUser(fresh) };
 }
 

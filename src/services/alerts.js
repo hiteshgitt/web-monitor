@@ -9,17 +9,28 @@ const json = async (response) => {
   return data;
 };
 
-const send = (path, method, body) => apiFetch(`${API_BASE_URL}${path}`, {
-  method,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body ?? {}),
-}).then(json);
+// The same alert API serves customers (/notifications, customer session) and super admins
+// (/admin/notifications, admin session)
+export function alertsApi(fetcher, base) {
+  const send = (path, method, body) => fetcher(`${API_BASE_URL}${base}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  }).then(json);
+  return {
+    send,
+    fetchNotifications: () => fetcher(`${API_BASE_URL}${base}?limit=50`).then(json),
+    markNotificationsRead: (ids) => send('/read', 'POST', ids ? { ids } : {}),
+    fetchAlertSettings: () => fetcher(`${API_BASE_URL}${base}/settings`).then(json),
+    saveAlertSettings: (prefs) => send('/settings', 'PUT', prefs),
+    removePushDevice: (id) => send('/devices/remove', 'POST', { id }),
+  };
+}
 
-export const fetchNotifications = () => apiFetch(`${API_BASE_URL}/notifications?limit=50`).then(json);
-export const markNotificationsRead = (ids) => send('/notifications/read', 'POST', ids ? { ids } : {});
-export const fetchAlertSettings = () => apiFetch(`${API_BASE_URL}/notifications/settings`).then(json);
-export const saveAlertSettings = (prefs) => send('/notifications/settings', 'PUT', prefs);
-export const removePushDevice = (id) => send('/notifications/devices/remove', 'POST', { id });
+const customer = alertsApi(apiFetch, '/notifications');
+export const {
+  fetchNotifications, markNotificationsRead, fetchAlertSettings, saveAlertSettings, removePushDevice,
+} = customer;
 
 // --- This browser's push subscription ---
 
@@ -60,8 +71,9 @@ export async function currentBrowserSubscription() {
   return registration ? registration.pushManager.getSubscription() : null;
 }
 
-// Asks for permission (must run from a click), subscribes and registers this browser with the server
-export async function enableBrowserPush(publicKey) {
+// Asks for permission (must run from a click), subscribes and registers this browser with the server.
+// A browser has one push subscription per site, so it delivers the alerts of whichever account turned it on last.
+export async function enableBrowserPush(publicKey, api = customer) {
   if (!browserPushSupported()) throw new Error('This browser does not support notifications.');
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
@@ -71,16 +83,16 @@ export async function enableBrowserPush(publicKey) {
   await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription()
     || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
-  const device = await send('/notifications/devices', 'POST', { kind: 'web', endpoint: subscription.endpoint, label: browserLabel() });
+  const device = await api.send('/devices', 'POST', { kind: 'web', endpoint: subscription.endpoint, label: browserLabel() });
   await withStore('readwrite', (store) => store.put({ pullKey: device.pullKey, apiBase: new URL(API_BASE_URL, location.origin).href }, 'device'));
   return device;
 }
 
 // Unsubscribes this browser; tells the server unless signing out already removed the session
-export async function disableBrowserPush({ notifyServer = true } = {}) {
+export async function disableBrowserPush({ notifyServer = true, api = customer } = {}) {
   const subscription = await currentBrowserSubscription().catch(() => null);
   if (subscription) {
-    if (notifyServer) await send('/notifications/devices/remove', 'POST', { endpoint: subscription.endpoint }).catch(() => {});
+    if (notifyServer) await api.send('/devices/remove', 'POST', { endpoint: subscription.endpoint }).catch(() => {});
     await subscription.unsubscribe().catch(() => {});
   }
   if (browserPushSupported()) await withStore('readwrite', (store) => store.delete('device')).catch(() => {});

@@ -61,7 +61,7 @@ npx wrangler secret put JWT_SECRET          # paste the output of: openssl rand 
 npx wrangler secret put GOOGLE_AI_API_KEY   # Gemini key for the Zealot assistant (Pro); optional
 ```
 
-Non-secret settings (admin emails, Google client ID, retention…) are in `vars` in `worker/wrangler.jsonc`.
+Non-secret settings (Google client ID, retention, admin session length…) are in `vars` in `worker/wrangler.jsonc`.
 
 #### Push alerts
 
@@ -111,11 +111,26 @@ Google Cloud → project **Web Monitor** → Google Auth Platform:
 
 ### 7. First run
 
-1. Sign up at `https://webmonitor.ruyalab.com/signup` with **hiteshgml@gmail.com** — it becomes admin
-   automatically (`ADMIN_EMAILS`).
+1. Create the super admin (see **Super admin** below) and open the setup link it prints.
 2. Install the integration on each site (guides and downloads: `https://webmonitor.ruyalab.com/integrations`),
    then **Add site** with its public URL and API key.
-3. Customers sign up themselves; Pro requests appear under **Customers** (👥 in the left bar).
+3. Customers sign up themselves; Pro requests appear in the super admin area.
+
+### Super admin (`/ruyashield`)
+
+Admins are separate accounts. They can't be created by signing up or with Google, and a customer login never
+opens the admin area. The page isn't linked from the website and asks search engines not to index it. It is
+protected by a password plus a 6-digit authenticator code, and sessions end after 8 hours (`ADMIN_SESSION_HOURS`).
+
+```bash
+cd worker
+npm run admin:create -- webmonitor@ruyalab.com "Web Monitor Admin" --remote   # prints a one-time setup link (24 h)
+npm run admin:create -- webmonitor@ruyalab.com --reset --remote               # lost password or phone: new link
+```
+
+The setup link asks for the password (12+ characters), then shows a QR code for Google Authenticator, Authy or
+1Password. A reset signs the admin out immediately; the old password and authenticator stop working.
+Every admin action (sign-ins, customer views, plan changes, suspensions, deletions) is listed under **Activity log**.
 
 ### 8. Watch it
 
