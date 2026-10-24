@@ -23,20 +23,25 @@ const matches = (site, filter) => {
   return site.status === filter;
 };
 
-export default function SitesScreen({ session, onOpen, onSignOut, onExpired }) {
+export default function SitesScreen({ session, onOpen, onAlerts, onSignOut, onExpired }) {
   const [sites, setSites] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
+  const [unread, setUnread] = useState(0);
 
   const load = useCallback(async () => {
     try {
-      const data = await api('/websites', { token: session.token });
+      const [data, alerts] = await Promise.all([
+        api('/websites', { token: session.token }),
+        api('/notifications?limit=1', { token: session.token }).catch(() => null),
+      ]);
       setSites(Array.isArray(data) ? data : []);
+      if (alerts) setUnread(alerts.unread);
       setError('');
     } catch (err) {
-      if (err.status === 401) onExpired();
+      if (err.status === 401 || err.status === 403) onExpired();
       else setError(err.message);
     } finally {
       setLoading(false);
@@ -59,6 +64,10 @@ export default function SitesScreen({ session, onOpen, onSignOut, onExpired }) {
           <Image source={require('../../assets/logo-mark.png')} style={styles.logo} resizeMode="contain" />
           <Text style={styles.kicker}>{visible.length} of {sites.length} sites</Text>
         </View>
+        <Pressable onPress={onAlerts} hitSlop={8} style={styles.alerts}>
+          <Text style={styles.signOut}>Alerts</Text>
+          {unread > 0 ? <View style={styles.badge}><Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text></View> : null}
+        </Pressable>
         <Pressable onPress={onSignOut} hitSlop={8}>
           <Text style={styles.signOut}>Sign out</Text>
         </Pressable>
@@ -142,6 +151,9 @@ const styles = StyleSheet.create({
   logo: { width: 108, height: 40 },
   kicker: { marginTop: 6, color: colors.inkMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
   signOut: { color: colors.brand, fontWeight: '800', fontSize: 14 },
+  alerts: { flexDirection: 'row', alignItems: 'center', marginRight: 18 },
+  badge: { marginLeft: 5, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: colors.bad, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { color: colors.white, fontSize: 10, fontWeight: '800' },
   account: { marginTop: 2, marginHorizontal: 20, color: colors.inkSoft, fontSize: 13, fontWeight: '700' },
   search: { marginHorizontal: 16, marginTop: 14, backgroundColor: '#e4e8f8', borderRadius: 16, paddingHorizontal: 14 },
   searchInput: { height: 46, color: colors.ink, fontSize: 15, fontWeight: '700' },

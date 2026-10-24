@@ -21,13 +21,15 @@ export const setToken = (token) => {
   }
 };
 
-// fetch() with the bearer token; a 401 clears the session and tells the app to show sign-in
+// fetch() with the bearer token; a 401 (or a suspended account) clears the session and tells the app to show sign-in
 export const apiFetch = async (url, options = {}) => {
   const token = getToken();
   const headers = new Headers(options.headers || {});
   if (token) headers.set('Authorization', `Bearer ${token}`);
   const response = await fetch(url, { ...options, headers });
-  if (response.status === 401 && token) {
+  const suspended = response.status === 403 && token
+    && (await response.clone().json().catch(() => ({}))).code === 'ACCOUNT_SUSPENDED';
+  if ((response.status === 401 || suspended) && token) {
     setToken(null);
     window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
   }

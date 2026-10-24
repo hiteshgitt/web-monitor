@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LogOut, Sparkles, Users, Globe } from 'lucide-react';
+import { LogOut, Sparkles, Users, Globe, BellRing } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const initials = (user) => (user?.name || user?.email || '?')
   .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('');
 
-// Avatar button with account details, plan, admin link and sign-out
-const UserMenu = ({ onUpgrade, placement = 'right' }) => {
+// Avatar button with account details, plan, alert settings, admin link and sign-out
+const UserMenu = ({ onUpgrade, onAlertSettings, placement = 'right' }) => {
   const { user, isPro, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -45,6 +45,9 @@ const UserMenu = ({ onUpgrade, placement = 'right' }) => {
           <div className="h-px bg-brand-100 my-1" />
           <button type="button" onClick={() => { setOpen(false); onUpgrade(); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-brand-700 hover:bg-brand-50">
             <Sparkles size={16} /> {isPro ? 'Your plan' : user?.upgradeRequestedAt ? 'Pro request pending' : 'Compare plans & upgrade'}
+          </button>
+          <button type="button" onClick={() => { setOpen(false); onAlertSettings?.(); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-brand-50">
+            <BellRing size={16} /> Alert settings
           </button>
           <button type="button" onClick={() => navigate('/')} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-brand-50">
             <Globe size={16} /> Website

@@ -10,6 +10,7 @@ import { ApiError } from './lib/util.js';
 import adminRoutes from './routes/admin.js';
 import advancedRoutes from './routes/advanced.js';
 import authRoutes from './routes/auth.js';
+import notificationRoutes, { pushPull } from './routes/notifications.js';
 import websiteRoutes from './routes/websites.js';
 
 const app = new Hono().basePath('/api');
@@ -34,6 +35,12 @@ app.route('/websites', websiteRoutes);
 // Advanced view is the paid Pro tier
 app.use('/advanced/*', requireAuth, requirePro);
 app.route('/advanced', advancedRoutes);
+
+app.use('/notifications', requireAuth);
+app.use('/notifications/*', requireAuth);
+app.route('/notifications', notificationRoutes);
+// Browser service workers fetch alert text here after a Web Push wake-up (pull_key, no sign-in token)
+app.route('/push', pushPull);
 
 app.use('/admin/*', requireAuth, requireAdmin);
 app.route('/admin', adminRoutes);

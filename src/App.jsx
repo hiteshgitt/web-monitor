@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AppShell from './components/shell/AppShell';
 import ApiService from './services/api';
-import notificationService from './services/notificationService';
 import { useToast } from './hooks/useToast.jsx';
 import CommandPalette from './components/CommandPalette';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
@@ -24,47 +23,12 @@ const WebMonitorDashboard = () => {
     setDetailTab(mode === 'advanced' ? 'Advanced' : 'Overview');
   }, []);
 
-  // Register service worker and initialize notifications
+  // The service worker shows push alerts while the dashboard is closed (see AlertSettingsModal)
   useEffect(() => {
-    // Register service worker
-    if (notificationService.isServiceWorkerSupported()) {
-      notificationService.registerServiceWorker().then(registration => {
-        if (registration) {
-          console.log('Service Worker registered successfully');
-        }
-      });
-    }
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  }, []);
 
-    // Initialize notification service
-    notificationService.initialize().then(granted => {
-      if (granted) {
-        console.log('Notifications enabled');
-      } else {
-        console.log('Notifications not granted');
-      }
-    });
-
-    // Handle notification clicks - navigate to specific website
-    const handleNotificationClick = (event) => {
-      const { navigateTo } = event.detail;
-      if (navigateTo && navigateTo.websiteId) {
-        // Find the website from the list
-        const website = websites.find(w => w._id === navigateTo.websiteId);
-        if (website) {
-          // Navigate to the website in advanced mode (to show alerts tab)
-          handleSelectWebsite(website, 'advanced');
-          // The dashboard will handle switching to alerts tab
-          setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('switch-to-alerts', {
-              detail: { alertType: navigateTo.alertType }
-            }));
-          }, 100);
-        }
-      }
-    };
-
-    window.addEventListener('notification-clicked', handleNotificationClick);
-    
+  useEffect(() => {
     // Handle switch to advanced view from basic view
     const handleSwitchToAdvanced = (event) => {
       const { websiteId } = event.detail;
@@ -89,7 +53,6 @@ const WebMonitorDashboard = () => {
     window.addEventListener('keydown', handleKeyDown);
     
     return () => {
-      window.removeEventListener('notification-clicked', handleNotificationClick);
       window.removeEventListener('switch-to-advanced', handleSwitchToAdvanced);
       window.removeEventListener('keydown', handleKeyDown);
     };
@@ -232,7 +195,7 @@ const WebMonitorDashboard = () => {
         // Open settings
         break;
       case 'notifications':
-        // Open notifications
+        window.dispatchEvent(new CustomEvent('open-notifications'));
         break;
       default:
         break;

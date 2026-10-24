@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { API_BASE_URL } from '../config/api';
 import { apiFetch, getToken, setToken, SESSION_EXPIRED_EVENT } from '../services/session';
+import { disableBrowserPush } from '../services/alerts';
 
 const AuthContext = createContext(null);
 
@@ -52,7 +53,8 @@ export const AuthProvider = ({ children }) => {
     register: (name, email, password) => postJson('/auth/register', { name, email, password }).then(startSession),
     loginWithGoogle: (credential) => postJson('/auth/google', { credential }).then(startSession),
     requestUpgrade: () => postJson('/auth/upgrade-request').then((data) => setUser(data.user)),
-    logout: () => { setToken(null); setUser(null); setStatus('signed-out'); },
+    // Stop pushing alerts to this browser before the session goes away
+    logout: () => disableBrowserPush().finally(() => { setToken(null); setUser(null); setStatus('signed-out'); }),
   }), [user, status, startSession]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

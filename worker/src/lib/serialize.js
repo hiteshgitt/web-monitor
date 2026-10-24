@@ -1,4 +1,5 @@
 // Database rows -> API JSON, in the same shape the dashboard used with the Express/MongoDB backend
+import { notifyPrefs } from './alerts.js';
 import { parseJson } from './util.js';
 
 export const serializeUser = (row, extra = {}) => ({
@@ -11,6 +12,9 @@ export const serializeUser = (row, extra = {}) => ({
   isPro: row.plan === 'pro' || row.role === 'admin',
   hasPassword: Boolean(row.password_hash),
   upgradeRequestedAt: row.upgrade_requested_at || undefined,
+  upgradeDeclinedAt: row.upgrade_declined_at || undefined,
+  status: row.status || 'active',
+  notifyPrefs: notifyPrefs(row),
   lastLoginAt: row.last_login_at || undefined,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -38,6 +42,16 @@ export const serializeWebsite = (row, live = {}) => ({
   security: parseJson(row.security),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+});
+
+export const serializeNotification = (row) => ({
+  _id: row.id,
+  websiteId: row.website_id || null,
+  type: row.type,
+  title: row.title,
+  body: row.body,
+  createdAt: row.created_at,
+  read: Boolean(row.read_at),
 });
 
 export const serializeIncident = (row) => ({

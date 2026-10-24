@@ -54,8 +54,15 @@ export async function requireAuth(c, next) {
   }
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(payload.sub).first();
   if (!user) throw new ApiError(401, 'Account not found', { code: 'AUTH_REQUIRED' });
+  assertActive(user);
   c.set('user', user);
   await next();
+}
+
+export function assertActive(user) {
+  if (user.status === 'suspended') {
+    throw new ApiError(403, 'This account is suspended. Contact hiteshgml@gmail.com.', { code: 'ACCOUNT_SUSPENDED' });
+  }
 }
 
 export const isPro = (user) => user?.plan === 'pro' || user?.role === 'admin';

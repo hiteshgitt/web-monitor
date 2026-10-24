@@ -6,6 +6,7 @@ import SiteDetail from './SiteDetail';
 import AddWebsiteModal from '../AddWebsiteModal';
 import EditWebsiteModal from '../EditWebsiteModal';
 import NotificationPanel from '../NotificationPanel';
+import AlertSettingsModal from '../AlertSettingsModal';
 import useNotifications from '../../hooks/useNotifications';
 import { useAuth } from '../../contexts/AuthContext';
 import UserMenu from './UserMenu';
@@ -47,7 +48,8 @@ const AppShell = ({
   const [editing, setEditing] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
-  const { notificationCount, getAlertsByWebsite, markAllAsSeen } = useNotifications();
+  const [showAlertSettings, setShowAlertSettings] = useState(false);
+  const { notifications, unread: notificationCount, markAllRead } = useNotifications();
   const { isPro, isAdmin, user } = useAuth();
   const pendingProRequests = usePendingProRequests(isAdmin);
   const [showUpgrade, setShowUpgrade] = useState(false);
@@ -67,9 +69,35 @@ const AppShell = ({
   // Command palette / other components can still ask for the add dialog
   useEffect(() => {
     const open = () => setShowAdd(true);
+    const openAlerts = () => setShowNotifications(true);
     window.addEventListener('open-add-website-modal', open);
-    return () => window.removeEventListener('open-add-website-modal', open);
+    window.addEventListener('open-notifications', openAlerts);
+    return () => {
+      window.removeEventListener('open-add-website-modal', open);
+      window.removeEventListener('open-notifications', openAlerts);
+    };
   }, []);
+
+  // A browser notification click opens its site: /app?site=<id> on a fresh tab, or a message to an open one
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const siteId = params.get('site');
+    if (!siteId || websites.length === 0) return;
+    const site = websites.find((w) => w._id === siteId);
+    if (site) onSelectWebsite(site);
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [websites, onSelectWebsite]);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined;
+    const onMessage = (event) => {
+      if (event.data?.type !== 'open-site') return;
+      const site = websites.find((w) => w._id === event.data.siteId);
+      if (site) onSelectWebsite(site);
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [websites, onSelectWebsite]);
 
   const showDetail = Boolean(selectedWebsite);
 
@@ -91,7 +119,7 @@ const AppShell = ({
           {selectedWebsite && <RailButton icon={BarChart3} label="Advanced analytics (Pro)" pro={!isPro} onClick={() => onOpenAdvanced(selectedWebsite)} />}
           <div className="flex-1" />
           <RailButton icon={RefreshCw} label="Reload data" onClick={() => onRefresh?.()} />
-          <div className="mt-2"><UserMenu onUpgrade={() => setShowUpgrade(true)} /></div>
+          <div className="mt-2"><UserMenu onUpgrade={() => setShowUpgrade(true)} onAlertSettings={() => setShowAlertSettings(true)} /></div>
         </nav>
 
         {/* Site list */}
@@ -108,7 +136,7 @@ const AppShell = ({
             <div className="flex gap-1">
               <RailButton icon={Bell} label="Alerts" badge={notificationCount} onClick={() => setShowNotifications(true)} />
               <RailButton icon={Plus} label="Add site" onClick={() => setShowAdd(true)} />
-              <UserMenu placement="below" onUpgrade={() => setShowUpgrade(true)} />
+              <UserMenu placement="below" onUpgrade={() => setShowUpgrade(true)} onAlertSettings={() => setShowAlertSettings(true)} />
             </div>
           </div>
           <div className="flex-1 min-h-0">
@@ -189,13 +217,18 @@ const AppShell = ({
       <NotificationPanel
         isOpen={showNotifications}
         onClose={() => setShowNotifications(false)}
-        alertsByWebsite={getAlertsByWebsite()}
-        onSelectWebsiteId={(id) => {
-          const site = websites.find((w) => w._id === id);
-          if (site) onOpenAdvanced(site);
+        notifications={notifications}
+        onOpenItem={(n) => {
+          const site = websites.find((w) => w._id === n.websiteId);
+          if (site) {
+            setShowNotifications(false);
+            onSelectWebsite(site);
+          }
         }}
-        onMarkSeen={markAllAsSeen}
+        onOpenSettings={() => { setShowNotifications(false); setShowAlertSettings(true); }}
+        onMarkRead={markAllRead}
       />
+      {showAlertSettings && <AlertSettingsModal onClose={() => setShowAlertSettings(false)} />}
     </div>
   );
 };

@@ -1,75 +1,33 @@
-import { useState, useEffect } from 'react';
-import notificationService from '../services/notificationService';
+import { useCallback, useEffect, useState } from 'react';
+import { fetchNotifications, markNotificationsRead } from '../services/alerts';
 
-/**
- * Custom hook for managing notifications
- * Returns notification count and alerts
- */
-export const useNotifications = () => {
-  const [notificationCount, setNotificationCount] = useState(0);
-  const [alerts, setAlerts] = useState([]);
-  const [isInitialized, setIsInitialized] = useState(false);
+const REFRESH_MS = 60000; // the monitor runs once a minute
+
+// The signed-in customer's alert history from the server (site down/up, plugin updates, plan changes...)
+const useNotifications = () => {
+  const [notifications, setNotifications] = useState([]);
+  const [unread, setUnread] = useState(0);
+
+  const refresh = useCallback(() => fetchNotifications()
+    .then((data) => { setNotifications(data.notifications); setUnread(data.unread); })
+    .catch(() => {}), []);
 
   useEffect(() => {
-    // Initialize notification service
-    const init = async () => {
-      const granted = await notificationService.initialize();
-      setIsInitialized(granted);
+    refresh();
+    const interval = setInterval(refresh, REFRESH_MS);
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
+    return () => { clearInterval(interval); window.removeEventListener('focus', onFocus); };
+  }, [refresh]);
 
-      // Set initial values
-      setNotificationCount(notificationService.getNotificationCount());
-      setAlerts(notificationService.getAlerts());
+  const markAllRead = useCallback(() => {
+    if (unread === 0) return;
+    setUnread(0);
+    setNotifications((list) => list.map((n) => ({ ...n, read: true })));
+    markNotificationsRead().catch(() => {});
+  }, [unread]);
 
-      // Subscribe to updates
-      const unsubscribe = notificationService.subscribe((data) => {
-        setNotificationCount(data.count);
-        setAlerts(data.alerts);
-      });
-
-      return unsubscribe;
-    };
-
-    let unsubscribe;
-    init().then(unsub => {
-      unsubscribe = unsub;
-    });
-
-    // Cleanup
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-      notificationService.stopPeriodicCheck();
-    };
-  }, []);
-
-  // Handle notification click event
-  useEffect(() => {
-    const handleNotificationClick = (event) => {
-      const alert = event.detail;
-      // You can navigate to the alert or show a modal here
-      console.log('Notification clicked:', alert);
-    };
-
-    window.addEventListener('notification-clicked', handleNotificationClick);
-    return () => {
-      window.removeEventListener('notification-clicked', handleNotificationClick);
-    };
-  }, []);
-
-  return {
-    notificationCount,
-    alerts,
-    isInitialized,
-    refreshAlerts: () => notificationService.fetchAllAlerts(),
-    clearNotifications: () => notificationService.clearNotifications(),
-    markAsRead: (alertId) => notificationService.markAsRead(alertId),
-    markAllAsSeen: () => notificationService.markAllAsSeen(),
-    getNotificationCountForWebsite: (websiteId) => notificationService.getNotificationCountForWebsite(websiteId),
-    getAlertsForWebsite: (websiteId) => notificationService.getAlertsForWebsite(websiteId),
-    getAlertsByWebsite: () => notificationService.getAlertsByWebsite()
-  };
+  return { notifications, unread, refresh, markAllRead };
 };
 
 export default useNotifications;
-

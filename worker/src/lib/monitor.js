@@ -1,4 +1,6 @@
 // Health checks of monitored sites (ported from the Express monitoringService) and how results are recorded.
+import { alertStatements } from './alerts.js';
+import { deliverPendingPush } from './push.js';
 import { DOWN_STATUSES, UP_STATUSES, VALID_STATUSES, dayKey, hourKey, newId } from './util.js';
 
 const TIMEOUT_MS = 10000;
@@ -217,7 +219,7 @@ export async function performHealthCheck(site, { withDetails = false } = {}) {
   }
 }
 
-// Statements that store one check result: hourly bucket, daily total, and status/incident changes.
+// Statements that store one check result: hourly bucket, daily total, status/incident changes and alerts.
 // Returned (not executed) so the monitor can send every site's writes in a single D1 batch.
 export function recordCheckStatements(db, site, result, at = new Date()) {
   const isUp = UP_STATUSES.includes(result.status);
@@ -264,6 +266,7 @@ export function recordCheckStatements(db, site, result, at = new Date()) {
       site.id,
     ));
   }
+  statements.push(...alertStatements(db, site, result, at));
   return statements;
 }
 
@@ -277,12 +280,16 @@ export async function checkAndRecord(env, site) {
 
 // Free plan: 50 outgoing requests per run. Health checks first (1 request per site);
 // leftover budget refreshes the slower-changing WordPress details (4 requests per site).
-const SUBREQUEST_BUDGET = 45;
+// PUSH_REQUESTS are kept for delivering the alerts the run produced.
+const SUBREQUEST_BUDGET = 40;
+const PUSH_REQUESTS = 6;
 
 export async function runMonitoringCycle(env, scheduledTime = Date.now()) {
   const at = new Date(scheduledTime);
-  const { results: sites } = await env.DB.prepare('SELECT * FROM websites WHERE monitoring_enabled = 1').all();
-  if (sites.length === 0) return { checked: 0 };
+  // Suspended customers' sites are not checked
+  const { results: sites } = await env.DB.prepare(`SELECT w.* FROM websites w JOIN users u ON u.id = w.owner_id
+    WHERE w.monitoring_enabled = 1 AND u.status = 'active'`).all();
+  if (sites.length === 0) return { checked: 0, ...(await deliverPendingPush(env, PUSH_REQUESTS, at).catch(() => ({}))) };
 
   // More sites than one run can reach: rotate through them minute by minute
   const minute = Math.floor(scheduledTime / 60000);
@@ -310,7 +317,8 @@ export async function runMonitoringCycle(env, scheduledTime = Date.now()) {
   if (at.getUTCHours() === 0 && at.getUTCMinutes() === 5) {
     await purgeOldHistory(env, at);
   }
-  return { checked: due.length, detailsRefreshed: detailIds.size };
+  const push = await deliverPendingPush(env, PUSH_REQUESTS, at).catch((error) => ({ pushError: error.message }));
+  return { checked: due.length, detailsRefreshed: detailIds.size, ...push };
 }
 
 export async function purgeOldHistory(env, at = new Date()) {
@@ -320,5 +328,6 @@ export async function purgeOldHistory(env, at = new Date()) {
     env.DB.prepare('DELETE FROM check_hours WHERE hour < ?').bind(hourKey(cutoff)),
     env.DB.prepare('DELETE FROM check_days WHERE day < ?').bind(dayKey(cutoff)),
     env.DB.prepare('DELETE FROM incidents WHERE ended_at IS NOT NULL AND ended_at < ?').bind(cutoff.toISOString()),
+    env.DB.prepare('DELETE FROM notifications WHERE created_at < ?').bind(cutoff.toISOString()),
   ]);
 }

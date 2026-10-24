@@ -39,7 +39,7 @@
     }
   ],
 
-  // Non-secret settings. Secrets (JWT_SECRET, GOOGLE_AI_API_KEY) are set with `wrangler secret put`.
+  // Non-secret settings. Secrets (JWT_SECRET, GOOGLE_AI_API_KEY, VAPID_PRIVATE_JWK) are set with `wrangler secret put`.
   "vars": {
     "ADMIN_EMAILS": "hiteshgml@gmail.com",
     "GOOGLE_CLIENT_ID": "111600729792-qmdiib16v9bsibq288nho36drdm4piu5.apps.googleusercontent.com",
@@ -47,7 +47,10 @@
     "DETAILS_REFRESH_MINUTES": "30",
     "JWT_EXPIRES_DAYS": "30",
     // Extra origins allowed to call the API (e.g. the mobile app later), comma-separated
-    "ALLOWED_ORIGINS": ""
+    "ALLOWED_ORIGINS": "",
+    // Browser push (Web Push). The matching private key is the VAPID_PRIVATE_JWK secret; see deploy/CLOUDFLARE.md
+    "VAPID_PUBLIC_KEY": "",
+    "VAPID_SUBJECT": "mailto:hiteshgml@gmail.com"
   },
 
   "observability": { "enabled": true }

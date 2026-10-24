@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { checkPassword, hashPassword, needsRehash, requireAuth, signToken } from '../lib/auth.js';
+import { notifyAdmins } from '../lib/alerts.js';
+import { assertActive, checkPassword, hashPassword, needsRehash, requireAuth, signToken } from '../lib/auth.js';
 import { serializeUser } from '../lib/serialize.js';
 import { ApiError, newId, nowIso } from '../lib/util.js';
 
@@ -10,11 +11,16 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 
+const announceSignup = (c, user) => notifyAdmins(c.env.DB, {
+  type: 'signup', title: 'New sign-up', body: `${user.name ? `${user.name} · ` : ''}${user.email}`,
+}, user.id).catch(() => {});
+
 const adminEmails = (env) => (env.ADMIN_EMAILS || '')
   .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
 
 // Shared post-sign-in steps: admin role from ADMIN_EMAILS, last login time, new token
 async function finishSignIn(c, user) {
+  assertActive(user);
   const now = nowIso();
   const role = adminEmails(c.env).includes(user.email) ? 'admin' : user.role;
   await c.env.DB.prepare('UPDATE users SET role = ?, last_login_at = ?, updated_at = ? WHERE id = ?')
@@ -42,7 +48,9 @@ auth.post('/register', async (c) => {
   await c.env.DB.prepare(`INSERT INTO users (id, email, name, password_hash, plan, role, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(user.id, user.email, user.name, user.password_hash, user.plan, user.role, now, now).run();
-  return c.json(await finishSignIn(c, user), 201);
+  const result = await finishSignIn(c, user);
+  await announceSignup(c, user);
+  return c.json(result, 201);
 });
 
 auth.post('/login', async (c) => {
@@ -79,6 +87,7 @@ auth.post('/google', async (c) => {
   const email = payload.email.toLowerCase();
   const now = nowIso();
   let user = await c.env.DB.prepare('SELECT * FROM users WHERE google_id = ? OR email = ?').bind(payload.sub, email).first();
+  const isNew = !user;
   if (!user) {
     user = {
       id: newId(), email, name: payload.name || '', avatar_url: payload.picture || null, password_hash: null,
@@ -93,7 +102,9 @@ auth.post('/google', async (c) => {
     await c.env.DB.prepare('UPDATE users SET google_id = ?, avatar_url = ?, name = ? WHERE id = ?')
       .bind(user.google_id, user.avatar_url, user.name, user.id).run();
   }
-  return c.json(await finishSignIn(c, user));
+  const result = await finishSignIn(c, user);
+  if (isNew) await announceSignup(c, user);
+  return c.json(result);
 });
 
 auth.get('/me', requireAuth, (c) => c.json({ user: serializeUser(c.get('user')) }));
@@ -105,6 +116,9 @@ auth.post('/upgrade-request', requireAuth, async (c) => {
   if (!isPro && !user.upgrade_requested_at) {
     const now = nowIso();
     await c.env.DB.prepare('UPDATE users SET upgrade_requested_at = ?, updated_at = ? WHERE id = ?').bind(now, now, user.id).run();
+    await notifyAdmins(c.env.DB, {
+      type: 'pro_request', title: 'New Pro request', body: `${user.name || user.email} asked for the Pro plan.`,
+    }).catch(() => {});
     return c.json({ user: serializeUser({ ...user, upgrade_requested_at: now, updated_at: now }) });
   }
   return c.json({ user: serializeUser(user) });

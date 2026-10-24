@@ -63,6 +63,25 @@ npx wrangler secret put GOOGLE_AI_API_KEY   # Gemini key for the Zealot assistan
 
 Non-secret settings (admin emails, Google client ID, retention…) are in `vars` in `worker/wrangler.jsonc`.
 
+#### Push alerts
+
+**Browsers (Web Push).** Generate a VAPID key pair once:
+
+```bash
+node -e "crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign']).then(async k=>{const j=await crypto.subtle.exportKey('jwk',k.privateKey);delete j.key_ops;delete j.ext;console.log('VAPID_PUBLIC_KEY='+Buffer.from(await crypto.subtle.exportKey('raw',k.publicKey)).toString('base64url'));console.log('VAPID_PRIVATE_JWK='+JSON.stringify(j))})"
+```
+
+Put `VAPID_PUBLIC_KEY` in `vars` in `wrangler.jsonc`, and the private one in a secret:
+`npx wrangler secret put VAPID_PRIVATE_JWK`. Keep the pair: a new pair ends every browser's subscription.
+Without them, browser notifications are hidden in the dashboard. Alerts still appear under the bell.
+
+**Phone app (Expo push, free).** Android delivery goes through Firebase Cloud Messaging:
+1. In the [Firebase console](https://console.firebase.google.com), add an Android app with the package `com.ruyalab.webmonitor`.
+   Download `google-services.json` to `mobile/` and add `"googleServicesFile": "./google-services.json"` under `expo.android` in `mobile/app.json`.
+2. Firebase → Project settings → Service accounts → **Generate new private key**. Upload it with
+   `cd mobile && npx eas-cli credentials` → Android → Google Service Account → FCM V1. Don't commit this key.
+3. Build the app again. Push needs a new build, because an over-the-air update can't add it.
+
 ### 4. Frontend setting
 
 In the project root, `.env` must contain the Google sign-in client ID (see `.env.example`):
@@ -115,6 +134,9 @@ cd worker && npm run deploy
 
 Database changes go in a new file in `worker/migrations/` and are applied with `npm run db:migrate:remote`
 before deploying.
+
+The free plan allows 50 outgoing requests per minute-run. The monitor uses up to 40 for checks and keeps 6 for
+push delivery (one Expo request carries 100 phone alerts; each browser costs one request).
 
 Optional: Cloudflare **Workers Builds** can deploy automatically on every push to GitHub
 (Workers & Pages → web-monitor → Settings → Builds → connect `hiteshgitt/web-monitor`,
