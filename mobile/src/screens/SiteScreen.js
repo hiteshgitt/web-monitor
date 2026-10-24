@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
+import { userIsPro } from '../session';
+import { platformIcon } from '../platforms';
+import AdvancedPanel from './AdvancedPanel';
 import {
   STATUS_LABEL, UP_STATUSES, availability, clock, displayUrl, formatMs, formatPercent, formatRatio,
-  healthScore, latencySeries, scoreTone, statusTone, timeAgo,
+  healthScore, latencySeries, platformLabel, scoreTone, statusTone, timeAgo,
 } from '../metrics';
 import { colors, toneColor } from '../theme';
 import { KeyValue, MetricCard, Panel, ScoreRing, Sparkline } from '../ui';
@@ -24,8 +27,6 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
   const [site, setSite] = useState(null);
   const [checks, setChecks] = useState([]);
   const [incidents, setIncidents] = useState([]);
-  const [plugins, setPlugins] = useState(null);
-  const [pluginError, setPluginError] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
@@ -40,25 +41,9 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
         api(`/websites/${siteId}/monitoring?hours=24&limit=1440`, { token }),
         api(`/websites/${siteId}/incidents?days=30`, { token }),
       ]);
-      let nextPlugins = null;
-      let nextPluginError = '';
-      if (session.user?.isPro) {
-        try {
-          nextPlugins = await api(`/advanced/plugins/${siteId}`, { token });
-          if (nextPlugins?.error) {
-            nextPluginError = nextPlugins.error;
-            nextPlugins = null;
-          }
-        } catch (err) {
-          if (err.status === 401) throw err;
-          nextPluginError = err.message;
-        }
-      }
       setSite(nextSite);
       setChecks(Array.isArray(nextChecks) ? nextChecks : []);
       setIncidents(Array.isArray(nextIncidents) ? nextIncidents : []);
-      setPlugins(nextPlugins);
-      setPluginError(nextPluginError);
       setError('');
     } catch (err) {
       if (err.status === 401) onExpired();
@@ -66,7 +51,7 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
     } finally {
       setLoading(false);
     }
-  }, [siteId, session.token, session.user?.isPro, onExpired]);
+  }, [siteId, session.token, onExpired]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -152,7 +137,7 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
             return (
               <Pressable key={name} onPress={() => chooseTab(name)} style={styles.tab}>
                 <Text style={[styles.tabText, active && styles.tabTextOn]}>
-                  {name}{name === 'Advanced' && !session.user?.isPro ? '  PRO' : ''}
+                  {name}{name === 'Advanced' && !userIsPro(session.user) ? '  PRO' : ''}
                 </Text>
                 <View style={[styles.tabLine, active && styles.tabLineOn]} />
               </Pressable>
@@ -315,8 +300,8 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
         ) : null}
 
         {site && tab === 'Advanced' ? (
-          session.user?.isPro ? (
-            <ProPlugins plugins={plugins} error={pluginError} loading={loading} />
+          userIsPro(session.user) ? (
+            <AdvancedPanel site={site} session={session} onExpired={onExpired} />
           ) : (
             <View style={styles.pro}>
               <Text style={styles.proKicker}>Pro</Text>
@@ -332,7 +317,10 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
 
       {site ? (
         <View style={styles.footer}>
-          <Text style={styles.footerText}>{String(site.platform || '').toUpperCase()}</Text>
+          <View style={styles.footerPlatform}>
+            {platformIcon(site.platform) ? <Image source={platformIcon(site.platform)} style={styles.footerIcon} resizeMode="contain" /> : null}
+            <Text style={styles.footerText}>{platformLabel(site.platform)}</Text>
+          </View>
           <Text style={styles.footerText}>30d {formatPercent(site.uptime)}</Text>
           <Text style={styles.footerText}>SEO {seo.score ?? '--'}</Text>
           <Text style={[styles.footerStatus, { color: status.text, backgroundColor: status.bg }]}>
@@ -388,41 +376,6 @@ function CheckList({ checks, title }) {
         );
       })}
     </Panel>
-  );
-}
-
-function ProPlugins({ plugins, error, loading }) {
-  if (error) return <Text style={styles.error}>{error}</Text>;
-  if (!plugins && loading) return <ActivityIndicator color={colors.brand} style={styles.spinner} />;
-  if (!plugins) return <Text style={styles.muted}>Plugin audit is not available for this site.</Text>;
-  const outdated = plugins.outdated_plugins || [];
-  return (
-    <>
-      <View style={styles.proStats}>
-        <MiniStat label="Plugins" value={plugins.total_plugins ?? '--'} />
-        <MiniStat label="Active" value={plugins.active_count ?? '--'} />
-        <MiniStat label="Updates" value={plugins.outdated_count ?? 0} warn={(plugins.outdated_count || 0) > 0} />
-      </View>
-      <Panel title="Updates">
-        {outdated.length === 0 ? <Text style={styles.muted}>No plugin updates.</Text> : outdated.slice(0, 12).map((plugin) => (
-          <View key={plugin.file || plugin.name} style={styles.checkRow}>
-            <View style={styles.checkMain}>
-              <Text style={styles.checkTitle} numberOfLines={1}>{plugin.name}</Text>
-              <Text style={styles.checkMeta}>v{plugin.version}{plugin.new_version ? ` → v${plugin.new_version}` : ''}</Text>
-            </View>
-          </View>
-        ))}
-      </Panel>
-    </>
-  );
-}
-
-function MiniStat({ label, value, warn }) {
-  return (
-    <View style={styles.miniStat}>
-      <Text style={styles.kicker}>{label}</Text>
-      <Text style={[styles.miniValue, warn && styles.badText]}>{value}</Text>
-    </View>
   );
 }
 
@@ -483,10 +436,6 @@ const styles = StyleSheet.create({
   proTitle: { marginTop: 14, color: colors.white, fontSize: 24, fontWeight: '800' },
   proLead: { marginTop: 8, color: 'rgba(255,255,255,0.88)', fontSize: 14, lineHeight: 20 },
   proItem: { marginTop: 10, color: colors.white, fontSize: 14, fontWeight: '700' },
-  proStats: { flexDirection: 'row', gap: 10 },
-  miniStat: { flex: 1, backgroundColor: colors.white, borderRadius: 16, padding: 12, borderWidth: 1, borderColor: colors.line },
-  kicker: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', color: colors.inkMuted },
-  miniValue: { marginTop: 6, fontSize: 22, fontWeight: '800', color: colors.ink },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -497,6 +446,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.line,
   },
+  footerPlatform: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  footerIcon: { width: 14, height: 14 },
   footerText: { color: colors.inkSoft, fontSize: 11, fontWeight: '800' },
   footerStatus: { marginLeft: 'auto', overflow: 'hidden', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 4, fontSize: 11, fontWeight: '800' },
 });

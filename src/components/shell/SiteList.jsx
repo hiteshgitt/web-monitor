@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Search, SlidersHorizontal, Plus, Globe } from 'lucide-react';
 import PlatformIcon from '../PlatformIcon';
 import {
-  healthScore, scoreTone, statusTone, TONE, STATUS_LABEL, formatMs, timeAgo, displayUrl,
+  healthScore, scoreTone, statusTone, TONE, STATUS_LABEL, formatMs, timeAgo, displayUrl, platformLabel,
 } from '../../utils/siteMetrics';
 
 const FILTERS = [
@@ -37,17 +37,16 @@ const SiteCard = ({ site, selected, onSelect, index }) => {
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
+          <div className="inline-flex items-center gap-1.5 max-w-full mb-1.5 px-1.5 py-0.5 rounded-md bg-brand-50">
+            <PlatformIcon platform={site.platform} className="w-3.5 h-3.5 shrink-0" />
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-ink-soft truncate">{platformLabel(site.platform)}</span>
+          </div>
           <div className="text-[11px] font-semibold text-ink-muted truncate">{displayUrl(site.url)}</div>
           <div className="text-[15px] font-bold text-ink truncate">{site.name}</div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className={`w-5 h-5 rounded-full ${tone.bg} ${tone.text} flex items-center justify-center`}>
-            <PlatformIcon platform={site.platform} className="w-3 h-3" />
-          </span>
-          <span className={`text-xl font-extrabold tabular-nums ${tone.text}`}>
-            {isDown ? '!' : score ?? '--'}
-          </span>
-        </div>
+        <span className={`text-xl font-extrabold tabular-nums ${tone.text}`}>
+          {isDown ? '!' : score ?? '--'}
+        </span>
       </div>
 
       <div className="mt-3 pt-2.5 border-t border-brand-100 flex items-center justify-between text-[12px]">

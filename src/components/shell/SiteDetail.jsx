@@ -12,7 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import PlatformIcon from '../PlatformIcon';
 import { ScoreRing, MetricCard, MiniChip, KeyValue, Collapsible, SectionTitle } from './ui';
 import {
-  healthScore, scoreTone, statusTone, TONE, STATUS_LABEL, UP_STATUSES, formatMs, formatPercent, timeAgo, displayUrl,
+  healthScore, scoreTone, statusTone, TONE, STATUS_LABEL, UP_STATUSES, formatMs, formatPercent, timeAgo, displayUrl, platformLabel,
 } from '../../utils/siteMetrics';
 
 const TABS = ['Overview', 'Performance', 'SEO', 'Security', 'History', 'Advanced'];
@@ -470,7 +470,7 @@ const SiteDetail = ({ site, tab = 'Overview', onTabChange, onBack, onEdit, onDel
           <span className="flex items-center gap-2 min-w-0">
             <span className="label-caps text-ink!">Platform</span>
             <PlatformIcon platform={site.platform} className="w-4 h-4" />
-            <span className="text-ink-soft capitalize">{site.platform}</span>
+            <span className="text-ink-soft">{platformLabel(site.platform)}</span>
           </span>
           <span className="hidden md:flex items-center gap-2">
             <span className="label-caps text-ink!">Uptime 30d</span>

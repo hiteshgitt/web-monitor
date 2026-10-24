@@ -54,6 +54,16 @@ export const timeAgo = (date) => {
 
 export const displayUrl = (url = '') => url.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
+export const PLATFORM_LABEL = {
+  wordpress: 'WordPress',
+  nextjs: 'Next.js',
+  laravel: 'Laravel',
+  codeigniter: 'CodeIgniter',
+  php: 'PHP',
+};
+
+export const platformLabel = (platform) => PLATFORM_LABEL[platform] || platform || 'Site';
+
 export const formatRatio = (value) => (typeof value === 'number' ? `${Math.round(value * 10) / 10}%` : null);
 
 export const availability = (checks) => {

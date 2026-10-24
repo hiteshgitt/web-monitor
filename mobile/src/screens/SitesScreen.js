@@ -5,8 +5,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../api';
 import {
-  STATUS_LABEL, displayUrl, formatMs, healthScore, scoreTone, statusTone, timeAgo,
+  STATUS_LABEL, displayUrl, formatMs, healthScore, platformLabel, scoreTone, statusTone, timeAgo,
 } from '../metrics';
+import { platformIcon } from '../platforms';
 import { colors, toneColor } from '../theme';
 
 const FILTERS = [
@@ -107,6 +108,12 @@ export default function SitesScreen({ session, onOpen, onSignOut, onExpired }) {
               <View style={styles.cardBody}>
                 <View style={styles.cardTop}>
                   <View style={styles.cardTitle}>
+                    <View style={styles.platform}>
+                      {platformIcon(item.platform) ? (
+                        <Image source={platformIcon(item.platform)} style={styles.platformIcon} resizeMode="contain" />
+                      ) : null}
+                      <Text style={styles.platformText} numberOfLines={1}>{platformLabel(item.platform)}</Text>
+                    </View>
                     <Text style={styles.url} numberOfLines={1}>{displayUrl(item.url)}</Text>
                     <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
                   </View>
@@ -153,6 +160,9 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1, paddingHorizontal: 14, paddingVertical: 13 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start' },
   cardTitle: { flex: 1, paddingRight: 10 },
+  platform: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 5, marginBottom: 6, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 8, backgroundColor: colors.brandSoft },
+  platformIcon: { width: 14, height: 14 },
+  platformText: { color: colors.inkSoft, fontSize: 10, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
   url: { color: colors.inkMuted, fontSize: 12, fontWeight: '700' },
   name: { marginTop: 2, color: colors.ink, fontSize: 16, fontWeight: '800' },
   score: { fontSize: 26, fontWeight: '800' },

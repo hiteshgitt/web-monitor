@@ -3,6 +3,8 @@ import * as SecureStore from 'expo-secure-store';
 
 const TOKEN_KEY = 'webmonitor_token';
 
+export const userIsPro = (user) => Boolean(user?.isPro || user?.plan === 'pro' || user?.role === 'admin');
+
 export async function loadToken() {
   if (Platform.OS === 'web') {
     try {

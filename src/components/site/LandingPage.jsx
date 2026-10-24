@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import {
   ArrowRight, Zap, BellRing, ShieldCheck, Search, Brain, Puzzle, Plug, KeyRound, Smartphone,
-  CheckCircle2, Activity, Menu, X, Monitor, Sparkles,
+  CheckCircle2, Activity, Menu, X, Monitor, Sparkles, Download,
 } from 'lucide-react';
 import Logo from '../Logo';
 import PlatformIcon from '../PlatformIcon';
 import PlanComparison from '../pro/PlanComparison';
 import { PLANS } from '../../config/plans';
+import { EARLY_ACCESS_APK } from '../../config/mobile';
 import { useAuth } from '../../contexts/AuthContext';
 import useReveal from '../../hooks/useReveal';
 
@@ -335,7 +336,20 @@ const LandingPage = () => {
             <span className="label-caps !text-brand-600">Mobile app</span>
             <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight">Your sites, in your pocket</h2>
             <p className="mt-4 text-ink-muted text-lg">The same live dashboard on Android and iPhone, with push alerts the moment a site goes down. Use the web dashboard on desktop whenever you prefer a big screen.</p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            {EARLY_ACCESS_APK.enabled && (
+              <div className="mt-8 rounded-3xl bg-white shadow-card p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[11px] font-extrabold uppercase tracking-wider">
+                    <Sparkles size={12} /> Android early access
+                  </span>
+                  <p className="mt-2 text-sm text-ink-muted">Install the app today while the Play Store release is on its way. Android may ask you to allow installs from your browser. The file is about {EARLY_ACCESS_APK.sizeMb} MB, so Wi-Fi is best.</p>
+                </div>
+                <a href={EARLY_ACCESS_APK.url} className="btn-primary !h-12 !px-6 shrink-0">
+                  <Download size={16} /> Download APK <span className="opacity-70 normal-case tracking-normal">v{EARLY_ACCESS_APK.version}</span>
+                </a>
+              </div>
+            )}
+            <div className="mt-6 flex flex-wrap gap-3">
               {['Google Play', 'App Store'].map((store) => (
                 <span key={store} className="h-14 px-5 rounded-2xl bg-ink text-white flex items-center gap-3 opacity-80 cursor-default">
                   <Smartphone size={22} />
