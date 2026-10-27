@@ -318,7 +318,7 @@ const LandingPage = () => {
                   >
                     {isPro ? 'Request Pro' : 'Start free'} <ArrowRight size={16} />
                   </Link>
-                  {isPro && <p className="mt-3 text-center text-[12px] text-white/70">Sign up, then request Pro from your dashboard — our team activates it.</p>}
+                  {isPro && <p className="mt-3 text-center text-[12px] text-white/70">Sign up, then request Pro from your dashboard. Online payment turns on later; until then our team activates it.</p>}
                 </Reveal>
               );
             })}
@@ -403,20 +403,27 @@ const LandingPage = () => {
 
       {/* Footer */}
       <footer className="border-t border-brand-100">
-        <div className="max-w-7xl mx-auto px-5 lg:px-8 py-10 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="max-w-7xl mx-auto px-5 lg:px-8 py-10 flex flex-col items-center gap-6 xl:flex-row xl:justify-between">
           <div className="flex items-center gap-2.5">
             <Logo variant="brand" className="h-5" />
             <span className="font-extrabold">Web Monitor</span>
-            <span className="text-ink-muted text-sm">by Ruyalab</span>
+            <a href="https://ruyalab.com/" className="text-ink-muted text-sm hover:text-brand-600">
+              Built by Ruyalab
+            </a>
           </div>
-          <nav className="flex gap-6 text-sm font-semibold text-ink-muted">
-            {NAV.map((item) => <a key={item.href} href={item.href} className="hover:text-brand-600">{item.label}</a>)}
-            <Link to="/integrations" className="hover:text-brand-600">Integrations</Link>
-            <Link to="/login" className="hover:text-brand-600">Sign in</Link>
-            <Link to="/privacy" className="hover:text-brand-600">Privacy</Link>
-            <Link to="/terms" className="hover:text-brand-600">Terms</Link>
+          <nav className="grid grid-cols-2 gap-x-8 gap-y-2.5 text-center text-sm font-semibold text-ink-muted sm:flex sm:max-w-none sm:flex-wrap sm:justify-center sm:gap-x-4 xl:gap-x-5 xl:flex-nowrap">
+            {NAV.map((item) => <a key={item.href} href={item.href} className="whitespace-nowrap hover:text-brand-600">{item.label}</a>)}
+            <Link to="/integrations" className="whitespace-nowrap hover:text-brand-600">Integrations</Link>
+            <Link to="/login" className="whitespace-nowrap hover:text-brand-600">Sign in</Link>
+            <Link to="/privacy" className="whitespace-nowrap hover:text-brand-600">Privacy</Link>
+            <Link to="/terms" className="whitespace-nowrap hover:text-brand-600">Terms</Link>
           </nav>
-          <p className="text-sm text-ink-muted">© {new Date().getFullYear()} Ruyalab</p>
+          <p className="text-sm text-ink-muted">
+            © {new Date().getFullYear()}{" "}
+            <a href="https://ruyalab.com/" className="hover:text-brand-600">
+              Ruyalab
+            </a>
+          </p>
         </div>
       </footer>
     </div>
