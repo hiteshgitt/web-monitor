@@ -47,18 +47,33 @@ export async function registerForPush(sessionToken) {
   }
 }
 
-// On sign-out: stop sending this account's alerts to the phone
+// On sign-out: stop sending this account's alerts to this phone
 export async function unregisterPush(sessionToken) {
   if (!registeredToken || !sessionToken) return;
   await api('/notifications/devices/remove', { method: 'POST', token: sessionToken, body: { token: registeredToken } }).catch(() => {});
   registeredToken = null;
 }
 
-// Calls onOpenSite(websiteId) when an alert is tapped, including the one that launched the app
-export function listenForAlertTaps(onOpenSite) {
+const alertFromResponse = (response) => {
+  const content = response?.notification?.request?.content || {};
+  const data = content.data || {};
+  const websiteId = data.websiteId;
+  if (!websiteId) return null;
+  return {
+    _id: data.notificationId || data.alertId || `${websiteId}-${data.type || data.alertType || 'alert'}`,
+    websiteId,
+    type: data.alertType || data.type || '',
+    title: data.alertTitle || content.title || '',
+    body: data.alertBody || content.body || '',
+    createdAt: data.alertAt || data.createdAt || null,
+  };
+};
+
+// Calls onOpenAlert(alert) when a push is tapped, including the one that launched the app.
+export function listenForAlertTaps(onOpenAlert) {
   const open = (response) => {
-    const websiteId = response?.notification?.request?.content?.data?.websiteId;
-    if (websiteId) onOpenSite(websiteId);
+    const alert = alertFromResponse(response);
+    if (alert) onOpenAlert(alert);
   };
   // Cleared after use, or the same alert would reopen its site on every launch
   Notifications.getLastNotificationResponseAsync()

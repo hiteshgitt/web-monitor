@@ -64,7 +64,37 @@ export const PLATFORM_LABEL = {
 
 export const platformLabel = (platform) => PLATFORM_LABEL[platform] || platform || 'Site';
 
-export const formatRatio = (value) => (typeof value === 'number' ? `${Math.round(value * 10) / 10}%` : null);
+const versionText = (value) => {
+  const text = value == null ? '' : String(value).trim();
+  return text || null;
+};
+
+export function runtimeRows(site) {
+  const security = site?.security || {};
+  const platform = site?.platform;
+  if (platform === 'wordpress') {
+    return [
+      ['WordPress', versionText(security.wordpressVersion)],
+      ['PHP', versionText(security.phpVersion)],
+      ['Plugin', versionText(security.pluginVersion)],
+    ];
+  }
+  if (platform === 'nextjs') {
+    return [
+      ['Next.js', versionText(security.nextVersion)],
+      ['Node', versionText(security.nodeVersion)],
+    ];
+  }
+  if (platform === 'laravel' || platform === 'codeigniter' || platform === 'php') {
+    const rows = [];
+    if (platform !== 'php') rows.push([platformLabel(platform), versionText(security.frameworkVersion)]);
+    rows.push(['PHP', versionText(security.phpVersion)]);
+    return rows;
+  }
+  return [['Version', versionText(security.frameworkVersion || security.wordpressVersion)]];
+}
+
+export const formatRatio = (value) => (typeof value === 'number' && value >= 0 && value <= 100 ? `${Math.round(value * 10) / 10}%` : null);
 
 export const availability = (checks) => {
   if (!checks.length) return null;
@@ -94,3 +124,22 @@ export const latencySeries = (checks, bucketMinutes = 15) => {
 export const clock = (date) => (
   date ? new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'
 );
+
+export const tabForAlert = (type) => {
+  if (['plugins', 'ssl_off', 'ssl_ok', 'security_low'].includes(type)) return 'Security';
+  if (['site_down', 'site_up', 'slow', 'slow_ok'].includes(type)) return 'History';
+  return 'Overview';
+};
+
+export const ALERT_KIND = {
+  site_down: 'Site down',
+  site_up: 'Site recovered',
+  slow: 'Slow response',
+  slow_ok: 'Speed recovered',
+  plugins: 'Plugin / package updates',
+  ssl_off: 'SSL problem',
+  ssl_ok: 'SSL recovered',
+  security_low: 'Security score',
+};
+
+export const formatWhen = (iso) => (iso ? new Date(iso).toLocaleString() : '—');

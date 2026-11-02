@@ -12,6 +12,67 @@ import { useAuth } from '../../contexts/AuthContext';
 import UserMenu from './UserMenu';
 import Logo from '../Logo';
 import UpgradeModal from '../pro/UpgradeModal';
+import { browserPushSupported, currentBrowserSubscription, enableBrowserPush, fetchAlertSettings } from '../../services/alerts';
+
+const LockScreenAlerts = () => {
+  const [mode, setMode] = useState('hidden');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!browserPushSupported() || sessionStorage.getItem('webmonitor-push-dismissed') === '1') return undefined;
+    if (Notification.permission === 'denied') {
+      setMode('blocked');
+      return undefined;
+    }
+    let cancelled = false;
+    currentBrowserSubscription()
+      .then((subscription) => { if (!cancelled && !subscription) setMode('offer'); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  if (mode === 'hidden') return null;
+
+  const turnOn = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const settings = await fetchAlertSettings();
+      if (!settings.webPushPublicKey) throw new Error('Browser alerts are not available yet.');
+      await enableBrowserPush(settings.webPushPublicKey);
+      setMode('hidden');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="shrink-0 border-b border-brand-100 bg-brand-50 px-4 py-3 flex flex-wrap items-center gap-3">
+      <Bell size={16} className="text-brand-700 shrink-0" />
+      <p className="text-sm text-ink flex-1 min-w-[220px]">
+        {mode === 'blocked'
+          ? 'Lock-screen alerts are blocked in this browser. Allow notifications for this site in the browser settings, then refresh.'
+          : 'Turn on lock-screen alerts for this browser. The phone app asks for the same permission when you open it.'}
+        {error && <span className="block text-bad text-xs mt-1">{error}</span>}
+      </p>
+      {mode === 'offer' && (
+        <button type="button" onClick={turnOn} disabled={busy} className="btn-primary h-9! px-4!">
+          {busy ? 'Turning on…' : 'Turn on alerts'}
+        </button>
+      )}
+      <button
+        type="button"
+        className="text-xs font-semibold text-ink-muted hover:text-ink"
+        onClick={() => { sessionStorage.setItem('webmonitor-push-dismissed', '1'); setMode('hidden'); }}
+      >
+        Not now
+      </button>
+    </div>
+  );
+};
 
 const RailButton = ({ icon: Icon, label, onClick, active, badge, pro }) => (
   <button
@@ -40,7 +101,7 @@ const RailButton = ({ icon: Icon, label, onClick, active, badge, pro }) => (
  */
 const AppShell = ({
   websites, selectedWebsite, loading, onSelectWebsite, onClearSelection, onRefresh, onDeleteWebsite,
-  onOpenAdvanced, onOpenCommandPalette, detailTab, onDetailTabChange,
+  onOpenAdvanced, onOpenCommandPalette, detailTab, onDetailTabChange, alertFocus, onOpenAlert, onDismissAlert,
 }) => {
   const navigate = useNavigate();
   const [showAdd, setShowAdd] = useState(false);
@@ -59,9 +120,18 @@ const AppShell = ({
     return () => query.removeEventListener('change', update);
   }, []);
 
-  // Desktop always shows a site, like a mail client; pick the first one when nothing is selected
+  // Desktop always shows a site, like a mail client; pick the first one when nothing is selected.
+  // Skip when a push/deep-link alert is waiting — otherwise Overview wipes the alert detail.
   useEffect(() => {
-    if (isDesktop && !selectedWebsite && websites.length > 0) onSelectWebsite(websites[0]);
+    if (!isDesktop || selectedWebsite || websites.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('site') || params.get('alertType')) return;
+    try {
+      if (sessionStorage.getItem('pending-alert')) return;
+    } catch {
+      // Private mode: fall through to the default site.
+    }
+    onSelectWebsite(websites[0]);
   }, [isDesktop, selectedWebsite, websites, onSelectWebsite]);
 
   // Command palette / other components can still ask for the add dialog
@@ -76,32 +146,115 @@ const AppShell = ({
     };
   }, []);
 
-  // A browser notification click opens its site: /app?site=<id> on a fresh tab, or a message to an open one
+  // A browser notification click opens its site: /app?site=<id>&alertType=… on a fresh tab, or a message to an open one
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const siteId = params.get('site');
-    if (!siteId || websites.length === 0) return;
-    const site = websites.find((w) => w._id === siteId);
-    if (site) onSelectWebsite(site);
-    window.history.replaceState(null, '', window.location.pathname);
-  }, [websites, onSelectWebsite]);
+    const gaPending = params.get('gaPending');
+    const gaError = params.get('gaError');
+    const scPending = params.get('scPending');
+    const scError = params.get('scError');
+    let pendingAlert = null;
+    try {
+      const raw = sessionStorage.getItem('pending-alert');
+      pendingAlert = raw ? JSON.parse(raw) : null;
+    } catch {
+      pendingAlert = null;
+    }
+
+    const alertFromUrl = siteId && params.get('alertType') ? {
+      _id: params.get('alertId') || `${siteId}-${params.get('alertType')}`,
+      websiteId: siteId,
+      type: params.get('alertType'),
+      title: params.get('alertTitle') || '',
+      body: params.get('alertBody') || '',
+      createdAt: params.get('alertAt') || null,
+    } : null;
+    if (alertFromUrl) {
+      try {
+        sessionStorage.setItem('pending-alert', JSON.stringify(alertFromUrl));
+      } catch {
+        // In-memory open still works once websites load.
+      }
+    }
+    const alert = alertFromUrl || (pendingAlert?.websiteId ? pendingAlert : null);
+
+    if ((!siteId && !gaError && !scError && !alert) || (websites.length === 0 && (siteId || alert))) return;
+
+    if (alert) {
+      const site = websites.find((w) => w._id === alert.websiteId);
+      if (!site) return;
+      onOpenAlert?.(alert);
+    } else if (siteId) {
+      const site = websites.find((w) => w._id === siteId);
+      if (!site) return;
+      onSelectWebsite(site);
+    }
+    if (gaPending || gaError) {
+      try {
+        if (siteId) sessionStorage.setItem('ga-site', siteId);
+        if (gaPending) sessionStorage.setItem('ga-pending', gaPending);
+        else sessionStorage.removeItem('ga-pending');
+        if (gaError) sessionStorage.setItem('ga-error', gaError);
+        else sessionStorage.removeItem('ga-error');
+      } catch {
+        // The property picker can still be opened again from the Analytics tab.
+      }
+      onDetailTabChange?.('Advanced');
+    }
+    if (scPending || scError) {
+      try {
+        if (siteId) sessionStorage.setItem('sc-site', siteId);
+        if (scPending) sessionStorage.setItem('sc-pending', scPending);
+        else sessionStorage.removeItem('sc-pending');
+        if (scError) sessionStorage.setItem('sc-error', scError);
+        else sessionStorage.removeItem('sc-error');
+      } catch {
+        // The property picker can still be opened again from the Analytics tab.
+      }
+      onDetailTabChange?.('Advanced');
+    }
+    if (siteId || alert || gaPending || gaError || scPending || scError) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [websites, onSelectWebsite, onDetailTabChange, onOpenAlert]);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return undefined;
     const onMessage = (event) => {
       if (event.data?.type !== 'open-site') return;
-      const site = websites.find((w) => w._id === event.data.siteId);
+      const siteId = event.data.siteId || event.data.websiteId;
+      if (event.data.alertType && siteId) {
+        const alert = {
+          _id: event.data.alertId || `${siteId}-${event.data.alertType}`,
+          websiteId: siteId,
+          type: event.data.alertType,
+          title: event.data.alertTitle || event.data.title || '',
+          body: event.data.alertBody || event.data.body || '',
+          createdAt: event.data.alertAt || event.data.createdAt || null,
+        };
+        try {
+          sessionStorage.setItem('pending-alert', JSON.stringify(alert));
+        } catch {
+          // In-memory open still works if storage is blocked.
+        }
+        onOpenAlert?.(alert);
+        return;
+      }
+      const site = websites.find((w) => w._id === siteId);
       if (site) onSelectWebsite(site);
     };
     navigator.serviceWorker.addEventListener('message', onMessage);
     return () => navigator.serviceWorker.removeEventListener('message', onMessage);
-  }, [websites, onSelectWebsite]);
+  }, [websites, onSelectWebsite, onOpenAlert]);
 
   const showDetail = Boolean(selectedWebsite);
 
   return (
     <div className="h-screen w-full bg-white">
-      <div className="h-full w-full overflow-hidden flex">
+      <div className="h-full w-full overflow-hidden flex flex-col">
+        <LockScreenAlerts />
+        <div className="flex-1 min-h-0 flex">
 
         {/* Icon rail (desktop) */}
         <nav className="hidden lg:flex w-[76px] shrink-0 flex-col items-center py-6 gap-3 bg-linear-to-b from-brand-400 via-brand-500 to-brand-600">
@@ -174,6 +327,8 @@ const AppShell = ({
               site={selectedWebsite}
               tab={detailTab}
               onTabChange={onDetailTabChange}
+              alertFocus={alertFocus?.websiteId === selectedWebsite._id ? alertFocus : null}
+              onDismissAlert={onDismissAlert}
               onBack={onClearSelection}
               onEdit={setEditing}
               onDelete={onDeleteWebsite}
@@ -190,6 +345,7 @@ const AppShell = ({
             </div>
           )}
         </main>
+        </div>
       </div>
 
       <AddWebsiteModal
@@ -216,11 +372,9 @@ const AppShell = ({
         onClose={() => setShowNotifications(false)}
         notifications={notifications}
         onOpenItem={(n) => {
-          const site = websites.find((w) => w._id === n.websiteId);
-          if (site) {
-            setShowNotifications(false);
-            onSelectWebsite(site);
-          }
+          if (!n.websiteId) return;
+          setShowNotifications(false);
+          onOpenAlert?.(n);
         }}
         onOpenSettings={() => { setShowNotifications(false); setShowAlertSettings(true); }}
         onMarkRead={markAllRead}

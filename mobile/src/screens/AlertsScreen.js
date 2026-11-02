@@ -13,7 +13,7 @@ const TONE = {
 };
 
 // Alert history plus the switches for which alerts are pushed to this phone (and the customer's browsers)
-export default function AlertsScreen({ session, onBack, onOpenSite, onExpired }) {
+export default function AlertsScreen({ session, onBack, onOpenAlert, onExpired }) {
   const [tab, setTab] = useState('history');
   const [items, setItems] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -81,7 +81,7 @@ export default function AlertsScreen({ session, onBack, onOpenSite, onExpired })
             <Pressable
               key={item._id}
               disabled={!item.websiteId}
-              onPress={() => onOpenSite(item.websiteId)}
+              onPress={() => onOpenAlert?.(item)}
               style={[styles.item, !item.read && styles.itemUnread]}
             >
               <View style={[styles.itemDot, { backgroundColor: TONE[item.type] || colors.brand }]} />

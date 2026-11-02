@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
-import { Mail, Lock, User, ArrowRight, Zap, ShieldCheck, BellRing, LineChart } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Zap, ShieldCheck, BellRing, LineChart, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import GoogleButton from './GoogleButton';
 import Logo from '../Logo';
@@ -13,12 +13,21 @@ const FEATURES = [
   { icon: LineChart, title: 'Pro analytics', text: 'AI insights, plugin audits and reports on the Pro plan.' },
 ];
 
-const Field = ({ icon: Icon, ...props }) => (
-  <label className="flex items-center gap-3 bg-canvas rounded-xl px-4 h-12 focus-within:ring-2 focus-within:ring-brand-300 transition-all">
-    <Icon size={17} className="text-brand-500 shrink-0" />
-    <input {...props} className="flex-1 min-w-0 bg-transparent text-[15px] font-semibold text-ink placeholder:text-ink-muted placeholder:font-normal focus:outline-hidden" />
-  </label>
-);
+const Field = ({ icon: Icon, type = 'text', ...props }) => {
+  const [visible, setVisible] = useState(false);
+  const secret = type === 'password';
+  return (
+    <label className="flex items-center gap-3 bg-canvas rounded-xl px-4 h-12 focus-within:ring-2 focus-within:ring-brand-300 transition-all">
+      <Icon size={17} className="text-brand-500 shrink-0" />
+      <input type={secret && visible ? 'text' : type} {...props} className="flex-1 min-w-0 bg-transparent text-[15px] font-semibold text-ink placeholder:text-ink-muted placeholder:font-normal focus:outline-hidden" />
+      {secret && (
+        <button type="button" onClick={() => setVisible((value) => !value)} className="text-ink-muted hover:text-ink" aria-label={visible ? 'Hide password' : 'Show password'}>
+          {visible ? <EyeOff size={17} /> : <Eye size={17} />}
+        </button>
+      )}
+    </label>
+  );
+};
 
 const AuthPage = ({ mode }) => {
   const isSignup = mode === 'signup';

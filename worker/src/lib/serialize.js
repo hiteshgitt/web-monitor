@@ -40,6 +40,18 @@ export const serializeWebsite = (row, live = {}) => ({
   performance: parseJson(row.performance),
   seo: parseJson(row.seo),
   security: parseJson(row.security),
+  googleAnalytics: {
+    connected: Boolean(row.ga_property_id && row.ga_refresh_token),
+    propertyId: row.ga_property_id || null,
+    propertyName: row.ga_property_name || null,
+    connectedAt: row.ga_connected_at || null,
+  },
+  searchConsole: {
+    connected: Boolean(row.sc_site_url && row.sc_refresh_token),
+    siteUrl: row.sc_site_url || null,
+    permission: row.sc_permission || null,
+    connectedAt: row.sc_connected_at || null,
+  },
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });

@@ -201,6 +201,15 @@ const AddWebsiteModal = ({ isOpen, onClose, onAdd }) => {
               </div>
               <p className="text-xs text-ink-muted leading-relaxed mt-2">
                 Find your API key in WordPress Settings → Web Monitor API, or in .env files for Laravel/Next.js. The connection is tested before the site is added.
+                {formData.platform === 'wordpress' && (
+                  <>
+                    {' '}
+                    <a href="/downloads/web-monitor-wordpress.zip" className="font-semibold text-brand-700 hover:underline" download>
+                      Download the WordPress plugin (1.1.5)
+                    </a>
+                    , then upload it under Plugins → Add New.
+                  </>
+                )}
               </p>
             </div>
 

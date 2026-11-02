@@ -86,7 +86,16 @@ export async function deliverPendingPush(env, maxRequests = 6, at = new Date()) 
           device,
           message: {
             to: device.token, title: n.title, body: n.body, sound: 'default', priority: 'high',
-            channelId: 'alerts', data: { notificationId: n.id, websiteId: n.website_id, type: n.type },
+            channelId: 'alerts',
+            data: {
+              notificationId: n.id,
+              websiteId: n.website_id,
+              type: n.type,
+              alertType: n.type,
+              alertTitle: n.title,
+              alertBody: n.body,
+              alertAt: n.created_at,
+            },
           },
         });
       } else if (webPushConfigured(env)) {

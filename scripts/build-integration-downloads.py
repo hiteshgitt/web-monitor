@@ -30,7 +30,9 @@ PACKAGES = {
             'Web Monitor - WordPress plugin\n\n'
             '1. WordPress admin -> Plugins -> Add New -> Upload Plugin -> choose this zip -> Install -> Activate.\n'
             '2. Settings -> Web Monitor API: copy the API key (generated on activation).\n'
-            '3. In the Web Monitor dashboard: Add site -> your site URL (https://your-site.com),\n'
+            '3. To update, download the zip again and upload it the same way. If WordPress says the plugin\n'
+            '   is already installed, choose Replace current with uploaded. The API key stays the same.\n'
+            '4. In the Web Monitor dashboard: Add site -> your site URL (https://your-site.com),\n'
             '   platform WordPress, paste the API key.\n'
         ),
     },

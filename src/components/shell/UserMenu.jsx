@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LogOut, Sparkles, Globe, BellRing } from 'lucide-react';
+import { LogOut, Sparkles, Globe, BellRing, Radio, Copy, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { API_BASE_URL } from '../../config/api';
+import { apiFetch } from '../../services/session';
 
 const initials = (user) => (user?.name || user?.email || '?')
   .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('');
@@ -11,7 +13,19 @@ const UserMenu = ({ onUpgrade, onAlertSettings, placement = 'right' }) => {
   const { user, isPro, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [statusUrl, setStatusUrl] = useState('');
+  const [copied, setCopied] = useState(false);
   const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open || statusUrl) return undefined;
+    let cancelled = false;
+    apiFetch(`${API_BASE_URL}/auth/status-page`)
+      .then((response) => response.json())
+      .then((data) => { if (!cancelled && data.url) setStatusUrl(data.url); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [open, statusUrl]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -48,6 +62,19 @@ const UserMenu = ({ onUpgrade, onAlertSettings, placement = 'right' }) => {
           </button>
           <button type="button" onClick={() => { setOpen(false); onAlertSettings?.(); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-brand-50">
             <BellRing size={16} /> Alert settings
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!statusUrl) return;
+              navigator.clipboard?.writeText(statusUrl).then(() => {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1500);
+              }).catch(() => window.open(statusUrl, '_blank', 'noopener'));
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-brand-50"
+          >
+            {copied ? <Check size={16} /> : statusUrl ? <Copy size={16} /> : <Radio size={16} />} {copied ? 'Link copied' : 'Copy public status link'}
           </button>
           <button type="button" onClick={() => navigate('/')} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-brand-50">
             <Globe size={16} /> Website

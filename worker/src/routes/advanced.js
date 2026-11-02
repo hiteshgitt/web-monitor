@@ -5,6 +5,10 @@ import { loadOwnedWebsite } from '../lib/auth.js';
 import { fetchWordPressEndpoint } from '../lib/monitor.js';
 import { serializeIncident, serializeWebsite } from '../lib/serialize.js';
 import { liveStatsFor, recentChecks, serverInfo } from '../lib/stats.js';
+import { analyticsForSite } from '../lib/googleAnalytics.js';
+import { searchConsoleForSite } from '../lib/searchConsole.js';
+import { queueSecurityScan, readSecurityScan } from '../lib/securityScan.js';
+import { readVitals, refreshVitals } from '../lib/webVitals.js';
 import { ApiError, daysAgo } from '../lib/util.js';
 
 const advanced = new Hono();
@@ -48,16 +52,21 @@ const pluginsEndpoint = (site) => {
 advanced.get('/comprehensive/:id', async (c) => {
   const site = c.get('website');
   const endpoint = pluginsEndpoint(site);
-  const [live, plugins, logs, recommendations] = await Promise.all([
+  const [live, plugins, logs, recommendations, analytics, searchConsole] = await Promise.all([
     liveStatsFor(c.env.DB, [site.id]).then((m) => m.get(site.id)),
     endpoint ? fetchIntegration(site, endpoint) : Promise.resolve(null),
     fetchIntegration(site, 'logs'),
     fetchIntegration(site, 'recommendations'),
+    analyticsForSite(c.env, site),
+    searchConsoleForSite(c.env, site),
   ]);
   return c.json({
     basic: serializeWebsite(site, live),
-    // External analytics (Google Analytics / Search Console) are not connected yet
-    analytics: { error: 'Google Analytics is not connected for this site.', statusCode: 503, service: 'Analytics' },
+    analytics: {
+      ...analytics,
+      searchConsole: searchConsole.searchConsole || null,
+      searchConsoleError: searchConsole.error || null,
+    },
     plugins: site.platform === 'wordpress' ? plugins : undefined,
     libraries: site.platform === 'nextjs' ? plugins : undefined,
     packages: PHP_PLATFORMS.includes(site.platform) ? plugins : undefined,
@@ -68,6 +77,20 @@ advanced.get('/comprehensive/:id', async (c) => {
     website: { id: site.id, name: site.name, url: site.url, platform: site.platform },
   });
 });
+
+// Saved PageSpeed lab run and Chrome field data. A separate schedule refreshes each Pro site once a week.
+advanced.get('/security-scan/:id', async (c) => {
+  const site = c.get('website');
+  const saved = await readSecurityScan(c.env, site);
+  const age = saved.checkedAt ? Date.now() - Date.parse(saved.checkedAt) : Infinity;
+  const complete = saved.malware?.configured !== false && saved.malware && saved.ssl?.status !== 'pending' && !saved.failed && !saved.running && age < 7 * 24 * 60 * 60 * 1000;
+  if (!complete) c.executionCtx.waitUntil(queueSecurityScan(c.env, site));
+  return c.json({ ...saved, checking: !complete });
+});
+
+advanced.get('/vitals/:id', async (c) => c.json(await readVitals(c.env, c.get('website'))));
+
+advanced.post('/vitals/:id/refresh', async (c) => c.json(await refreshVitals(c.env, c.get('website'))));
 
 advanced.get('/plugins/:id', async (c) => {
   const site = c.get('website');

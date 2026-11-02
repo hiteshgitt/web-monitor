@@ -43,7 +43,14 @@ async function showPendingAlerts() {
     icon: '/icons/icon-192.png',
     tag: alert._id,
     requireInteraction: alert.type === 'site_down',
-    data: { websiteId: alert.websiteId },
+    data: {
+      websiteId: alert.websiteId,
+      alertId: alert._id,
+      alertType: alert.type,
+      alertTitle: alert.title,
+      alertBody: alert.body,
+      alertAt: alert.createdAt,
+    },
   })));
 }
 
@@ -51,12 +58,36 @@ self.addEventListener('push', (event) => event.waitUntil(showPendingAlerts()));
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const siteId = event.notification.data?.websiteId;
-  const url = siteId ? `/app?site=${encodeURIComponent(siteId)}` : '/app';
-  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-    const open = windows.find((w) => new URL(w.url).pathname.startsWith('/app'));
+  const data = event.notification.data || {};
+  const siteId = data.websiteId;
+  const params = new URLSearchParams();
+  if (siteId) params.set('site', siteId);
+  if (data.alertType) {
+    params.set('alertId', data.alertId || '');
+    params.set('alertType', data.alertType);
+    params.set('alertTitle', data.alertTitle || '');
+    params.set('alertBody', data.alertBody || '');
+    params.set('alertAt', data.alertAt || '');
+  }
+  const url = `/app${params.toString() ? `?${params}` : ''}`;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (windows) => {
+    const open = windows.find((w) => {
+      try {
+        return new URL(w.url).pathname.startsWith('/app');
+      } catch {
+        return false;
+      }
+    });
     if (open) {
-      open.postMessage({ type: 'open-site', siteId });
+      open.postMessage({ type: 'open-site', siteId, ...data });
+      // Prefer navigating the open dashboard to the alert URL so a refresh still has context.
+      if (typeof open.navigate === 'function' && (siteId || data.alertType)) {
+        try {
+          await open.navigate(url);
+        } catch {
+          // navigate() is unsupported in some browsers; focus + postMessage still apply.
+        }
+      }
       return open.focus();
     }
     return self.clients.openWindow(url);

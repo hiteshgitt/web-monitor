@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { timingSafeEqual } from 'node:crypto';
 
 export const VERSION = '1.0.0';
@@ -20,6 +21,16 @@ function readJson(file) {
 }
 
 const installedVersion = (name) => readJson(path.join(projectRoot(), 'node_modules', name, 'package.json'))?.version ?? null;
+
+function nextVersion() {
+  const fromDisk = installedVersion('next');
+  if (fromDisk) return fromDisk;
+  try {
+    return createRequire(import.meta.url)('next/package.json').version || null;
+  } catch {
+    return null;
+  }
+}
 
 function safeEqual(a, b) {
   const left = Buffer.from(String(a));
@@ -40,12 +51,43 @@ function cpuUsagePercent() {
   return round(Math.min(100, (os.loadavg()[0] / cores) * 100));
 }
 
-function diskFreePercent() {
+function trafficStats() {
+  try {
+    const lines = fs.readFileSync('/proc/net/dev', 'utf8').split('\n');
+    let tx = 0;
+    let rx = 0;
+    let found = false;
+    for (const line of lines) {
+      const split = line.split(':');
+      if (split.length < 2) continue;
+      const iface = split[0].trim();
+      if (!iface || iface === 'lo') continue;
+      const cols = split.slice(1).join(':').trim().split(/\s+/);
+      if (cols.length < 9) continue;
+      rx += Number(cols[0]);
+      tx += Number(cols[8]);
+      found = true;
+    }
+    if (!found) return { txBytes: null, rxBytes: null };
+    return { txBytes: tx, rxBytes: rx };
+  } catch {
+    return { txBytes: null, rxBytes: null };
+  }
+}
+
+function diskStats() {
   try {
     const stats = fs.statfsSync(projectRoot());
-    return round((stats.bavail / stats.blocks) * 100, 1);
+    const free = stats.bavail * stats.bsize;
+    const total = stats.blocks * stats.bsize;
+    if (!total) return { freeBytes: null, totalBytes: null, freePercent: null };
+    return {
+      freeBytes: free,
+      totalBytes: total,
+      freePercent: round((stats.bavail / stats.blocks) * 100, 1),
+    };
   } catch {
-    return null;
+    return { freeBytes: null, totalBytes: null, freePercent: null };
   }
 }
 
@@ -61,7 +103,7 @@ function getHealth() {
     timestamp: new Date().toISOString(),
     response_time: round(performance.now() - start),
     node_version: process.version,
-    nextjs_version: installedVersion('next'),
+    nextjs_version: nextVersion(),
     framework: 'Next.js',
     integration_version: VERSION,
     uptime_seconds: Math.round(os.uptime()),
@@ -90,7 +132,8 @@ function getPerformance() {
   const start = performance.now();
   const memory = systemMemoryPercent();
   const cpu = cpuUsagePercent();
-  const disk = diskFreePercent();
+  const disk = diskStats();
+  const traffic = trafficStats();
   const processMemory = process.memoryUsage();
   const elapsed = round(performance.now() - start);
 
@@ -98,7 +141,7 @@ function getPerformance() {
   const recommendations = [];
   if (memory > 80) { score -= 15; recommendations.push('Server memory usage is high — add memory or reduce usage'); }
   if (cpu != null && cpu > 80) { score -= 20; recommendations.push('Server CPU load is high — optimize heavy work or add capacity'); }
-  if (disk != null && disk < 10) { score -= 15; recommendations.push('Less than 10% disk space left on the server'); }
+  if (disk.freePercent != null && disk.freePercent < 10) { score -= 15; recommendations.push('Less than 10% disk space left on the server'); }
   if (process.env.NODE_ENV !== 'production') { score -= 10; recommendations.push('Run the site with a production build (next build && next start)'); }
 
   return {
@@ -109,7 +152,11 @@ function getPerformance() {
     memory_peak: round(processMemory.rss / 1048576),
     heap_used_mb: round(processMemory.heapUsed / 1048576),
     cpu_usage: cpu,
-    disk_free_percent: disk,
+    disk_free_percent: disk.freePercent,
+    disk_free_bytes: disk.freeBytes,
+    disk_total_bytes: disk.totalBytes,
+    bandwidth_tx_bytes: traffic.txBytes,
+    bandwidth_rx_bytes: traffic.rxBytes,
     performance_score: Math.max(0, score),
     active_plugins: null,
     recommendations,
@@ -224,7 +271,7 @@ async function getSecurity(ctx) {
     total_plugins: null,
     outdated_plugins: null,
     node_version: process.version,
-    nextjs_version: installedVersion('next'),
+    nextjs_version: nextVersion(),
     recommendations,
   };
 }
@@ -251,7 +298,7 @@ function getLibraries() {
     all_libraries: [...dependencies, ...devDependencies],
     outdated_count: null,
     node_version: process.version,
-    nextjs_version: installedVersion('next'),
+    nextjs_version: nextVersion(),
   };
 }
 

@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
-import { loadOwnedWebsite } from '../lib/auth.js';
+import { loadOwnedWebsite, requirePro } from '../lib/auth.js';
+import { attachProperty, connectUrl, pendingProperties } from '../lib/googleAnalytics.js';
+import { attachSite, connectUrl as searchConsoleConnectUrl, pendingSites } from '../lib/searchConsole.js';
 import { checkAndRecord, performHealthCheck } from '../lib/monitor.js';
 import { serializeIncident, serializeWebsite } from '../lib/serialize.js';
 import { liveStatsFor, recentChecks } from '../lib/stats.js';
@@ -117,6 +119,10 @@ websites.delete('/:id', async (c) => {
     c.env.DB.prepare('DELETE FROM check_hours WHERE website_id = ?').bind(id),
     c.env.DB.prepare('DELETE FROM check_days WHERE website_id = ?').bind(id),
     c.env.DB.prepare('DELETE FROM incidents WHERE website_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM ga_pending WHERE website_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM sc_pending WHERE website_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM vitals_scans WHERE website_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM security_scans WHERE website_id = ?').bind(id),
     c.env.DB.prepare('DELETE FROM websites WHERE id = ?').bind(id),
   ]);
   return c.json({ message: 'Website deleted successfully' });
@@ -138,6 +144,59 @@ websites.get('/:id/incidents', async (c) => {
 
 // Kept for API compatibility; per-day analytics history needs an analytics integration
 websites.get('/:id/analytics', (c) => c.json([]));
+
+// Google Analytics is a separate permission from sign-in. Pro only, and only for a site this account owns.
+websites.get('/:id/analytics/google/connect', requirePro, async (c) => {
+  const site = c.get('website');
+  const url = await connectUrl(c.env, c.req.url, c.get('user').id, site.id);
+  return c.json({ url });
+});
+
+websites.get('/:id/analytics/google/properties', requirePro, async (c) => {
+  const pendingId = c.req.query('pending');
+  if (!pendingId) throw new ApiError(400, 'Missing Google connection.');
+  const properties = await pendingProperties(c.env, pendingId, c.get('user').id, c.get('website').id);
+  return c.json({ properties });
+});
+
+websites.post('/:id/analytics/google', requirePro, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const connection = await attachProperty(c.env, body.pendingId, c.get('user').id, c.get('website').id, body.propertyId);
+  return c.json(connection);
+});
+
+websites.get('/:id/search-console/google/connect', requirePro, async (c) => {
+  const site = c.get('website');
+  const url = await searchConsoleConnectUrl(c.env, c.req.url, c.get('user').id, site.id);
+  return c.json({ url });
+});
+
+websites.get('/:id/search-console/google/sites', requirePro, async (c) => {
+  const pendingId = c.req.query('pending');
+  if (!pendingId) throw new ApiError(400, 'Missing Google connection.');
+  const sites = await pendingSites(c.env, pendingId, c.get('user').id, c.get('website').id);
+  return c.json({ sites });
+});
+
+websites.post('/:id/search-console/google', requirePro, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const connection = await attachSite(c.env, body.pendingId, c.get('user').id, c.get('website').id, body.siteUrl);
+  return c.json(connection);
+});
+
+websites.delete('/:id/search-console/google', requirePro, async (c) => {
+  const now = nowIso();
+  await c.env.DB.prepare(`UPDATE websites SET sc_site_url = NULL, sc_permission = NULL, sc_refresh_token = NULL, sc_connected_at = NULL, updated_at = ?
+    WHERE id = ?`).bind(now, c.get('website').id).run();
+  return c.json({ connected: false });
+});
+
+websites.delete('/:id/analytics/google', requirePro, async (c) => {
+  const now = nowIso();
+  await c.env.DB.prepare(`UPDATE websites SET ga_property_id = NULL, ga_property_name = NULL, ga_refresh_token = NULL, ga_connected_at = NULL, updated_at = ?
+    WHERE id = ?`).bind(now, c.get('website').id).run();
+  return c.json({ connected: false });
+});
 
 // "Run check": a real check now, recorded like a scheduled one
 websites.post('/:id/test', async (c) => {

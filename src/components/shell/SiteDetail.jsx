@@ -12,13 +12,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import PlatformIcon from '../PlatformIcon';
 import { ScoreRing, MetricCard, MiniChip, KeyValue, Collapsible, SectionTitle } from './ui';
 import {
-  healthScore, scoreTone, statusTone, TONE, STATUS_LABEL, UP_STATUSES, formatMs, formatPercent, timeAgo, displayUrl, platformLabel,
+  healthScore, scoreTone, statusTone, TONE, STATUS_LABEL, UP_STATUSES, formatMs, formatPercent, formatSpan, timeAgo, displayUrl, platformLabel,
+  incidentForAlert, slowStretch, runtimeRows,
 } from '../../utils/siteMetrics';
 
 const TABS = ['Overview', 'Performance', 'SEO', 'Security', 'History', 'Advanced'];
 const INCIDENT_REFRESH_MS = 60000;
 
-const percentOrNull = (value) => (typeof value === 'number' ? `${Math.round(value * 10) / 10}%` : null);
+const percentOrNull = (value) => (typeof value === 'number' && value >= 0 && value <= 100 ? `${Math.round(value * 10) / 10}%` : null);
 
 // ---------- Charts ----------
 const LatencyChart = ({ data, height = 180 }) => {
@@ -109,7 +110,9 @@ const ReviewColumn = ({ site, availability, recommendations, incidents }) => (
               <div key={incident._id} className="panel p-3 hover:shadow-card-hover transition-shadow">
                 <div className="text-[13px] font-semibold text-ink line-clamp-2">{incident.message || STATUS_LABEL[incident.status]}</div>
                 <div className="flex justify-between mt-2 text-[11px] font-semibold text-ink-muted">
-                  <span className={incident.endedAt ? '' : 'text-bad'}>{incident.endedAt ? 'Resolved' : 'Ongoing'}</span>
+                  <span className={incident.endedAt ? '' : 'text-bad'}>
+                    {incident.endedAt ? 'Resolved' : 'Ongoing'} · down for {formatSpan(incident.startedAt, incident.endedAt)}
+                  </span>
                   <span>{new Date(incident.startedAt).toLocaleString()}</span>
                 </div>
               </div>
@@ -122,7 +125,109 @@ const ReviewColumn = ({ site, availability, recommendations, incidents }) => (
 );
 
 // ---------- Tabs ----------
-const ChecksTable = ({ checks, limit }) => (
+const when = (iso) => (iso ? new Date(iso).toLocaleString() : '—');
+
+const ALERT_KIND = {
+  site_down: 'Site down',
+  site_up: 'Site recovered',
+  slow: 'Slow response',
+  slow_ok: 'Speed recovered',
+  plugins: 'Plugin / package updates',
+  ssl_off: 'SSL problem',
+  ssl_ok: 'SSL recovered',
+  security_low: 'Security score',
+};
+
+const AlertContext = ({ focus, incidents, incidentsLoaded, checks, checksLoaded, threshold, onDismiss }) => {
+  if (!focus) return null;
+  const downtime = focus.type === 'site_down' || focus.type === 'site_up';
+  const speed = focus.type === 'slow' || focus.type === 'slow_ok';
+  const incident = downtime ? incidentForAlert(incidents, focus) : null;
+  const stretch = speed ? slowStretch(checks, focus, threshold) : null;
+  const reason = incident?.message || focus.body || 'No extra detail was stored with this alert.';
+
+  return (
+    <section id="alert-context" className="panel p-5 border-brand-200 bg-linear-to-br from-brand-50 to-white shadow-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="label-caps mb-1 text-brand-700!">Alert detail</div>
+          <h3 className="text-[17px] font-extrabold text-ink tracking-tight">{focus.title || ALERT_KIND[focus.type] || 'Alert'}</h3>
+        </div>
+        {onDismiss && (
+          <button type="button" onClick={onDismiss} className="btn-ghost shrink-0 text-ink-muted" aria-label="Dismiss alert detail">
+            <XCircle size={18} />
+          </button>
+        )}
+      </div>
+
+      <dl className="mt-4 grid sm:grid-cols-3 gap-x-6 gap-y-3 text-[13px]">
+        <div>
+          <dt className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">What</dt>
+          <dd className="text-ink font-semibold mt-0.5">{ALERT_KIND[focus.type] || focus.type || 'Alert'}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">When</dt>
+          <dd className="text-ink font-semibold mt-0.5">{focus.createdAt ? when(focus.createdAt) : '—'}</dd>
+        </div>
+        <div className="sm:col-span-1">
+          <dt className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Why</dt>
+          <dd className="text-ink font-semibold mt-0.5 break-words">{reason}</dd>
+        </div>
+      </dl>
+
+      {downtime && !incidentsLoaded && <p className="text-[13px] text-ink-muted mt-3">Loading this outage…</p>}
+      {downtime && incidentsLoaded && incident && (
+        <dl className="mt-4 pt-4 border-t border-brand-100 grid sm:grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
+          <div>
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Down for</dt>
+            <dd className="text-ink font-semibold mt-0.5">
+              {formatSpan(incident.startedAt, incident.endedAt)}{incident.endedAt ? '' : ' so far'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Started</dt>
+            <dd className="text-ink mt-0.5">{when(incident.startedAt)}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">{incident.endedAt ? 'Recovered' : 'Status'}</dt>
+            <dd className={`mt-0.5 font-semibold ${incident.endedAt ? 'text-ink' : 'text-bad'}`}>
+              {incident.endedAt ? when(incident.endedAt) : 'Still down'}
+            </dd>
+          </div>
+        </dl>
+      )}
+      {downtime && incidentsLoaded && !incident && (
+        <p className="text-[13px] text-ink-muted mt-3">This outage is not in the last 30 days of incident history.</p>
+      )}
+      {speed && !checksLoaded && <p className="text-[13px] text-ink-muted mt-3">Loading this check…</p>}
+      {speed && checksLoaded && stretch?.check && (
+        <dl className="mt-4 pt-4 border-t border-brand-100 grid sm:grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
+          <div>
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Response</dt>
+            <dd className="text-ink font-semibold mt-0.5">{formatMs(stretch.check.responseTime)} · alert threshold {threshold.toLocaleString()} ms</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">{focus.type === 'slow_ok' ? 'Was slow for' : 'Slow for'}</dt>
+            <dd className="text-ink font-semibold mt-0.5">{stretch.minutes ? `${stretch.minutes} minute${stretch.minutes === 1 ? '' : 's'}` : 'This check was back under the threshold.'}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">Checked</dt>
+            <dd className="text-ink mt-0.5">{when(stretch.check.timestamp)}{stretch.check.statusCode ? ` · HTTP ${stretch.check.statusCode}` : ''}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-ink-muted">From / to</dt>
+            <dd className="text-ink mt-0.5">{stretch.from ? `${when(stretch.from)} → ${when(stretch.to)}` : '—'}</dd>
+          </div>
+        </dl>
+      )}
+      {speed && checksLoaded && !stretch && (
+        <p className="text-[13px] text-ink-muted mt-3">This check is outside the last 24 hours, so the minute-by-minute times are no longer stored.</p>
+      )}
+    </section>
+  );
+};
+
+const ChecksTable = ({ checks, limit, highlightId }) => (
   <div className="overflow-x-auto">
     <table className="w-full text-[13px]">
       <thead>
@@ -137,7 +242,7 @@ const ChecksTable = ({ checks, limit }) => (
         {checks.slice(0, limit).map((check) => {
           const tone = TONE[statusTone(check.status)];
           return (
-            <tr key={check._id} className="border-t border-brand-100 hover:bg-brand-50/60 transition-colors">
+            <tr key={check._id} className={`border-t border-brand-100 hover:bg-brand-50/60 transition-colors ${check._id === highlightId ? 'bg-brand-50' : ''}`}>
               <td className="py-2.5 text-brand-700 font-semibold whitespace-nowrap">{new Date(check.timestamp).toLocaleTimeString()}</td>
               <td className="py-2.5">
                 <span className={`inline-flex items-center gap-1.5 font-semibold ${tone.text}`}>
@@ -197,8 +302,8 @@ const OverviewTab = ({ site, availability, checks, latencySeries }) => {
           <div>
             <div className="label-caps mb-3">Site</div>
             <KeyValue rows={[
-              ['Platform', site.platform],
-              ['Version', site.security?.wordpressVersion || null],
+              ['Platform', platformLabel(site.platform)],
+              ...runtimeRows(site),
               ['Active plugins', site.performance?.activePlugins ?? null],
               ['Content items', site.seo?.totalContent ?? null],
             ]} />
@@ -219,11 +324,33 @@ const OverviewTab = ({ site, availability, checks, latencySeries }) => {
         </div>
       </section>
 
+      <InventorySection site={site} />
+
       <section>
         <SectionTitle>Recent checks</SectionTitle>
         <ChecksTable checks={checks} limit={6} />
       </section>
     </div>
+  );
+};
+
+const INVENTORY_TITLE = { wordpress: 'Plugins', nextjs: 'Libraries', laravel: 'Packages', codeigniter: 'Packages', php: 'Packages' };
+
+const InventorySection = ({ site }) => {
+  const title = INVENTORY_TITLE[site.platform];
+  if (!title) return null;
+  const items = Array.isArray(site.security?.inventory) ? site.security.inventory : [];
+  return (
+    <section>
+      <SectionTitle>{title}</SectionTitle>
+      {items.length === 0 ? (
+        <p className="text-[13px] font-semibold text-ink-muted">Not reported yet.</p>
+      ) : (
+        <div className="grid sm:grid-cols-2 gap-x-10">
+          <KeyValue rows={items.map((item) => [item.dev ? `${item.name} · dev` : item.name, item.version || '--'])} />
+        </div>
+      )}
+    </section>
   );
 };
 
@@ -278,17 +405,23 @@ const ScoreSection = ({ title, score, rows, items, itemsTitle, emptyText }) => (
   </div>
 );
 
-const HistoryTab = ({ checks, incidents }) => (
+const HistoryTab = ({ checks, incidents, focusId, highlightCheckId }) => (
   <div className="space-y-7">
     <section>
       <SectionTitle>Incidents · last 30 days</SectionTitle>
       {incidents.length === 0 ? <p className="text-[13px] text-ink-muted">No downtime recorded.</p> : (
         <div className="space-y-2">
           {incidents.map((incident) => (
-            <div key={incident._id} className="panel px-4 py-3 flex items-center justify-between gap-4 text-[13px]">
-              <span className="font-semibold text-ink truncate">{incident.message || STATUS_LABEL[incident.status]}</span>
-              <span className="text-ink-muted whitespace-nowrap">
-                {new Date(incident.startedAt).toLocaleString()} → {incident.endedAt ? new Date(incident.endedAt).toLocaleTimeString() : <span className="text-bad font-bold">ongoing</span>}
+            <div key={incident._id} className={`panel px-4 py-3 flex items-center justify-between gap-4 text-[13px] ${incident._id === focusId ? 'ring-2 ring-brand-500' : ''}`}>
+              <span className="min-w-0">
+                <span className="block font-semibold text-ink truncate">{incident.message || STATUS_LABEL[incident.status]}</span>
+                <span className={`text-[11px] font-semibold ${incident.endedAt ? 'text-ink-muted' : 'text-bad'}`}>
+                  Down for {formatSpan(incident.startedAt, incident.endedAt)}{incident.endedAt ? '' : ' so far'}
+                </span>
+              </span>
+              <span className="text-ink-muted whitespace-nowrap text-right">
+                {new Date(incident.startedAt).toLocaleString()}
+                <span className="block">{incident.endedAt ? new Date(incident.endedAt).toLocaleString() : <span className="text-bad font-bold">ongoing</span>}</span>
               </span>
             </div>
           ))}
@@ -297,29 +430,40 @@ const HistoryTab = ({ checks, incidents }) => (
     </section>
     <section>
       <SectionTitle>All checks · last 24 hours</SectionTitle>
-      <ChecksTable checks={checks} limit={60} />
+      <ChecksTable checks={checks} limit={60} highlightId={highlightCheckId} />
     </section>
   </div>
 );
 
 // ---------- Main ----------
-const SiteDetail = ({ site, tab = 'Overview', onTabChange, onBack, onEdit, onDelete, onChanged }) => {
+const SiteDetail = ({ site, tab = 'Overview', onTabChange, onBack, onEdit, onDelete, onChanged, alertFocus = null, onDismissAlert }) => {
   const setTab = onTabChange;
   const [checking, setChecking] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [incidents, setIncidents] = useState([]);
-  const { checks, latencySeries, availability } = useMonitoringHistory(site._id, 24);
+  const [incidentsLoaded, setIncidentsLoaded] = useState(false);
+  const { checks, latencySeries, availability, loaded: checksLoaded } = useMonitoringHistory(site._id, 24);
   const { isPro } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
     const load = () => ApiService.getIncidents(site._id, 30)
       .then((data) => { if (!cancelled) setIncidents(Array.isArray(data) ? data : []); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setIncidentsLoaded(true); });
     load();
     const interval = setInterval(load, INCIDENT_REFRESH_MS);
     return () => { cancelled = true; clearInterval(interval); };
   }, [site._id]);
+
+  const threshold = site.settings?.alertThresholds?.responseTime || 5000;
+  const focusedIncident = alertFocus ? incidentForAlert(incidents, alertFocus) : null;
+  const focusedSlow = alertFocus ? slowStretch(checks, alertFocus, threshold) : null;
+
+  useEffect(() => {
+    if (!alertFocus) return;
+    document.getElementById('alert-context')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [alertFocus, tab, incidentsLoaded, checks.length]);
 
   const recommendations = useMemo(() => {
     const seen = new Set();
@@ -431,7 +575,8 @@ const SiteDetail = ({ site, tab = 'Overview', onTabChange, onBack, onEdit, onDel
           </div>
         ) : (
         <div key={tab} className="px-6 lg:px-8 py-6 grid lg:grid-cols-[1fr_290px] gap-8 animate-fade-in">
-          <div className="min-w-0">
+          <div className="min-w-0 space-y-7">
+            <AlertContext focus={alertFocus} incidents={incidents} incidentsLoaded={incidentsLoaded} checks={checks} checksLoaded={checksLoaded} threshold={threshold} onDismiss={onDismissAlert} />
             {tab === 'Overview' && <OverviewTab site={site} availability={availability} checks={checks} latencySeries={latencySeries} />}
             {tab === 'Performance' && <PerformanceTab site={site} latencySeries={latencySeries} />}
             {tab === 'SEO' && (
@@ -451,13 +596,21 @@ const SiteDetail = ({ site, tab = 'Overview', onTabChange, onBack, onEdit, onDel
                 title="Security" score={sec.securityScore}
                 rows={[
                   ['SSL', sec.sslStatus], ['Firewall', sec.firewall], ['Vulnerability scan', sec.vulnerabilityScan?.replace(/_/g, ' ')],
-                  ['Malware scan', sec.malwareScan?.replace(/_/g, ' ')], ['Platform version', sec.wordpressVersion || null],
+                  ['Malware scan', sec.malwareScan?.replace(/_/g, ' ')],
+                  ...runtimeRows(site),
                   ['Plugins', sec.totalPlugins], ['Outdated plugins', sec.outdatedPlugins], ['Security plugins', sec.securityPlugins],
                 ]}
                 itemsTitle="Recommendations" items={sec.recommendations || []} emptyText="No security recommendations."
               />
             )}
-            {tab === 'History' && <HistoryTab checks={checks} incidents={incidents} />}
+            {tab === 'History' && (
+              <HistoryTab
+                checks={checks}
+                incidents={incidents}
+                focusId={focusedIncident?._id}
+                highlightCheckId={focusedSlow?.check?._id}
+              />
+            )}
           </div>
           <ReviewColumn site={{ ...site, lastError: latestError }} availability={availability} recommendations={recommendations} incidents={incidents} />
         </div>

@@ -30,7 +30,7 @@
     }
   },
   "bin": {
-    "webmonitor-nextjs": "./bin/webmonitor-nextjs.js"
+    "webmonitor-nextjs": "bin/webmonitor-nextjs.js"
   },
   "files": [
     "src",

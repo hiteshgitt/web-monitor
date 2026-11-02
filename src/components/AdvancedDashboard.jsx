@@ -17,6 +17,42 @@ import {
 import { getApiUrl, API_BASE_URL } from '../config/api';
 import { apiFetch } from '../services/session';
 import useMonitoringHistory from '../hooks/useMonitoringHistory';
+import GoogleAnalyticsPanel from './shell/GoogleAnalyticsPanel';
+import SearchConsolePanel from './shell/SearchConsolePanel';
+import WebVitalsPanel from './shell/WebVitalsPanel';
+import SecurityScanPanel from './shell/SecurityScanPanel';
+
+// Used and total gigabytes from a saved performance payload. Null until the site has reported disk bytes.
+function transferOf(bandwidth, performance) {
+  if (bandwidth?.used != null) return bandwidth;
+  if (performance?.bandwidthTxBytes == null) return null;
+  const sent = Number(performance.bandwidthTxBytes);
+  if (!Number.isFinite(sent) || sent < 0) return null;
+  const gb = (bytes) => Math.round((bytes / 1073741824) * 100) / 100;
+  const received = Number(performance?.bandwidthRxBytes);
+  return {
+    used: gb(sent),
+    received: Number.isFinite(received) && received >= 0 ? gb(received) : null,
+    limit: null,
+    unit: 'GB',
+    since: 'restart',
+  };
+}
+
+function formatTransfer(bandwidth) {
+  if (!bandwidth || bandwidth.used == null) return { value: 'Not connected', note: '' };
+  const unit = bandwidth.unit || 'GB';
+  if (bandwidth.limit != null) return { value: `${bandwidth.used} / ${bandwidth.limit} ${unit}`, note: '' };
+  return { value: `${bandwidth.used} ${unit} sent`, note: 'Since the server last restarted' };
+}
+
+function diskSpaceOf(performance) {
+  const total = Number(performance?.diskTotalBytes);
+  const free = Number(performance?.diskFreeBytes);
+  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(free) || free < 0 || free > total) return null;
+  const gb = (bytes) => Math.round((bytes / 1073741824) * 100) / 100;
+  return { used: gb(total - free), total: gb(total), unit: 'GB' };
+}
 
 // Pro-only Advanced view, shown inside the site detail as its own tab
 const AdvancedDashboard = ({ selectedWebsite }) => {
@@ -55,7 +91,14 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
   };
 
   const { draggedItem, dragOverIndex, handleDragStart, handleDragOver, handleDragLeave, handleDrop, handleDragEnd } = useDragAndDrop(metricCards, handleReorder);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const id = selectedWebsite?._id;
+      return sessionStorage.getItem('ga-site') === id || sessionStorage.getItem('sc-site') === id ? 'analytics' : 'overview';
+    } catch {
+      return 'overview';
+    }
+  });
   const [showAI, setShowAI] = useState(false);
   const [aiQuery, setAiQuery] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -259,7 +302,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
     } else {
       setCardOrder(['uptime', 'response', 'visitors', 'security']);
     }
-  }, [selectedWebsite?._id, dateRange]);
+  }, [selectedWebsite?._id, selectedWebsite?.performance?.diskTotalBytes, selectedWebsite?.performance?.diskFreeBytes, selectedWebsite?.performance?.bandwidthTxBytes, dateRange]);
 
   useEffect(() => {
     const el = aiScrollRef.current;
@@ -462,7 +505,12 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
     try {
       const apiUrl = API_BASE_URL;
       const response = await apiFetch(`${apiUrl}/advanced/comprehensive/${selectedWebsite._id}`);
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        console.error('Error loading advanced data:', data.error || response.status);
+        setAdvancedData(null);
+        return;
+      }
       setAdvancedData(data);
     } catch (error) {
       console.error('Error loading advanced data:', error);
@@ -779,9 +827,12 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                     <div>
                       <div className="text-[10px] text-ink-muted font-extrabold uppercase tracking-widest mb-0.5">Disk Resource</div>
                       <div className="text-sm font-extrabold text-ink">
-                        {advancedData?.serverInfo?.diskSpace
-                          ? `${advancedData.serverInfo.diskSpace.used ?? '—'} / ${advancedData.serverInfo.diskSpace.total ?? '—'} ${advancedData.serverInfo.diskSpace.unit || 'GB'}`
-                          : 'Not connected'}
+                        {(() => {
+                          const disk = advancedData?.serverInfo?.diskSpace || diskSpaceOf(selectedWebsite?.performance);
+                          return disk
+                            ? `${disk.used ?? '—'} / ${disk.total ?? '—'} ${disk.unit || 'GB'}`
+                            : 'Not connected';
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -791,11 +842,15 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                     </div>
                     <div>
                       <div className="text-[10px] text-ink-muted font-extrabold uppercase tracking-widest mb-0.5">Data Transfer</div>
-                      <div className="text-sm font-extrabold text-ink">
-                        {advancedData?.serverInfo?.bandwidth
-                          ? `${advancedData.serverInfo.bandwidth.used ?? '—'} / ${advancedData.serverInfo.bandwidth.limit ?? '—'} ${advancedData.serverInfo.bandwidth.unit || 'GB'}`
-                          : 'Not connected'}
-                      </div>
+                      {(() => {
+                        const transfer = formatTransfer(transferOf(advancedData?.serverInfo?.bandwidth, selectedWebsite?.performance));
+                        return (
+                          <>
+                            <div className="text-sm font-extrabold text-ink">{transfer.value}</div>
+                            {transfer.note && <div className="text-[10px] font-bold text-ink-muted mt-0.5">{transfer.note}</div>}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -841,19 +896,19 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="text-xs text-ink-muted mb-1">Total Sessions</div>
-                  <div className="text-lg font-bold text-ink">{advancedData?.analytics?.googleAnalytics?.sessions != null ? (advancedData.analytics.googleAnalytics.sessions / 1000).toFixed(1) + 'K' : 'N/A'}</div>
+                  <div className="text-lg font-bold text-ink">{advancedData?.analytics?.googleAnalytics?.sessions != null ? advancedData.analytics.googleAnalytics.sessions.toLocaleString() : 'N/A'}</div>
                 </div>
                 <div>
                   <div className="text-xs text-ink-muted mb-1">Unique Users</div>
-                  <div className="text-lg font-bold text-ink">{selectedWebsite?.analytics?.totalVisitors != null ? (selectedWebsite.analytics.totalVisitors / 1000).toFixed(1) + 'K' : 'N/A'}</div>
+                  <div className="text-lg font-bold text-ink">{(advancedData?.analytics?.googleAnalytics?.totalUsers ?? selectedWebsite?.analytics?.totalVisitors) != null ? Number(advancedData?.analytics?.googleAnalytics?.totalUsers ?? selectedWebsite?.analytics?.totalVisitors).toLocaleString() : 'N/A'}</div>
                 </div>
                 <div>
                   <div className="text-xs text-ink-muted mb-1">Page Views</div>
-                  <div className="text-lg font-bold text-ink">{selectedWebsite?.analytics?.totalPageViews != null ? (selectedWebsite.analytics.totalPageViews / 1000).toFixed(1) + 'K' : 'N/A'}</div>
+                  <div className="text-lg font-bold text-ink">{(advancedData?.analytics?.googleAnalytics?.pageViews ?? selectedWebsite?.analytics?.totalPageViews) != null ? Number(advancedData?.analytics?.googleAnalytics?.pageViews ?? selectedWebsite?.analytics?.totalPageViews).toLocaleString() : 'N/A'}</div>
                 </div>
                 <div>
                   <div className="text-xs text-ink-muted mb-1">Bounce Rate</div>
-                  <div className="text-lg font-bold text-ink">{selectedWebsite?.analytics?.bounceRate != null ? `${selectedWebsite.analytics.bounceRate}%` : 'N/A'}</div>
+                  <div className="text-lg font-bold text-ink">{(advancedData?.analytics?.googleAnalytics?.bounceRate ?? selectedWebsite?.analytics?.bounceRate) != null ? `${advancedData?.analytics?.googleAnalytics?.bounceRate ?? selectedWebsite?.analytics?.bounceRate}%` : 'N/A'}</div>
                 </div>
               </div>
             </div>
@@ -1079,8 +1134,18 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
         {/* Analytics Tab */}
         {activeTab === 'analytics' && (
           <div className="space-y-4">
+            <GoogleAnalyticsPanel
+              siteId={selectedWebsite._id}
+              report={advancedData?.analytics}
+              onConnected={loadAdvancedData}
+            />
+            <SearchConsolePanel
+              siteId={selectedWebsite._id}
+              report={advancedData?.analytics}
+              onConnected={loadAdvancedData}
+            />
             {/* Analytics Overview - Modern Cards */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="bg-white rounded-xl border border-brand-100 shadow-xs p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <BarChart3 size={18} className="text-brand-600" />
@@ -1089,90 +1154,20 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-ink-muted">Visitors</span>
-                    <span className="text-sm font-bold text-ink">{selectedWebsite?.analytics?.totalVisitors ?? 'N/A'}</span>
+                    <span className="text-sm font-bold text-ink">{(advancedData?.analytics?.googleAnalytics?.totalUsers ?? selectedWebsite?.analytics?.totalVisitors) ?? 'N/A'}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-ink-muted">Page Views</span>
-                    <span className="text-sm font-bold text-ink">{selectedWebsite?.analytics?.totalPageViews ?? 'N/A'}</span>
+                    <span className="text-sm font-bold text-ink">{(advancedData?.analytics?.googleAnalytics?.pageViews ?? selectedWebsite?.analytics?.totalPageViews) ?? 'N/A'}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-ink-muted">Bounce Rate</span>
-                    <span className="text-sm font-bold text-ink">{selectedWebsite?.analytics?.bounceRate != null ? `${selectedWebsite.analytics.bounceRate}%` : 'N/A'}</span>
+                    <span className="text-sm font-bold text-ink">{(advancedData?.analytics?.googleAnalytics?.bounceRate ?? selectedWebsite?.analytics?.bounceRate) != null ? `${advancedData?.analytics?.googleAnalytics?.bounceRate ?? selectedWebsite?.analytics?.bounceRate}%` : 'N/A'}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-ink-muted">Avg Session</span>
-                    <span className="text-sm font-bold text-ink">{selectedWebsite?.analytics?.avgSessionDuration != null ? `${selectedWebsite.analytics.avgSessionDuration}s` : 'N/A'}</span>
+                    <span className="text-sm font-bold text-ink">{(advancedData?.analytics?.googleAnalytics?.avgSessionDuration ?? selectedWebsite?.analytics?.avgSessionDuration) != null ? `${advancedData?.analytics?.googleAnalytics?.avgSessionDuration ?? selectedWebsite?.analytics?.avgSessionDuration}s` : 'N/A'}</span>
                   </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-card border border-brand-100 overflow-hidden">
-                <div className="px-8 py-6 border-b border-brand-100 flex items-center justify-between bg-linear-to-r from-gray-50 to-white">
-                  <h3 className="text-sm font-extrabold text-ink uppercase tracking-widest flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-                      <Search size={20} />
-                    </div>
-                    Search Engine Visibility
-                  </h3>
-                </div>
-              <div className="p-8 space-y-6">
-                  {!advancedData?.analytics?.searchConsole ? (
-                    <div className="bg-brand-50 border border-brand-100 rounded-2xl p-6 flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-2xl bg-brand-100 flex items-center justify-center text-brand-600 shrink-0">
-                        <Search size={18} />
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-extrabold uppercase tracking-widest text-brand-700 mb-1">Google Search Console Not Connected</div>
-                        <p className="text-xs text-brand-600/80 font-medium leading-relaxed">
-                          Organic search data (clicks, impressions, CTR) requires Google Search Console API credentials.
-                          Configure <code className="bg-brand-100 px-1 rounded-sm">GOOGLE_SEARCH_CONSOLE_ENABLED=true</code> and the related API keys in <code className="bg-brand-100 px-1 rounded-sm">backend/config.env</code>.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-brand-50/50 rounded-2xl p-5 border border-brand-100">
-                      <div className="text-[10px] text-ink-muted font-extrabold uppercase tracking-widest mb-2">Total Clicks</div>
-                      <div className="text-xl font-extrabold text-ink">
-                        {advancedData?.analytics?.searchConsole?.totalClicks != null
-                          ? advancedData.analytics.searchConsole.totalClicks >= 1000
-                            ? (advancedData.analytics.searchConsole.totalClicks / 1000).toFixed(1) + 'K'
-                            : advancedData.analytics.searchConsole.totalClicks
-                          : '—'}
-                      </div>
-                    </div>
-                    <div className="bg-brand-50/50 rounded-2xl p-5 border border-brand-100">
-                      <div className="text-[10px] text-ink-muted font-extrabold uppercase tracking-widest mb-2">Impressions</div>
-                      <div className="text-xl font-extrabold text-ink">
-                        {advancedData?.analytics?.searchConsole?.totalImpressions != null
-                          ? advancedData.analytics.searchConsole.totalImpressions >= 1000
-                            ? (advancedData.analytics.searchConsole.totalImpressions / 1000).toFixed(1) + 'K'
-                            : advancedData.analytics.searchConsole.totalImpressions
-                          : '—'}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-brand-50/50 rounded-2xl p-5 border border-brand-100">
-                      <div className="text-[10px] text-ink-muted font-extrabold uppercase tracking-widest mb-2">Avg. CTR</div>
-                      <div className="text-xl font-extrabold text-brand-600">
-                        {advancedData?.analytics?.searchConsole?.averageCTR != null
-                          ? `${(advancedData.analytics.searchConsole.averageCTR * 100).toFixed(1)}%`
-                          : '—'}
-                      </div>
-                    </div>
-                    <div className="bg-brand-50/50 rounded-2xl p-5 border border-brand-100">
-                      <div className="text-[10px] text-ink-muted font-extrabold uppercase tracking-widest mb-2">Avg. Position</div>
-                      <div className="text-xl font-extrabold text-brand-600">
-                        {advancedData?.analytics?.searchConsole?.averagePosition != null
-                          ? `#${advancedData.analytics.searchConsole.averagePosition.toFixed(1)}`
-                          : '—'}
-                      </div>
-                    </div>
-                  </div>
-                    </>
-                  )}
                 </div>
               </div>
 
@@ -1189,6 +1184,9 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                 </h3>
               </div>
               <div className="p-8">
+                {Object.keys(advancedData?.analytics?.googleAnalytics?.channelBreakdown || {}).length === 0 ? (
+                  <p className="text-sm text-ink-muted">Traffic sources appear here after Google Analytics is connected and the property has sessions.</p>
+                ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
@@ -1217,6 +1215,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                     <Tooltip content={<CustomTooltip />} />
                   </PieChart>
                 </ResponsiveContainer>
+                )}
               </div>
             </div>
 
@@ -1231,6 +1230,9 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                 </h3>
               </div>
               <div className="p-8">
+                {Object.keys(advancedData?.analytics?.googleAnalytics?.deviceBreakdown || {}).length === 0 ? (
+                  <p className="text-sm text-ink-muted">Device split appears here after Google Analytics is connected and the property has sessions.</p>
+                ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={Object.entries(advancedData?.analytics?.googleAnalytics?.deviceBreakdown || {}).map(([key, value]) => ({
                     name: key.charAt(0).toUpperCase() + key.slice(1),
@@ -1249,6 +1251,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                     />
                   </BarChart>
                 </ResponsiveContainer>
+                )}
               </div>
             </div>
           </div>
@@ -1257,13 +1260,14 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
         {/* Performance Tab */}
         {activeTab === 'performance' && (
           <div className="space-y-4">
+            <WebVitalsPanel siteId={selectedWebsite._id} />
             {/* Performance Metrics - Modern Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { label: 'Response', value: selectedWebsite?.responseTime, icon: Clock, color: 'text-brand-600', bg: 'bg-brand-50', unit: 'ms' },
                 { label: 'Server processing', value: selectedWebsite?.performance?.serverResponseTime, icon: Activity, color: 'text-emerald-600', bg: 'bg-emerald-50', unit: 'ms' },
                 { label: 'DB query', value: selectedWebsite?.performance?.databaseQueryTime, icon: Gauge, color: 'text-amber-600', bg: 'bg-amber-50', unit: 'ms' },
-                { label: 'Memory', value: selectedWebsite?.performance?.memoryUsage, icon: Activity, color: 'text-purple-600', bg: 'bg-purple-50', unit: '%' }
+                { label: 'Memory', value: (() => { const value = Number(selectedWebsite?.performance?.memoryUsage); return Number.isFinite(value) && value >= 0 && value <= 100 ? value : null; })(), icon: Activity, color: 'text-purple-600', bg: 'bg-purple-50', unit: '%' }
               ].map((metric, i) => (
                 <div key={i} className="bg-white rounded-2xl p-6 shadow-card border border-brand-100 flex flex-col items-center gap-3">
                   <div className={`w-12 h-12 rounded-2xl ${metric.bg} flex items-center justify-center ${metric.color}`}>
@@ -1318,6 +1322,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
         {/* Security Tab */}
         {activeTab === 'security' && (
           <div className="space-y-6">
+            <SecurityScanPanel siteId={selectedWebsite._id} />
             <div className="bg-white rounded-2xl shadow-card border border-brand-100 overflow-hidden">
               <div className="px-8 py-6 border-b border-brand-100 flex items-center justify-between bg-linear-to-r from-gray-50 to-white">
                 <h3 className="text-sm font-extrabold text-ink uppercase tracking-widest flex items-center gap-3">
@@ -1331,7 +1336,8 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {(() => {
                     const vulnScan = selectedWebsite?.security?.vulnerabilityScan;
-                    const hasVulnIssues = vulnScan && vulnScan !== 'Secure' && vulnScan !== 'secure' && vulnScan !== 'clean' && vulnScan !== 'Clean';
+                    const vulnOk = !vulnScan || ['secure', 'clean', 'passed'].includes(String(vulnScan).toLowerCase());
+                    const hasVulnIssues = Boolean(vulnScan) && !vulnOk;
                     const vulnColor = hasVulnIssues ? 'text-rose-600' : 'text-emerald-600';
                     const vulnBg = hasVulnIssues ? 'bg-rose-50' : 'bg-emerald-50';
                     const vulnDisplay = !vulnScan ? 'N/A' : hasVulnIssues ? (vulnScan.replace(/_/g, ' ')) : 'Secure';
@@ -1358,16 +1364,14 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                 {/* Vulnerability detail list - shown when issues found */}
                 {(() => {
                   const vulnScan = selectedWebsite?.security?.vulnerabilityScan;
-                  const hasVulnIssues = vulnScan && vulnScan !== 'Secure' && vulnScan !== 'secure' && vulnScan !== 'clean' && vulnScan !== 'Clean';
+                  const hasVulnIssues = Boolean(vulnScan) && !['secure', 'clean', 'passed'].includes(String(vulnScan).toLowerCase());
                   const vulnItems = selectedWebsite?.security?.vulnerabilities || [];
                   if (!hasVulnIssues) return null;
-                  const defaultIssues = [
-                    { title: 'Outdated core software version detected', severity: 'High' },
-                    { title: 'Weak admin credentials policy', severity: 'Medium' },
-                    { title: 'Exposed wp-config paths (if WordPress)', severity: 'High' },
-                    { title: 'Missing HTTP security headers', severity: 'Medium' }
-                  ];
-                  const issues = vulnItems.length > 0 ? vulnItems : defaultIssues;
+                  const outdated = Number(selectedWebsite?.security?.outdatedPlugins) || 0;
+                  const issues = vulnItems.length > 0
+                    ? vulnItems
+                    : (outdated > 0 ? [{ title: `${outdated} plugins have an update`, severity: 'Medium' }] : []);
+                  if (issues.length === 0) return null;
                   return (
                     <div className="bg-rose-50 border border-rose-100 rounded-2xl overflow-hidden">
                       <div className="px-6 py-4 border-b border-rose-100 flex items-center gap-3">

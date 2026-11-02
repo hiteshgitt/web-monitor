@@ -106,6 +106,18 @@ auth.post('/google', async (c) => {
 
 auth.get('/me', requireAuth, (c) => c.json({ user: serializeUser(c.get('user')) }));
 
+// Creates the account's public status link the first time it is asked for.
+auth.get('/status-page', requireAuth, async (c) => {
+  const user = c.get('user');
+  let slug = user.status_slug;
+  if (!slug) {
+    slug = newId();
+    await c.env.DB.prepare('UPDATE users SET status_slug = ?, updated_at = ? WHERE id = ?').bind(slug, nowIso(), user.id).run();
+  }
+  const origin = new URL(c.req.url).origin;
+  return c.json({ slug, url: `${origin}/status/${slug}` });
+});
+
 // Manual Pro for now: the customer asks, an admin switches the plan
 auth.post('/upgrade-request', requireAuth, async (c) => {
   const user = c.get('user');

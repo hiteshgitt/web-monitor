@@ -15,6 +15,7 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [session, setSession] = useState(null);
   const [siteId, setSiteId] = useState(null);
+  const [alertFocus, setAlertFocus] = useState(null);
   const [showAlerts, setShowAlerts] = useState(false);
 
   useEffect(() => {
@@ -37,12 +38,18 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // Register this phone for push once signed in; a tapped alert opens its site
   useEffect(() => {
     if (session?.token) registerForPush(session.token);
   }, [session?.token]);
 
-  useEffect(() => listenForAlertTaps((id) => { setShowAlerts(false); setSiteId(id); }), []);
+  const openAlert = useCallback((alert) => {
+    if (!alert?.websiteId) return;
+    setShowAlerts(false);
+    setAlertFocus(alert);
+    setSiteId(alert.websiteId);
+  }, []);
+
+  useEffect(() => listenForAlertTaps(openAlert), [openAlert]);
 
   const startSession = async (data) => {
     await saveToken(data.token);
@@ -62,8 +69,15 @@ export default function App() {
     await saveToken(null);
     setSession(null);
     setSiteId(null);
+    setAlertFocus(null);
     setShowAlerts(false);
   }, [session?.token]);
+
+  const openSite = useCallback((id) => {
+    setShowAlerts(false);
+    setAlertFocus(null);
+    setSiteId(id);
+  }, []);
 
   let screen = <LoginScreen onSignIn={signIn} onGoogle={signInWithGoogle} />;
   if (booting) {
@@ -73,18 +87,27 @@ export default function App() {
       </View>
     );
   } else if (session && siteId) {
-    screen = <SiteScreen siteId={siteId} session={session} onBack={() => setSiteId(null)} onExpired={signOut} />;
+    screen = (
+      <SiteScreen
+        siteId={siteId}
+        session={session}
+        alertFocus={alertFocus?.websiteId === siteId ? alertFocus : null}
+        onDismissAlert={() => setAlertFocus(null)}
+        onBack={() => { setSiteId(null); setAlertFocus(null); }}
+        onExpired={signOut}
+      />
+    );
   } else if (session && showAlerts) {
     screen = (
       <AlertsScreen
         session={session}
         onBack={() => setShowAlerts(false)}
-        onOpenSite={(id) => { setShowAlerts(false); setSiteId(id); }}
+        onOpenAlert={openAlert}
         onExpired={signOut}
       />
     );
   } else if (session) {
-    screen = <SitesScreen session={session} onOpen={setSiteId} onAlerts={() => setShowAlerts(true)} onSignOut={signOut} onExpired={signOut} />;
+    screen = <SitesScreen session={session} onOpen={openSite} onAlerts={() => setShowAlerts(true)} onSignOut={signOut} onExpired={signOut} />;
   }
 
   return (

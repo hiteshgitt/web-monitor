@@ -8,8 +8,8 @@ import { userIsPro } from '../session';
 import { platformIcon } from '../platforms';
 import AdvancedPanel from './AdvancedPanel';
 import {
-  STATUS_LABEL, UP_STATUSES, availability, clock, displayUrl, formatMs, formatPercent, formatRatio,
-  healthScore, latencySeries, platformLabel, scoreTone, statusTone, timeAgo,
+  ALERT_KIND, STATUS_LABEL, UP_STATUSES, availability, clock, displayUrl, formatMs, formatPercent, formatRatio,
+  formatWhen, healthScore, latencySeries, platformLabel, runtimeRows, scoreTone, statusTone, tabForAlert, timeAgo,
 } from '../metrics';
 import { colors, toneColor } from '../theme';
 import { KeyValue, MetricCard, Panel, ScoreRing, Sparkline } from '../ui';
@@ -23,7 +23,7 @@ const HERO = {
   muted: { bg: '#5868cf', title: 'Waiting for first check' },
 };
 
-export default function SiteScreen({ siteId, session, onBack, onExpired }) {
+export default function SiteScreen({ siteId, session, onBack, onExpired, alertFocus = null, onDismissAlert }) {
   const [site, setSite] = useState(null);
   const [checks, setChecks] = useState([]);
   const [incidents, setIncidents] = useState([]);
@@ -32,6 +32,7 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
   const [checking, setChecking] = useState(false);
   const [tab, setTab] = useState('Overview');
   const scrollRef = useRef(null);
+  const appliedAlert = useRef(null);
 
   const load = useCallback(async () => {
     const token = session.token;
@@ -54,6 +55,14 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
   }, [siteId, session.token, onExpired]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Open the tab that explains this alert (History / Security / Overview) once per alert id.
+  useEffect(() => {
+    if (!alertFocus?._id || appliedAlert.current === alertFocus._id) return;
+    appliedAlert.current = alertFocus._id;
+    setTab(tabForAlert(alertFocus.type));
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
+  }, [alertFocus]);
 
   const chooseTab = (name) => {
     setTab(name);
@@ -153,6 +162,33 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
       >
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {!site && loading ? <ActivityIndicator color={colors.brand} style={styles.spinner} /> : null}
+        {site && alertFocus ? (
+          <View style={styles.alertCard}>
+            <View style={styles.alertTop}>
+              <Text style={styles.alertKicker}>Alert detail</Text>
+              {onDismissAlert ? (
+                <Pressable onPress={onDismissAlert} hitSlop={8}>
+                  <Text style={styles.alertDismiss}>Dismiss</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <Text style={styles.alertTitle}>{alertFocus.title || ALERT_KIND[alertFocus.type] || 'Alert'}</Text>
+            <View style={styles.alertGrid}>
+              <View style={styles.alertCell}>
+                <Text style={styles.alertLabel}>What</Text>
+                <Text style={styles.alertValue}>{ALERT_KIND[alertFocus.type] || alertFocus.type || 'Alert'}</Text>
+              </View>
+              <View style={styles.alertCell}>
+                <Text style={styles.alertLabel}>When</Text>
+                <Text style={styles.alertValue}>{formatWhen(alertFocus.createdAt)}</Text>
+              </View>
+            </View>
+            <View style={styles.alertWhy}>
+              <Text style={styles.alertLabel}>Why</Text>
+              <Text style={styles.alertValue}>{alertFocus.body || 'No extra detail was stored with this alert.'}</Text>
+            </View>
+          </View>
+        ) : null}
         {site && tab === 'Overview' ? (
           <>
             <View style={[styles.hero, { backgroundColor: hero.bg }]}>
@@ -196,12 +232,21 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
             </Panel>
             <Panel title="Site">
               <KeyValue rows={[
-                ['Platform', site.platform],
-                ['Version', sec.wordpressVersion || null],
+                ['Platform', platformLabel(site.platform)],
+                ...runtimeRows(site),
                 ['Active plugins', perf.activePlugins ?? null],
                 ['Content items', seo.totalContent ?? null],
               ]} />
             </Panel>
+            {['wordpress', 'nextjs', 'laravel', 'codeigniter', 'php'].includes(site.platform) ? (
+              <Panel title={{ wordpress: 'Plugins', nextjs: 'Libraries', laravel: 'Packages', codeigniter: 'Packages', php: 'Packages' }[site.platform]}>
+                {Array.isArray(sec.inventory) && sec.inventory.length > 0 ? (
+                  <KeyValue rows={sec.inventory.map((item) => [item.dev ? `${item.name} · dev` : item.name, item.version || '--'])} />
+                ) : (
+                  <Text style={styles.muted}>Not reported yet.</Text>
+                )}
+              </Panel>
+            ) : null}
             <Panel title="Server">
               <KeyValue rows={[
                 ['CPU load', formatRatio(perf.cpuUsage)],
@@ -272,7 +317,7 @@ export default function SiteScreen({ siteId, session, onBack, onExpired }) {
               ['Firewall', sec.firewall],
               ['Vulnerability scan', sec.vulnerabilityScan?.replace(/_/g, ' ')],
               ['Malware scan', sec.malwareScan?.replace(/_/g, ' ')],
-              ['Platform version', sec.wordpressVersion || null],
+              ...runtimeRows(site),
               ['Plugins', sec.totalPlugins],
               ['Outdated plugins', sec.outdatedPlugins],
               ['Security plugins', sec.securityPlugins],
@@ -407,6 +452,22 @@ const styles = StyleSheet.create({
   body: { padding: 16, gap: 12, paddingBottom: 28 },
   error: { color: colors.bad, fontWeight: '700' },
   spinner: { marginTop: 32 },
+  alertCard: {
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: colors.brandSoft,
+  },
+  alertTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  alertKicker: { color: colors.brand, fontSize: 10, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
+  alertDismiss: { color: colors.inkMuted, fontSize: 12, fontWeight: '800' },
+  alertTitle: { color: colors.ink, fontSize: 17, fontWeight: '800', marginBottom: 10 },
+  alertGrid: { flexDirection: 'row', gap: 12 },
+  alertCell: { flex: 1 },
+  alertWhy: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.line },
+  alertLabel: { color: colors.inkMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  alertValue: { color: colors.ink, fontSize: 13, fontWeight: '700', marginTop: 3, lineHeight: 18 },
   hero: { borderRadius: 22, padding: 18, overflow: 'hidden' },
   heroOrb: { position: 'absolute', width: 140, height: 140, borderRadius: 70, backgroundColor: 'rgba(255,255,255,0.14)', top: -50, right: -30 },
   heroOrbSmall: { position: 'absolute', width: 90, height: 90, borderRadius: 45, backgroundColor: 'rgba(255,255,255,0.1)', bottom: -36, right: 48 },

@@ -52,6 +52,7 @@ export const AuthProvider = ({ children }) => {
     register: (name, email, password) => postJson('/auth/register', { name, email, password }).then(startSession),
     loginWithGoogle: (credential) => postJson('/auth/google', { credential }).then(startSession),
     requestUpgrade: () => postJson('/auth/upgrade-request').then((data) => setUser(data.user)),
+    applyUser: (next) => setUser(next),
     // Stop pushing alerts to this browser before the session goes away
     logout: () => disableBrowserPush().finally(() => { setToken(null); setUser(null); setStatus('signed-out'); }),
   }), [user, status, startSession]);

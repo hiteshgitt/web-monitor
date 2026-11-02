@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Web Monitor API (Advanced)
  * Description: Advanced REST API endpoints for the Web Monitor Dashboard. Exposes real, dynamic WordPress health, analytics, performance, SEO and security data (no simulated/random values).
- * Version: 1.1.1
+ * Version: 1.1.5
  * Author: Web Monitor Team
  * Requires at least: 5.6
  * Tested up to: 7.0
@@ -25,6 +25,62 @@ add_action('rest_api_init', 'webmonitor_advanced_register_routes');
 
 // Auto-generate API key on plugin activation
 register_activation_hook(__FILE__, 'webmonitor_advanced_activate');
+
+// A PHP memory_limit of -1 means unlimited. A percentage of that is meaningless.
+function webmonitor_traffic_stats() {
+    if (!is_readable('/proc/net/dev')) {
+        return array('tx_bytes' => null, 'rx_bytes' => null);
+    }
+    $lines = file('/proc/net/dev', FILE_IGNORE_NEW_LINES);
+    if ($lines === false) {
+        return array('tx_bytes' => null, 'rx_bytes' => null);
+    }
+    $tx = 0;
+    $rx = 0;
+    $found = false;
+    foreach ($lines as $line) {
+        if (strpos($line, ':') === false) {
+            continue;
+        }
+        $parts = explode(':', $line, 2);
+        $iface = trim($parts[0]);
+        if ($iface === '' || $iface === 'lo') {
+            continue;
+        }
+        $cols = preg_split('/\s+/', trim($parts[1]));
+        if (!is_array($cols) || count($cols) < 9) {
+            continue;
+        }
+        $rx += (int) $cols[0];
+        $tx += (int) $cols[8];
+        $found = true;
+    }
+    if (!$found) {
+        return array('tx_bytes' => null, 'rx_bytes' => null);
+    }
+    return array('tx_bytes' => $tx, 'rx_bytes' => $rx);
+}
+
+function webmonitor_disk_stats() {
+    $free = @disk_free_space(ABSPATH);
+    $total = @disk_total_space(ABSPATH);
+    if ($free === false || $total === false || $total <= 0) {
+        return array('free_bytes' => null, 'total_bytes' => null, 'free_percent' => null);
+    }
+    return array(
+        'free_bytes' => (int) $free,
+        'total_bytes' => (int) $total,
+        'free_percent' => round($free / $total * 100, 1),
+    );
+}
+
+function webmonitor_memory_percent($bytes) {
+    $limit = wp_convert_hr_to_bytes(ini_get('memory_limit'));
+    if ($limit <= 0) {
+        return null;
+    }
+    return round(($bytes / $limit) * 100, 2);
+}
 
 function webmonitor_advanced_activate() {
     // Check if API key already exists
@@ -435,10 +491,10 @@ function webmonitor_advanced_health_check($request) {
     global $wpdb;
     $db_status = $wpdb->get_var("SELECT 1") ? 'connected' : 'error';
     
-    // Test memory usage
+    // Test memory usage. Unlimited memory stays null instead of a nonsense percentage.
     $memory_usage = memory_get_usage(true);
     $memory_limit = ini_get('memory_limit');
-    $memory_percentage = ($memory_usage / wp_convert_hr_to_bytes($memory_limit)) * 100;
+    $memory_percentage = webmonitor_memory_percent($memory_usage);
     
     // Test plugins
     $active_plugins = get_option('active_plugins', array());
@@ -464,7 +520,7 @@ function webmonitor_advanced_health_check($request) {
     if ($db_status !== 'connected') {
         $status = 'error';
         $message = 'Database connection check failed';
-    } elseif ($memory_percentage >= 90) {
+    } elseif ($memory_percentage !== null && $memory_percentage >= 90) {
         $status = 'warning';
         $message = 'Memory usage is above 90% of the PHP memory limit';
     }
@@ -478,12 +534,13 @@ function webmonitor_advanced_health_check($request) {
         'message' => $message,
         'site_url' => home_url(),
         'wordpress_version' => get_bloginfo('version'),
-        'plugin_version' => '1.0.0 (Advanced)',
+        'php_version' => PHP_VERSION,
+        'plugin_version' => '1.1.5',
         'checks' => array(
             'database' => $db_status,
-            'memory' => $memory_percentage < 80 ? 'normal' : 'high',
+            'memory' => ($memory_percentage === null || $memory_percentage < 80) ? 'normal' : 'high',
             'plugins' => $plugin_count . ' active plugins',
-            'memory_usage' => round($memory_percentage, 2) . '%',
+            'memory_usage' => $memory_percentage === null ? null : $memory_percentage . '%',
             'memory_limit' => $memory_limit
         )
     );
@@ -556,10 +613,13 @@ function webmonitor_advanced_performance($request) {
     $wpdb->get_results("SELECT ID, post_title FROM {$wpdb->posts} WHERE post_status = 'publish' LIMIT 10");
     $query_time = (microtime(true) - $query_start) * 1000;
     
-    // Memory usage
+    // Memory usage. A limit of -1 means PHP has no cap, so a percentage would be meaningless.
     $memory_usage = memory_get_usage(true);
     $memory_peak = memory_get_peak_usage(true);
-    $memory_limit = wp_convert_hr_to_bytes(ini_get('memory_limit'));
+    $memory_percent = webmonitor_memory_percent($memory_usage);
+    $memory_peak_percent = webmonitor_memory_percent($memory_peak);
+    $disk = webmonitor_disk_stats();
+    $traffic = webmonitor_traffic_stats();
     
     // Server response time
     $response_time = (microtime(true) - $start_time) * 1000;
@@ -571,15 +631,17 @@ function webmonitor_advanced_performance($request) {
     // Calculate performance score
     $performance_score = 100;
     if ($query_time > 100) $performance_score -= 20;
-    if ($memory_usage / $memory_limit > 0.8) $performance_score -= 15;
+    if ($memory_percent !== null && $memory_percent > 80) $performance_score -= 15;
     if ($plugin_count > 20) $performance_score -= 10;
     if ($response_time > 500) $performance_score -= 25;
+    if ($disk['free_percent'] !== null && $disk['free_percent'] < 10) $performance_score -= 15;
     
     $recommendations = array();
     if ($query_time > 100) $recommendations[] = 'Optimize database queries';
-    if ($memory_usage / $memory_limit > 0.8) $recommendations[] = 'Increase memory limit or optimize memory usage';
+    if ($memory_percent !== null && $memory_percent > 80) $recommendations[] = 'Increase memory limit or optimize memory usage';
     if ($plugin_count > 20) $recommendations[] = 'Consider deactivating unused plugins';
     if ($response_time > 500) $recommendations[] = 'Enable caching or optimize server';
+    if ($disk['free_percent'] !== null && $disk['free_percent'] < 10) $recommendations[] = 'Less than 10% disk space left on the server';
     
     // Real CPU utilisation derived from the kernel load average and core count.
     // Unavailable on some hosts (e.g. Windows) -> null rather than a fake value.
@@ -601,10 +663,15 @@ function webmonitor_advanced_performance($request) {
         'load_time' => round($response_time, 2),
         'server_response_time' => round($response_time, 2),
         'database_query_time' => round($query_time, 2),
-        'memory_usage' => round(($memory_usage / $memory_limit) * 100, 2),
-        'memory_peak' => round(($memory_peak / $memory_limit) * 100, 2),
+        'memory_usage' => $memory_percent,
+        'memory_peak' => $memory_peak_percent,
         'cpu_usage' => $cpu_usage,
         'cpu_load_avg' => $cpu_load_avg,
+        'disk_free_bytes' => $disk['free_bytes'],
+        'disk_total_bytes' => $disk['total_bytes'],
+        'disk_free_percent' => $disk['free_percent'],
+        'bandwidth_tx_bytes' => $traffic['tx_bytes'],
+        'bandwidth_rx_bytes' => $traffic['rx_bytes'],
         'performance_score' => max(0, $performance_score),
         'active_plugins' => $plugin_count,
         'recommendations' => $recommendations
@@ -760,6 +827,7 @@ function webmonitor_advanced_security($request) {
         'total_plugins' => $plugin_count,
         'outdated_plugins' => $outdated_plugins,
         'wordpress_version' => $wp_version,
+        'php_version' => PHP_VERSION,
         'recommendations' => $recommendations
     );
 }

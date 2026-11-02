@@ -25,9 +25,10 @@
     }
   ],
 
-  // The monitor: one run per minute (the daily cleanup happens inside the 00:05 UTC run)
+  // The monitor: one run per minute (the daily cleanup happens inside the 00:05 UTC run).
+  // The 15-minute run scans one Pro site with PageSpeed when its saved result is older than a week.
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": ["* * * * *", "*/15 * * * *"]
   },
 
   // Slows down password guessing on the sign-in endpoints (per visitor IP)
@@ -39,11 +40,23 @@
     }
   ],
 
-  // Non-secret settings. Secrets (JWT_SECRET, GOOGLE_AI_API_KEY, VAPID_PRIVATE_JWK) are set with `wrangler secret put`.
+  // Non-secret settings. Secrets (JWT_SECRET, GOOGLE_AI_API_KEY, GOOGLE_ANALYTICS_CLIENT_SECRET,
+  // PAGESPEED_API_KEY, SAFE_BROWSING_API_KEY, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET, VAPID_PRIVATE_JWK) are set with `wrangler secret put`.
   "vars": {
     // Super admin sessions (/ruyashield); admins are created with `npm run admin:create`
     "ADMIN_SESSION_HOURS": "8",
     "GOOGLE_CLIENT_ID": "111600729792-qmdiib16v9bsibq288nho36drdm4piu5.apps.googleusercontent.com",
+    // Analytics uses a second web client (read-only Analytics scope). Set the id here after it is created.
+    // The secret is `wrangler secret put GOOGLE_ANALYTICS_CLIENT_SECRET` and is not stored in this file.
+    "GOOGLE_ANALYTICS_CLIENT_ID": "111600729792-df1g18j631g7u67btt21s395n2jc0ao1.apps.googleusercontent.com",
+    // Search Console uses its own web client. Set the id after it is created.
+    // The secret is `wrangler secret put GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET`.
+    "GOOGLE_SEARCH_CONSOLE_CLIENT_ID": "111600729792-754p9u68iocrokjnrognmpfr4jctdkgh.apps.googleusercontent.com",
+    // Pro checkout stays off until these are set: RAZORPAY_KEY_ID, PRO_PRICE_PAISE (49900 = ₹499),
+    // and the secrets RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET.
+    "RAZORPAY_KEY_ID": "",
+    "PRO_PRICE_PAISE": "",
+    "PRO_CURRENCY": "INR",
     "MONITORING_RETENTION_DAYS": "90",
     "DETAILS_REFRESH_MINUTES": "30",
     "JWT_EXPIRES_DAYS": "30",

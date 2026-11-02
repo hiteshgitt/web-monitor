@@ -71,14 +71,51 @@ export async function serverInfo(db, site, live) {
     .bind(site.id, dayKey(daysAgo(days, now)))));
   // One check per minute, so each failed check is one minute of downtime
   const downHours = (r) => Math.round((((r.results[0]?.total || 0) - (r.results[0]?.up || 0)) / 60) * 100) / 100;
+  const diskSpace = diskFromPerformance(site.performance);
+  const bandwidth = bandwidthFromPerformance(site.performance);
   return {
     downtimeHours: { last24h: downHours(day1), last7d: downHours(day7), last30d: downHours(day30) },
     uptimePercent: live.uptime ?? null,
     lastChecked: live.lastChecked ?? null,
     status: live.status ?? site.status ?? 'unknown',
     checkIntervalMinutes: 1,
-    diskSpace: null,
-    bandwidth: null,
-    serverResourcesMessage: 'Disk and bandwidth require a server monitoring integration (e.g. cPanel API, server agent).',
+    diskSpace,
+    bandwidth,
+    serverResourcesMessage: serverResourcesMessage(diskSpace, bandwidth),
   };
+}
+
+function serverResourcesMessage(diskSpace, bandwidth) {
+  const disk = diskSpace
+    ? 'Disk is the space this server reports for the site.'
+    : 'This site has not reported disk space yet.';
+  const transfer = bandwidth
+    ? 'Data transfer is traffic this server has sent since it last restarted. It is not the hosting plan’s monthly quota.'
+    : 'This site has not reported data transfer yet.';
+  return `${disk} ${transfer}`;
+}
+
+function bandwidthFromPerformance(raw) {
+  const perf = parseJson(raw) || {};
+  if (perf.bandwidthTxBytes == null) return null;
+  const sent = Number(perf.bandwidthTxBytes);
+  if (!Number.isFinite(sent) || sent < 0) return null;
+  const gb = (bytes) => Math.round((bytes / 1073741824) * 100) / 100;
+  const received = Number(perf.bandwidthRxBytes);
+  return {
+    used: gb(sent),
+    received: Number.isFinite(received) && received >= 0 ? gb(received) : null,
+    limit: null,
+    unit: 'GB',
+    since: 'restart',
+  };
+}
+
+function diskFromPerformance(raw) {
+  const perf = parseJson(raw) || {};
+  const total = Number(perf.diskTotalBytes);
+  const free = Number(perf.diskFreeBytes);
+  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(free) || free < 0 || free > total) return null;
+  const gb = (bytes) => Math.round((bytes / 1073741824) * 100) / 100;
+  return { used: gb(total - free), total: gb(total), unit: 'GB' };
 }

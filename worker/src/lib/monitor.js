@@ -75,6 +75,10 @@ function integrationDetails([analytics, performance, seo, security]) {
       databaseQueryTime: performance.database_query_time ?? null,
       memoryUsage: performance.memory_usage ?? null,
       memoryPeak: performance.memory_peak ?? null,
+      diskFreeBytes: performance.disk_free_bytes ?? null,
+      diskTotalBytes: performance.disk_total_bytes ?? null,
+      bandwidthTxBytes: performance.bandwidth_tx_bytes ?? null,
+      bandwidthRxBytes: performance.bandwidth_rx_bytes ?? null,
       cpuUsage: performance.cpu_usage ?? null,
       performanceScore: performance.performance_score ?? null,
       activePlugins: performance.active_plugins ?? null,
@@ -104,6 +108,13 @@ function integrationDetails([analytics, performance, seo, security]) {
       totalPlugins: security.total_plugins ?? 0,
       outdatedPlugins: security.outdated_plugins ?? 0,
       wordpressVersion: security.wordpress_version || '',
+      phpVersion: security.php_version || '',
+      nodeVersion: security.node_version || '',
+      nextVersion: security.nextjs_version || '',
+      framework: security.framework || '',
+      frameworkVersion: security.framework_version || '',
+      pluginVersion: security.plugin_version || '',
+      inventory: Array.isArray(security.inventory) ? security.inventory : [],
       recommendations: security.recommendations || [],
     },
   };
@@ -136,9 +147,29 @@ async function checkWordPress(site, withDetails) {
     const parts = await Promise.all(['analytics', 'performance', 'seo', 'security'].map((ep) => (
       fetchWordPressEndpoint(site, ep).then((r) => (r?.status === 200 && r.data ? r.data : null)).catch(() => null)
     )));
-    result.details = integrationDetails(parts);
+    const versioned = withRuntimeVersions(parts, health.data);
+    const plugins = await fetchWordPressEndpoint(site, 'plugins').then((r) => (r?.status === 200 ? r.data : null)).catch(() => null);
+    versioned[3].inventory = compactInventory(plugins);
+    result.details = integrationDetails(versioned);
   }
   return result;
+}
+
+// The health check and the security check both report runtime versions. Keep whichever one is present.
+function withRuntimeVersions(parts, health) {
+  const [analytics, performance, seo, security] = parts;
+  const source = health || {};
+  const merged = {
+    ...(security || {}),
+    wordpress_version: security?.wordpress_version || source.wordpress_version || '',
+    php_version: security?.php_version || source.php_version || '',
+    node_version: security?.node_version || source.node_version || '',
+    nextjs_version: security?.nextjs_version || source.nextjs_version || '',
+    framework: security?.framework || source.framework || '',
+    framework_version: security?.framework_version || source.framework_version || '',
+    plugin_version: security?.plugin_version || source.plugin_version || '',
+  };
+  return [analytics, performance, seo, merged];
 }
 
 // Next.js / Laravel / CodeIgniter / Core PHP integrations share /api/webmonitor/health
@@ -171,9 +202,27 @@ async function checkApiIntegration(site, frameworkName, withDetails = false) {
         .then((r) => (r.status === 200 && r.data ? r.data : null))
         .catch(() => null)
     )));
-    result.details = integrationDetails(parts);
+    const versioned = withRuntimeVersions(parts, health.data);
+    const inventoryEndpoint = site.platform === 'nextjs' ? 'libraries' : ['laravel', 'codeigniter', 'php'].includes(site.platform) ? 'packages' : null;
+    if (inventoryEndpoint) {
+      const data = await timedFetch(`${base}/api/webmonitor/${inventoryEndpoint}`, site.api_key)
+        .then((r) => (r.status === 200 && r.data ? r.data : null))
+        .catch(() => null);
+      versioned[3].inventory = compactInventory(data);
+    }
+    result.details = integrationDetails(versioned);
   }
   return result;
+}
+
+function compactInventory(data) {
+  const items = data?.all_libraries || data?.all_packages || data?.all_plugins;
+  if (!Array.isArray(items)) return [];
+  return items.slice(0, 80).map((item) => ({
+    name: String(item.name || item.package || 'Unknown'),
+    version: item.version ? String(item.version) : null,
+    dev: Boolean(item.isDev || item.type === 'devDependency'),
+  }));
 }
 
 // Plain URL without an integration: reachable, but monitoring needs the API

@@ -4,6 +4,7 @@ import ApiService from './services/api';
 import { useToast } from './hooks/useToast.jsx';
 import CommandPalette from './components/CommandPalette';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { tabForAlert } from './utils/siteMetrics';
 
 const LIVE_REFRESH_MS = 30000; // backend checks each site every 60s
 
@@ -14,14 +15,33 @@ const WebMonitorDashboard = () => {
   const [error, setError] = useState(null);
   // Tab shown in the site detail ('Overview', ..., 'Advanced')
   const [detailTab, setDetailTab] = useState('Overview');
+  const [alertFocus, setAlertFocus] = useState(null);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const { ToastContainer, success, error: showError } = useToast();
 
   // 'advanced' opens the site's Advanced tab (Pro content, or the Pro preview for free plans)
   const handleSelectWebsite = useCallback((website, mode = 'basic') => {
     setSelectedWebsite(website);
+    setAlertFocus(null);
     setDetailTab(mode === 'advanced' ? 'Advanced' : 'Overview');
   }, []);
+
+  // Bell / push / lock-screen taps: open the site on the tab that explains this alert, with what/when/why.
+  const handleOpenAlert = useCallback((notification) => {
+    if (!notification?.websiteId) return;
+    const site = websites.find((item) => item._id === notification.websiteId);
+    if (!site) return;
+    try {
+      sessionStorage.removeItem('pending-alert');
+    } catch {
+      // Private mode can block storage; the in-memory focus still works.
+    }
+    setSelectedWebsite(site);
+    setDetailTab(tabForAlert(notification.type));
+    setAlertFocus(notification);
+  }, [websites]);
+
+  const handleDismissAlert = useCallback(() => setAlertFocus(null), []);
 
   // The service worker shows push alerts while the dashboard is closed (see AlertSettingsModal)
   useEffect(() => {
@@ -254,6 +274,9 @@ const WebMonitorDashboard = () => {
           onOpenCommandPalette={() => setShowCommandPalette(true)}
           detailTab={detailTab}
           onDetailTabChange={setDetailTab}
+          alertFocus={alertFocus}
+          onOpenAlert={handleOpenAlert}
+          onDismissAlert={handleDismissAlert}
         />
     </div>
   );

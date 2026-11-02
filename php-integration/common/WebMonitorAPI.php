@@ -287,22 +287,16 @@ class WebMonitorAPI {
         $siteUrl = $this->getSiteUrl();
         $isSSL = strpos($siteUrl, 'https://') === 0;
         
-        // Calculate security score
-        $securityScore = 60;
-        if ($isSSL) $securityScore += 20;
-        $securityScore += 10; // Assume basic security headers
-        
+        $securityScore = $isSSL ? 80 : 60;
         $recommendations = [];
         if (!$isSSL) $recommendations[] = 'Enable SSL certificate';
-        $recommendations[] = 'Review and update dependencies regularly';
-        $recommendations[] = 'Keep PHP version updated';
-        
+
         return [
             'sslStatus' => $isSSL ? 'enabled' : 'disabled',
-            'firewall' => 'active', // Assumed if using hosting provider
-            'malwareScan' => 'clean',
-            'vulnerabilityScan' => 'issues_found', // Generic - should be checked regularly
-            'securityScore' => min(100, $securityScore),
+            'firewall' => null,
+            'malwareScan' => 'not_available',
+            'vulnerabilityScan' => null,
+            'securityScore' => $securityScore,
             'phpVersion' => PHP_VERSION,
             'framework' => $this->framework,
             'frameworkVersion' => $this->frameworkVersion,

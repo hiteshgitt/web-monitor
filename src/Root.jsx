@@ -7,6 +7,7 @@ import App from './App';
 import LandingPage from './components/site/LandingPage';
 import LegalPage from './components/site/LegalPage';
 import IntegrationsPage from './components/site/IntegrationsPage';
+import StatusPage from './components/site/StatusPage';
 
 const FullScreenLoader = () => (
   <div className="min-h-screen bg-canvas flex items-center justify-center">
@@ -19,7 +20,7 @@ const RequireAuth = ({ children }) => {
   const { status } = useAuth();
   const location = useLocation();
   if (status === 'loading') return <FullScreenLoader />;
-  if (status !== 'signed-in') return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (status !== 'signed-in') return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
   return children;
 };
 
@@ -31,6 +32,7 @@ const Root = () => (
         <Route path="/integrations" element={<IntegrationsPage />} />
         <Route path="/privacy" element={<LegalPage doc="privacy" />} />
         <Route path="/terms" element={<LegalPage doc="terms" />} />
+        <Route path="/status/:slug" element={<StatusPage />} />
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/signup" element={<AuthPage mode="signup" />} />
         {/* Super admin: separate accounts and sign-in, not linked from the website */}

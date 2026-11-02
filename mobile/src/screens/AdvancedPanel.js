@@ -124,10 +124,11 @@ export default function AdvancedPanel({ site, session, onExpired }) {
   const log = data?.logs?.error_log;
   const access = data?.logs?.access_summary?.by_status;
   const analyticsError = data?.analytics?.error;
-  const visitors = site.analytics?.totalVisitors;
-  const pageViews = site.analytics?.totalPageViews;
-  const bounce = site.analytics?.bounceRate;
-  const sessions = data?.analytics?.googleAnalytics?.sessions;
+  const ga = data?.analytics?.googleAnalytics;
+  const visitors = ga?.totalUsers ?? site.analytics?.totalVisitors;
+  const pageViews = ga?.pageViews ?? site.analytics?.totalPageViews;
+  const bounce = ga?.bounceRate ?? site.analytics?.bounceRate;
+  const sessions = ga?.sessions;
 
   return (
     <View style={styles.wrap}>
@@ -155,7 +156,9 @@ export default function AdvancedPanel({ site, session, onExpired }) {
               <Stat label="Down 7d" value={down.last7d != null ? `${down.last7d}h` : '--'} plain />
               <Stat label="Down 30d" value={down.last30d != null ? `${down.last30d}h` : '--'} plain />
             </View>
-            <Text style={styles.note}>{server.serverResourcesMessage || 'Disk and bandwidth are not connected.'}</Text>
+            <Row label="Disk" value={server.diskSpace ? `${server.diskSpace.used} / ${server.diskSpace.total} ${server.diskSpace.unit || 'GB'}` : 'Not connected'} />
+            <Row label="Data transfer" value={server.bandwidth?.used != null ? `${server.bandwidth.used} ${server.bandwidth.unit || 'GB'} sent since restart` : 'Not connected'} />
+            <Text style={styles.note}>{server.serverResourcesMessage || 'Bandwidth is not available from the site.'}</Text>
           </Panel>
           <Panel title="Performance">
             <Row label="Round trip" value={formatMs(site.responseTime)} />
@@ -163,7 +166,7 @@ export default function AdvancedPanel({ site, session, onExpired }) {
             <Row label="DB query" value={site.performance?.databaseQueryTime != null ? formatMs(site.performance.databaseQueryTime) : '--'} />
           </Panel>
           <Panel title="Analytics">
-            {analyticsError && visitors == null && pageViews == null ? (
+            {!ga && analyticsError && visitors == null && pageViews == null ? (
               <Text style={styles.muted}>{analyticsError}</Text>
             ) : (
               <>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, Mail, Lock, KeyRound, Smartphone, User } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, KeyRound, Smartphone, User, Eye, EyeOff } from 'lucide-react';
 import QRCode from 'qrcode';
 import { API_BASE_URL } from '../../config/api';
 import Logo from '../Logo';
@@ -19,12 +19,21 @@ const post = async (path, body) => {
   return data;
 };
 
-const Field = ({ icon: Icon, ...props }) => (
-  <label className="flex items-center gap-3 bg-canvas rounded-xl px-4 h-12 focus-within:ring-2 focus-within:ring-brand-300 transition-all">
-    <Icon size={18} className="text-brand-500 shrink-0" />
-    <input {...props} className="flex-1 min-w-0 bg-transparent text-[15px] font-semibold text-ink placeholder:text-ink-muted placeholder:font-normal focus:outline-hidden" />
-  </label>
-);
+const Field = ({ icon: Icon, type = 'text', ...props }) => {
+  const [visible, setVisible] = useState(false);
+  const secret = type === 'password';
+  return (
+    <label className="flex items-center gap-3 bg-canvas rounded-xl px-4 h-12 focus-within:ring-2 focus-within:ring-brand-300 transition-all">
+      <Icon size={18} className="text-brand-500 shrink-0" />
+      <input type={secret && visible ? 'text' : type} {...props} className="flex-1 min-w-0 bg-transparent text-[15px] font-semibold text-ink placeholder:text-ink-muted placeholder:font-normal focus:outline-hidden" />
+      {secret && (
+        <button type="button" onClick={() => setVisible((value) => !value)} className="text-ink-muted hover:text-ink" aria-label={visible ? 'Hide password' : 'Show password'}>
+          {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+        </button>
+      )}
+    </label>
+  );
+};
 
 const SetupQr = ({ url }) => {
   const [src, setSrc] = useState('');
