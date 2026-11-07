@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "750210376568",
+    "project_id": "web-monitor-2ba55",
+    "storage_bucket": "web-monitor-2ba55.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:750210376568:android:5e445575282058f3c59e8d",
+        "android_client_info": {
+          "package_name": "com.ruyalab.webmonitor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD2RovEdy20Xuecd3H2AgP3FqTBsOQiXU0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -5,19 +5,14 @@
  */
 export const EARLY_ACCESS_APK = {
   enabled: true,
-  url: 'https://expo.dev/artifacts/eas/MqxKk38SoZNERG-vAIEnW8fM5f6dfMkl9w_aV6wjRO8.apk',
-  version: '1.1.2',
-  sizeMb: 73,
-  nextVersion: '1.1.2',
+  url: 'https://expo.dev/artifacts/eas/mXxDAgHE5yQcs6mjES3XEeHhySAAQ4f6eMx2-W3vTMU.apk',
+  version: '1.2.0',
+  sizeMb: 75,
+  nextVersion: '1.2.0',
   whatsNew: [
-    'Site header no longer crops Run check — Advanced and Run check on their own row',
-    'Google sign-in asks which account to use after sign-out',
-    'Advanced opens from the header — no more tab scrolling',
-    'Export center with selectable categories and clearer spacing',
-    'Zealot branded FAB plus Ask Zealot from Overview and Security',
-    'Home filters show Healthy / Warning / Down counts',
-    'Account menu and Alerts use icons like the web app',
-    'Run check shows a quick “Updated” toast with score and latency',
-    'Security / SEO hide empty “not available” rows',
+    'Push notifications on Android when a site goes down or recovers',
+    'Delete your account from the app menu',
+    'Report a Zealot answer that looks wrong',
+    'A crashed screen now offers Try again instead of closing the app',
   ],
 };
