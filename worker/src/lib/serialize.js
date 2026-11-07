@@ -59,6 +59,7 @@ export const serializeWebsite = (row, live = {}) => ({
 export const serializeNotification = (row) => ({
   _id: row.id,
   websiteId: row.website_id || null,
+  websiteName: row.website_name || row.websiteName || null,
   type: row.type,
   title: row.title,
   body: row.body,

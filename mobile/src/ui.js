@@ -5,14 +5,15 @@ import { colors, toneColor } from './theme';
 
 const RING = { good: '#3CC48C', warn: '#E3B23C', bad: '#E5536A', muted: '#AAB7F0' };
 
-export function ScoreRing({ value, tone = 'muted', size = 108, label }) {
-  const stroke = 8;
+export function ScoreRing({ value, tone = 'muted', size = 88, label }) {
+  const stroke = 7;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const progress = value == null ? 0 : Math.max(0, Math.min(100, value));
+  // SVG sits absolutely behind the score so the number always renders centered inside the ring.
   return (
-    <View style={{ width: size, height: size }}>
-      <Svg width={size} height={size}>
+    <View style={[styles.ringWrap, { width: size, height: size }]}>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill} pointerEvents="none">
         <Circle cx={size / 2} cy={size / 2} r={radius} stroke={colors.line} strokeWidth={stroke} fill="none" />
         <Circle
           cx={size / 2}
@@ -24,14 +25,11 @@ export function ScoreRing({ value, tone = 'muted', size = 108, label }) {
           strokeLinecap="round"
           strokeDasharray={`${circumference} ${circumference}`}
           strokeDashoffset={circumference * (1 - progress / 100)}
-          rotation="-90"
-          origin={`${size / 2}, ${size / 2}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
-      <View style={styles.ringCenter}>
-        <Text style={styles.ringValue}>{value ?? '--'}</Text>
-        {label ? <Text style={styles.ringLabel}>{label}</Text> : null}
-      </View>
+      <Text style={[styles.ringValue, size < 80 && styles.ringValueSm]}>{value ?? '--'}</Text>
+      {label ? <Text style={styles.ringLabel}>{label}</Text> : null}
     </View>
   );
 }
@@ -99,15 +97,49 @@ export function MetricCard({ title, value, tone = 'muted', progress, detail, foo
   );
 }
 
-export function KeyValue({ rows }) {
+const EMPTY_VALUE = /^(unknown|n\/?a|not available|not reported|none|null|undefined|--|—)$/i;
+
+function isUsefulValue(value) {
+  if (value == null) return false;
+  if (typeof value === 'number') return Number.isFinite(value);
+  const text = String(value).trim();
+  if (!text) return false;
+  return !EMPTY_VALUE.test(text);
+}
+
+/** Drop empty / “unknown” rows so score cards stay tight. Returns { rows, hidden }. */
+export function splitMetricRows(rows = []) {
+  const useful = [];
+  let hidden = 0;
+  rows.forEach((row) => {
+    if (!row || row[0] == null) return;
+    if (isUsefulValue(row[1])) useful.push(row);
+    else hidden += 1;
+  });
+  return { rows: useful, hidden };
+}
+
+export function KeyValue({ rows, compact = false, hideEmpty = true, emptyNote = 'Not reported by this site yet.' }) {
+  const source = rows || [];
+  const { rows: visible, hidden } = hideEmpty
+    ? splitMetricRows(source)
+    : { rows: source.filter((row) => row && row[0] != null), hidden: 0 };
+  if (visible.length === 0 && hidden === 0) {
+    return <Text style={styles.kvEmpty}>No details yet.</Text>;
+  }
   return (
     <View>
-      {rows.map(([label, value]) => (
-        <View key={label} style={styles.kv}>
+      {visible.map(([label, value], index) => (
+        <View key={label} style={[styles.kv, compact && styles.kvCompact, index === 0 && styles.kvFirst]}>
           <Text style={styles.kvLabel}>{label}</Text>
-          <Text style={styles.kvValue} numberOfLines={2}>{value ?? '--'}</Text>
+          <Text style={styles.kvValue} numberOfLines={2}>{String(value)}</Text>
         </View>
       ))}
+      {hideEmpty && hidden > 0 ? (
+        <Text style={styles.kvNote}>
+          {hidden} more field{hidden === 1 ? '' : 's'} {emptyNote.toLowerCase()}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -122,9 +154,10 @@ export function Panel({ title, children, style }) {
 }
 
 const styles = StyleSheet.create({
-  ringCenter: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  ringValue: { fontSize: 26, fontWeight: '800', color: colors.ink },
-  ringLabel: { marginTop: 2, fontSize: 9, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', color: colors.inkMuted },
+  ringWrap: { alignItems: 'center', justifyContent: 'center' },
+  ringValue: { fontSize: 24, fontWeight: '800', color: colors.ink, lineHeight: 28 },
+  ringValueSm: { fontSize: 20, lineHeight: 24 },
+  ringLabel: { marginTop: 1, fontSize: 9, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase', color: colors.inkMuted },
   chartEmpty: { color: colors.inkMuted, fontSize: 13, fontWeight: '700', paddingVertical: 28, textAlign: 'center' },
   chartScale: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   chartScaleText: { color: colors.inkMuted, fontSize: 10, fontWeight: '700' },
@@ -141,9 +174,21 @@ const styles = StyleSheet.create({
   metricValue: { marginTop: 8, fontSize: 28, fontWeight: '800' },
   detail: { marginTop: 10, color: colors.inkSoft, fontSize: 13, lineHeight: 18 },
   footer: { marginTop: 10, color: colors.brandDark, fontSize: 12, fontWeight: '700' },
-  kv: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 7 },
-  kvLabel: { color: colors.ink, fontSize: 13, fontWeight: '800', flexShrink: 0 },
+  kv: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+  },
+  kvFirst: { borderTopWidth: 0, paddingTop: 0 },
+  kvCompact: { paddingVertical: 7 },
+  kvLabel: { color: colors.ink, fontSize: 13, fontWeight: '800', flexShrink: 0, maxWidth: '46%' },
   kvValue: { color: colors.inkSoft, fontSize: 13, fontWeight: '600', textAlign: 'right', flex: 1 },
+  kvEmpty: { color: colors.inkMuted, fontSize: 13, fontWeight: '600' },
+  kvNote: { marginTop: 10, color: colors.inkMuted, fontSize: 12, fontWeight: '600', lineHeight: 16 },
   panel: {
     backgroundColor: colors.white,
     borderRadius: 20,

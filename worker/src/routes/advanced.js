@@ -1,6 +1,7 @@
 // Advanced view (Pro): plugins/packages, logs, recommendations, server info, CSV export, Zealot assistant
 import { Hono } from 'hono';
 import { askZealot } from '../lib/ai.js';
+import { notifyAdmins } from '../lib/alerts.js';
 import { loadOwnedWebsite } from '../lib/auth.js';
 import { fetchWordPressEndpoint } from '../lib/monitor.js';
 import { serializeIncident, serializeWebsite } from '../lib/serialize.js';
@@ -16,6 +17,7 @@ advanced.use('/:section/:id', loadOwnedWebsite);
 advanced.use('/:section/:id/*', loadOwnedWebsite);
 
 const PHP_PLATFORMS = ['laravel', 'codeigniter', 'php'];
+const REPORT_TEXT_LIMIT = 500;
 
 // GET <integration>/<endpoint> with the site's API key; returns parsed JSON or { error }
 async function fetchIntegration(site, endpoint) {
@@ -52,13 +54,17 @@ const pluginsEndpoint = (site) => {
 advanced.get('/comprehensive/:id', async (c) => {
   const site = c.get('website');
   const endpoint = pluginsEndpoint(site);
-  const [live, plugins, logs, recommendations, analytics, searchConsole] = await Promise.all([
+  // Vitals and the public security scan are saved weekly — return them with the rest of Advanced
+  // so mobile/web show the last score immediately instead of waiting on a second request.
+  const [live, plugins, logs, recommendations, analytics, searchConsole, vitals, securityScan] = await Promise.all([
     liveStatsFor(c.env.DB, [site.id]).then((m) => m.get(site.id)),
     endpoint ? fetchIntegration(site, endpoint) : Promise.resolve(null),
     fetchIntegration(site, 'logs'),
     fetchIntegration(site, 'recommendations'),
     analyticsForSite(c.env, site),
     searchConsoleForSite(c.env, site),
+    readVitals(c.env, site),
+    readSecurityScan(c.env, site),
   ]);
   return c.json({
     basic: serializeWebsite(site, live),
@@ -72,6 +78,8 @@ advanced.get('/comprehensive/:id', async (c) => {
     packages: PHP_PLATFORMS.includes(site.platform) ? plugins : undefined,
     logs: logs?.error ? { error_log: { enabled: false, message: logs.error }, access_summary: {} } : logs,
     recommendations: recommendations?.error ? { recommendations: [], count: 0 } : recommendations,
+    vitals,
+    securityScan,
     serverInfo: await serverInfo(c.env.DB, site, live),
     timestamp: new Date().toISOString(),
     website: { id: site.id, name: site.name, url: site.url, platform: site.platform },
@@ -140,6 +148,19 @@ advanced.post('/ai-insights/:id/query', async (c) => {
   const site = c.get('website');
   const live = (await liveStatsFor(c.env.DB, [site.id])).get(site.id);
   return c.json(await askZealot(c.env, String(query), serializeWebsite(site, live)));
+});
+
+// A customer flagging a Zealot answer as wrong or harmful; lands in the super admin alerts
+advanced.post('/ai-insights/:id/report', async (c) => {
+  const { question, answer } = await c.req.json().catch(() => ({}));
+  if (!answer || !String(answer).trim()) throw new ApiError(400, 'Answer is required');
+  const clip = (text) => String(text || '').trim().slice(0, REPORT_TEXT_LIMIT);
+  await notifyAdmins(c.env.DB, {
+    type: 'ai_report',
+    title: 'Zealot answer reported',
+    body: `${c.get('user').email} on ${c.get('website').name}\nQ: ${clip(question)}\nA: ${clip(answer)}`,
+  });
+  return c.json({ message: 'Report sent' });
 });
 
 export default advanced;

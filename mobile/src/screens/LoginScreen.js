@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Image, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { googleIdToken } from '../google';
@@ -42,7 +42,7 @@ export default function LoginScreen({ onSignIn, onGoogle }) {
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.wrap}>
+        <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
           <Image source={require('../../assets/logo-mark.png')} style={styles.logo} resizeMode="contain" />
           <Text style={styles.mark}>Web Monitor</Text>
           <Text style={styles.lead}>Sign in with the same account you use on the website.</Text>
@@ -71,7 +71,7 @@ export default function LoginScreen({ onSignIn, onGoogle }) {
             onChangeText={setPassword}
             secureTextEntry
             textContentType="password"
-            placeholder="At least 8 characters"
+            placeholder="Your password"
             placeholderTextColor={colors.inkMuted}
             style={styles.input}
             onSubmitEditing={submit}
@@ -86,7 +86,16 @@ export default function LoginScreen({ onSignIn, onGoogle }) {
           >
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
           </Pressable>
-        </View>
+
+          <View style={styles.legal}>
+            <Pressable onPress={() => Linking.openURL('https://webmonitor.ruyalab.com/privacy')} hitSlop={8}>
+              <Text style={styles.legalText}>Privacy</Text>
+            </Pressable>
+            <Pressable onPress={() => Linking.openURL('https://webmonitor.ruyalab.com/terms')} hitSlop={8}>
+              <Text style={styles.legalText}>Terms</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -95,7 +104,7 @@ export default function LoginScreen({ onSignIn, onGoogle }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  wrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  wrap: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 24 },
   logo: { width: 168, height: 64, marginBottom: 16 },
   mark: { fontSize: 32, fontWeight: '800', color: colors.ink },
   google: {
@@ -134,4 +143,6 @@ const styles = StyleSheet.create({
   buttonOff: { opacity: 0.55 },
   pressed: { backgroundColor: colors.brandDark },
   buttonText: { color: colors.white, fontSize: 16, fontWeight: '800' },
+  legal: { marginTop: 20, flexDirection: 'row', justifyContent: 'center', gap: 24 },
+  legalText: { color: colors.inkMuted, fontSize: 13, fontWeight: '700' },
 });

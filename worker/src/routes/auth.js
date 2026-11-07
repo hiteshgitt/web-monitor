@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { deleteCustomerStatements } from '../lib/accounts.js';
 import { notifyAdmins } from '../lib/alerts.js';
 import { assertActive, checkPassword, hashPassword, needsRehash, requireAuth, signToken } from '../lib/auth.js';
 import { serializeUser } from '../lib/serialize.js';
@@ -131,6 +132,16 @@ auth.post('/upgrade-request', requireAuth, async (c) => {
     return c.json({ user: serializeUser({ ...user, upgrade_requested_at: now, updated_at: now }) });
   }
   return c.json({ user: serializeUser(user) });
+});
+
+// Self-service deletion. Tokens stop working once the row is gone, because requireAuth loads the user.
+auth.delete('/account', requireAuth, async (c) => {
+  const user = c.get('user');
+  await c.env.DB.batch(deleteCustomerStatements(c.env.DB, user.id));
+  await notifyAdmins(c.env.DB, {
+    type: 'account_deleted', title: 'Account deleted', body: `${user.email} deleted their account.`,
+  }).catch(() => {});
+  return c.json({ message: 'Account deleted' });
 });
 
 export default auth;

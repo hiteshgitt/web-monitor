@@ -17,6 +17,8 @@ const LOOK = {
   pro_declined: { icon: Info, tone: 'bg-canvas text-ink-muted' },
   pro_request: { icon: Sparkles, tone: 'bg-brand-50 text-brand-600' },
   signup: { icon: UserPlus, tone: 'bg-brand-50 text-brand-600' },
+  account_deleted: { icon: Info, tone: 'bg-canvas text-ink-muted' },
+  ai_report: { icon: AlertTriangle, tone: 'bg-warn-soft text-warn' },
 };
 const fallback = { icon: Bell, tone: 'bg-brand-50 text-brand-600' };
 

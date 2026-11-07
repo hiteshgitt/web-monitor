@@ -336,19 +336,43 @@ const LandingPage = () => {
             <span className="label-caps !text-brand-600">Mobile app</span>
             <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight">Your sites, in your pocket</h2>
             <p className="mt-4 text-ink-muted text-lg">The same live dashboard on Android and iPhone, with push alerts the moment a site goes down. Use the web dashboard on desktop whenever you prefer a big screen.</p>
-            {EARLY_ACCESS_APK.enabled && (
-              <div className="mt-8 rounded-3xl bg-white shadow-card p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="flex-1 min-w-0">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[11px] font-extrabold uppercase tracking-wider">
-                    <Sparkles size={12} /> Android early access
-                  </span>
-                  <p className="mt-2 text-sm text-ink-muted">Install the app today while the Play Store release is on its way. Android may ask you to allow installs from your browser. The file is about {EARLY_ACCESS_APK.sizeMb} MB, so Wi-Fi is best.</p>
-                </div>
-                <a href={EARLY_ACCESS_APK.url} className="btn-primary !h-12 !px-6 shrink-0">
+            <div className="mt-8 rounded-3xl bg-white shadow-card p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 text-[11px] font-extrabold uppercase tracking-wider">
+                  <Sparkles size={12} /> Android early access
+                </span>
+                <p className="mt-2 text-sm text-ink-muted">
+                  {EARLY_ACCESS_APK.enabled
+                    ? `Download the current Android build (v${EARLY_ACCESS_APK.version}) while Google Play and the App Store are on the way. About ${EARLY_ACCESS_APK.sizeMb} MB — Wi-Fi is best. Android may ask you to allow installs from your browser.`
+                    : 'Google Play and the App Store are on the way. Use the web dashboard today, and check back here for the Android early-access APK.'}
+                </p>
+              </div>
+              {EARLY_ACCESS_APK.enabled ? (
+                <a href={EARLY_ACCESS_APK.url} className="btn-primary !h-12 !px-6 shrink-0" download>
                   <Download size={16} /> Download APK <span className="opacity-70 normal-case tracking-normal">v{EARLY_ACCESS_APK.version}</span>
                 </a>
+              ) : (
+                <span className="h-12 px-6 rounded-2xl bg-brand-50 text-brand-700 font-extrabold text-[11px] uppercase tracking-widest flex items-center justify-center shrink-0">Coming soon</span>
+              )}
+            </div>
+            {EARLY_ACCESS_APK.whatsNew?.length ? (
+              <div className="mt-5 rounded-3xl border border-brand-100 bg-white/80 p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-extrabold uppercase tracking-widest text-brand-700">What’s new</p>
+                  <span className="text-[11px] font-extrabold uppercase tracking-widest text-ink-muted">
+                    Shipping in v{EARLY_ACCESS_APK.nextVersion || EARLY_ACCESS_APK.version}
+                  </span>
+                </div>
+                <ul className="mt-3 space-y-2">
+                  {EARLY_ACCESS_APK.whatsNew.map((item) => (
+                    <li key={item} className="flex gap-2 text-sm text-ink-soft font-semibold leading-snug">
+                      <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            )}
+            ) : null}
             <div className="mt-6 flex flex-wrap gap-3">
               {['Google Play', 'App Store'].map((store) => (
                 <span key={store} className="h-14 px-5 rounded-2xl bg-ink text-white flex items-center gap-3 opacity-80 cursor-default">
@@ -417,6 +441,7 @@ const LandingPage = () => {
             <Link to="/login" className="whitespace-nowrap hover:text-brand-600">Sign in</Link>
             <Link to="/privacy" className="whitespace-nowrap hover:text-brand-600">Privacy</Link>
             <Link to="/terms" className="whitespace-nowrap hover:text-brand-600">Terms</Link>
+            <Link to="/delete-account" className="whitespace-nowrap hover:text-brand-600">Delete account</Link>
           </nav>
           <p className="text-sm text-ink-muted">
             © {new Date().getFullYear()}{" "}

@@ -35,3 +35,4 @@ backend/*.env
 # Cloudflare Worker (local dev state and secrets)
 worker/.wrangler
 worker/.dev.vars
+public/downloads/*.apk

@@ -6,6 +6,7 @@ import AdminApp from './components/admin/AdminApp';
 import App from './App';
 import LandingPage from './components/site/LandingPage';
 import LegalPage from './components/site/LegalPage';
+import DeleteAccountPage from './components/site/DeleteAccountPage';
 import IntegrationsPage from './components/site/IntegrationsPage';
 import StatusPage from './components/site/StatusPage';
 
@@ -32,6 +33,7 @@ const Root = () => (
         <Route path="/integrations" element={<IntegrationsPage />} />
         <Route path="/privacy" element={<LegalPage doc="privacy" />} />
         <Route path="/terms" element={<LegalPage doc="terms" />} />
+        <Route path="/delete-account" element={<DeleteAccountPage />} />
         <Route path="/status/:slug" element={<StatusPage />} />
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/signup" element={<AuthPage mode="signup" />} />

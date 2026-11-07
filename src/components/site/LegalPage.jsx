@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import Logo from '../Logo';
 
 const CONTACT_EMAIL = 'hiteshgml@gmail.com';
-const LAST_UPDATED = '23 October 2026';
+const LAST_UPDATED = '7 November 2026';
 
 // Written from what the app actually stores and does; update it whenever that changes.
 const DOCUMENTS = {
@@ -16,10 +16,13 @@ const DOCUMENTS = {
         heading: 'Information we collect',
         items: [
           'Account details: your email address and name. If you sign up with a password, we store only a salted hash of it, never the password itself.',
-          'If you sign in with Google: your Google account ID, email, name and profile picture, as shared by Google. We do not get access to your Gmail, Drive or any other Google data.',
+          'If you sign in with Google: your Google account ID, email, name and profile picture, as shared by Google. Signing in does not give us access to your Gmail, Drive or any other Google data.',
+          'If you connect Google Analytics or Search Console (Pro plan): read-only access to the properties you choose, using the analytics.readonly and webmasters.readonly permissions. We store the access tokens Google gives us and use them only to show those reports in your dashboard.',
           'Websites you add: the site name, URL, platform and the API key of the Web Monitor integration you installed on that site.',
           'Monitoring results: for every check we store the time, status, response time, HTTP status code and any error. Your site’s integration also reports technical health data such as WordPress/framework version, plugin list, PHP memory and CPU load, SEO findings (for example post titles missing an excerpt) and security findings (for example SSL status and outdated plugins).',
           'Plan information: whether you are on Basic or Pro and whether you requested Pro.',
+          'Alerts and push: your alert history and alert settings, plus the device push token of your phone or the push subscription of your browser if you turn on notifications.',
+          'Zealot reports: if you report a Zealot answer, the question, the answer, your email and the site name are sent to our team so we can review it.',
         ],
       },
       {
@@ -35,13 +38,18 @@ const DOCUMENTS = {
         items: [
           'Google Gemini (Pro plan only): when the Advanced view generates AI insights or you ask the Zealot assistant a question, the relevant monitoring data for that site is sent to Google’s Gemini API to produce the answer.',
           'Google Sign-In, if you choose to use it.',
+          'Google Analytics and Search Console, if you connect them. Web Monitor’s use of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements.',
+          'Google PageSpeed Insights, Chrome UX Report and Safe Browsing, and Qualys SSL Labs: the URLs of your sites are sent to these services to measure performance and scan for security problems.',
+          'Cloudflare hosts the service and its database.',
+          'Expo Push and Firebase Cloud Messaging deliver alerts to the mobile app, and your browser’s push service delivers them to the web. They receive the alert text and your device token or subscription.',
+          'Razorpay processes card and UPI payments if you pay for Pro online. We do not see or store your payment details.',
           'Google Fonts: pages load the Nunito Sans font from Google’s servers, which receive your IP address as part of the request.',
         ],
       },
       {
         heading: 'Storage and retention',
         items: [
-          'Data is stored in our database on our own server.',
+          'Data is stored in a Cloudflare D1 database.',
           'Individual check results are deleted automatically after 90 days.',
           'When you delete a website from your dashboard, the site and all of its check history and incidents are deleted immediately.',
           'Your sign-in session is kept in your browser’s or app’s local storage until you sign out or it expires.',
@@ -51,7 +59,10 @@ const DOCUMENTS = {
         heading: 'Your choices and rights',
         items: [
           'You can view and delete your websites at any time from the dashboard.',
-          `To get a copy of your data, correct it, or delete your account entirely, email ${CONTACT_EMAIL} and we will handle it promptly.`,
+          'You can delete your account at any time from the app menu, from the account menu in the dashboard, or at webmonitor.ruyalab.com/delete-account. If you cannot sign in, email us.',
+          'Deleting your account immediately removes your profile, websites, check history, incidents, alerts, registered devices and stored Google tokens. We keep records of paid orders, which do not contain your email address, for tax and accounting. Our admin audit log and admin alerts are also kept; they record actions on accounts, Zealot reports and the deletion itself, and can include your email address.',
+          'You can also remove Web Monitor’s access to your Google data at any time from your Google account’s security settings.',
+          `To get a copy of your data or correct it, email ${CONTACT_EMAIL} and we will handle it promptly.`,
         ],
       },
       {
@@ -111,7 +122,7 @@ const DOCUMENTS = {
       {
         heading: 'Ending use',
         items: [
-          `You can stop using the service at any time and ask us to delete your account by emailing ${CONTACT_EMAIL}.`,
+          `You can stop using the service at any time and delete your account yourself in the app, in the dashboard or on the delete account page, or ask us to by emailing ${CONTACT_EMAIL}.`,
         ],
       },
       {
@@ -168,6 +179,7 @@ const LegalPage = ({ doc }) => {
           <span className="flex gap-4 text-ink-muted">
             <Link to="/privacy" className="hover:text-brand-600">Privacy</Link>
             <Link to="/terms" className="hover:text-brand-600">Terms</Link>
+            <Link to="/delete-account" className="hover:text-brand-600">Delete account</Link>
           </span>
         </div>
       </main>

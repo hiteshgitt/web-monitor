@@ -1,6 +1,7 @@
 // Super admin only (requireAdmin): customers, their plans (manual Pro for now), suspension and deletion,
 // an overview, the activity log and the admin's own alerts. Every change is written to admin_audit.
 import { Hono } from 'hono';
+import { deleteCustomerStatements } from '../lib/accounts.js';
 import { auditStatement } from '../lib/adminAuth.js';
 import { notificationStatement } from '../lib/alerts.js';
 import { serializeIncident, serializeUser, serializeWebsite } from '../lib/serialize.js';
@@ -124,15 +125,8 @@ admin.patch('/users/:id', async (c) => {
 admin.delete('/users/:id', async (c) => {
   const user = await loadCustomer(c);
   const db = c.env.DB;
-  const ownSites = 'SELECT id FROM websites WHERE owner_id = ?';
   await db.batch([
-    db.prepare(`DELETE FROM check_hours WHERE website_id IN (${ownSites})`).bind(user.id),
-    db.prepare(`DELETE FROM check_days WHERE website_id IN (${ownSites})`).bind(user.id),
-    db.prepare(`DELETE FROM incidents WHERE website_id IN (${ownSites})`).bind(user.id),
-    db.prepare('DELETE FROM websites WHERE owner_id = ?').bind(user.id),
-    db.prepare('DELETE FROM notifications WHERE user_id = ?').bind(user.id),
-    db.prepare('DELETE FROM push_devices WHERE user_id = ?').bind(user.id),
-    db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
+    ...deleteCustomerStatements(db, user.id),
     auditStatement(db, c.get('admin'), 'deleted', { targetId: user.id, targetEmail: user.email }),
   ]);
   return c.json({ message: 'Customer deleted' });

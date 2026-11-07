@@ -119,6 +119,13 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
   const [customFromDate, setCustomFromDate] = useState('');
   const [customToDate, setCustomToDate] = useState('');
   const [reportMode, setReportMode] = useState('preset'); // 'preset' | 'custom'
+  const [exportCategories, setExportCategories] = useState({
+    checks: true,
+    performance: true,
+    security: true,
+    seo: true,
+    traffic: true,
+  });
 
   // Build active alerts list for Alerts tab (with priority for filtering)
   const activeAlertsList = React.useMemo(() => {
@@ -662,12 +669,62 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
 
   const handleExportReport = async (format = 'csv', days = 30) => {
     if (!selectedWebsite?._id) return;
+    const selected = Object.entries(exportCategories).filter(([, on]) => on).map(([id]) => id);
+    if (selected.length === 0) return;
     try {
-      const url = getApiUrl(`advanced/export/${selectedWebsite._id}?format=${format}&days=${days}`);
-      const res = await apiFetch(url);
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
-      const name = `${(selectedWebsite.name || 'report').replace(/[^a-z0-9_-]/gi, '_')}-${days}days.${format}`;
+      // CSV remains check-history only (same as before). JSON can pack selected Advanced tabs.
+      if (format === 'csv' || (selected.length === 1 && selected[0] === 'checks')) {
+        if (format === 'csv' && (selected.length > 1 || !exportCategories.checks)) {
+          window.alert('CSV exports check history only. Select Check history alone, or use Export JSON for multiple tabs.');
+          return;
+        }
+        const url = getApiUrl(`advanced/export/${selectedWebsite._id}?format=${format}&days=${days}`);
+        const res = await apiFetch(url);
+        if (!res.ok) throw new Error('Export failed');
+        const blob = await res.blob();
+        const name = `${(selectedWebsite.name || 'report').replace(/[^a-z0-9_-]/gi, '_')}-${days}days.${format}`;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        return;
+      }
+
+      const payload = {
+        website: { name: selectedWebsite.name, url: selectedWebsite.url, platform: selectedWebsite.platform },
+        exportedAt: new Date().toISOString(),
+        periodDays: days,
+        categories: selected,
+      };
+      if (exportCategories.checks) {
+        const url = getApiUrl(`advanced/export/${selectedWebsite._id}?format=json&days=${days}`);
+        const res = await apiFetch(url);
+        if (!res.ok) throw new Error('Export failed');
+        payload.checks = await res.json();
+      }
+      if (exportCategories.performance) {
+        payload.performance = {
+          responseTime: selectedWebsite.responseTime,
+          performance: selectedWebsite.performance || null,
+          vitals: advancedData?.vitals || null,
+        };
+      }
+      if (exportCategories.security) {
+        payload.security = {
+          architecture: selectedWebsite.security || null,
+          publicScan: advancedData?.securityScan || null,
+        };
+      }
+      if (exportCategories.seo) payload.seo = selectedWebsite.seo || null;
+      if (exportCategories.traffic) {
+        payload.traffic = {
+          googleAnalytics: advancedData?.analytics?.googleAnalytics || null,
+          searchConsole: advancedData?.analytics?.searchConsole || null,
+        };
+      }
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const name = `${(selectedWebsite.name || 'report').replace(/[^a-z0-9_-]/gi, '_')}-${days}days.json`;
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = name;
@@ -695,35 +752,38 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
       <div className="pb-6 overflow-x-hidden relative">
       {/* Main Content */}
       <div className="pb-2">
-        {/* 📑 Premium Sticky Tab Navigation */}
-        <div className="mb-6 bg-canvas rounded-2xl overflow-hidden">
-          <div className="py-2 px-2 overflow-x-auto scrollbar-hide">
-            <div className="flex gap-1 flex-nowrap min-w-max">
-              {advancedTabs.map(tab => (
-                <button
-                  key={tab}
-                  onClick={(e) => {
-                    setActiveTab(tab);
-                    e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-                  }}
-                  className={`px-4 py-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.08em] whitespace-nowrap transition-all duration-200 flex items-center gap-2 shrink-0 ${
-                    activeTab === tab
-                      ? 'bg-white text-brand-700 shadow-card'
-                      : 'text-ink-muted hover:text-ink hover:bg-white/60'
-                  }`}
-                >
-                  {tab === 'overview' && <Home size={14} />}
-                  {tab === 'analytics' && <BarChart3 size={14} />}
-                  {tab === 'performance' && <Zap size={14} />}
-                  {tab === 'seo' && <Search size={14} />}
-                  {tab === 'security' && <Shield size={14} />}
-                  {tab === 'reports' && <Download size={14} />}
-                  {tab === 'alerts' && <Bell size={14} />}
-                  {tab === 'logs' && <FileCode size={14} />}
-                  {(tab === 'plugins' || tab === 'libraries' || tab === 'packages') && <Settings size={14} />}
-                  <span>{tab === 'libraries' ? 'Libraries' : tab === 'packages' ? 'Packages' : tab}</span>
-                </button>
-              ))}
+        {/* Sticky Advanced sections — single horizontal row, no wrap/overlap with site tabs above */}
+        <div className="mb-6 sticky top-0 z-20 -mx-1 px-1 py-2 bg-canvas/95 backdrop-blur-md">
+          <div className="rounded-2xl border border-brand-100 bg-white/80 shadow-sm overflow-hidden">
+            <div className="py-2 px-2 overflow-x-auto scrollbar-hide">
+              <div className="flex gap-1 flex-nowrap min-w-max">
+                {advancedTabs.map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={(e) => {
+                      setActiveTab(tab);
+                      e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                    }}
+                    className={`px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.08em] whitespace-nowrap transition-all duration-200 flex items-center gap-1.5 shrink-0 ${
+                      activeTab === tab
+                        ? 'bg-brand-600 text-white shadow-card'
+                        : 'text-ink-muted hover:text-ink hover:bg-brand-50'
+                    }`}
+                  >
+                    {tab === 'overview' && <Home size={14} />}
+                    {tab === 'analytics' && <BarChart3 size={14} />}
+                    {tab === 'performance' && <Zap size={14} />}
+                    {tab === 'seo' && <Search size={14} />}
+                    {tab === 'security' && <Shield size={14} />}
+                    {tab === 'reports' && <Download size={14} />}
+                    {tab === 'alerts' && <Bell size={14} />}
+                    {tab === 'logs' && <FileCode size={14} />}
+                    {(tab === 'plugins' || tab === 'libraries' || tab === 'packages') && <Settings size={14} />}
+                    <span>{tab === 'libraries' ? 'Libraries' : tab === 'packages' ? 'Packages' : tab}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1630,29 +1690,43 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                     </button>
                   </div>
 
-                  {/* Report Type Cards */}
+                  {/* Selectable export categories — JSON packs the chosen tabs; CSV is check history */}
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-ink-muted">Include in export</h4>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setExportCategories({ checks: true, performance: true, security: true, seo: true, traffic: true })} className="text-[10px] font-extrabold uppercase tracking-widest text-brand-700">All</button>
+                      <button type="button" onClick={() => setExportCategories({ checks: true, performance: false, security: false, seo: false, traffic: false })} className="text-[10px] font-extrabold uppercase tracking-widest text-ink-muted">Checks only</button>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {[
-                      { label: 'Performance Analytics', desc: 'Core web vitals & speed trends', icon: Zap, color: 'text-brand-600', bg: 'bg-brand-50' },
-                      { label: 'Security Audit', desc: 'Malware history & vulnerability logs', icon: Shield, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                      { label: 'SEO Breakdown', desc: 'Keyword & meta optimization reports', icon: Search, color: 'text-purple-600', bg: 'bg-purple-50' },
-                      { label: 'Traffic Insights', desc: 'User behavior & source analysis', icon: BarChart3, color: 'text-amber-600', bg: 'bg-amber-50' }
-                    ].map((report, i) => (
-                      <button
-                        key={i}
-                        onClick={() => handleExport('csv')}
-                        className="group bg-white rounded-2xl p-6 border border-brand-100 shadow-lg hover:border-brand-200 hover:shadow-card-hover transition-all text-left flex items-center gap-5"
-                      >
-                        <div className={`w-12 h-12 rounded-2xl ${report.bg} flex items-center justify-center ${report.color} group-hover:scale-110 transition-transform`}>
-                          <report.icon size={20} />
-                        </div>
-                        <div>
-                          <div className="font-extrabold text-ink tracking-tight">{report.label}</div>
-                          <div className="text-[10px] font-bold text-ink-muted uppercase tracking-widest">{report.desc}</div>
-                        </div>
-                        <Download size={14} className="ml-auto text-ink-faint group-hover:text-brand-600 transition-colors" />
-                      </button>
-                    ))}
+                      { id: 'checks', label: 'Check history', desc: 'Uptime & response times', icon: Activity, color: 'text-brand-600', bg: 'bg-brand-50' },
+                      { id: 'performance', label: 'Performance Analytics', desc: 'Core web vitals & speed trends', icon: Zap, color: 'text-brand-600', bg: 'bg-brand-50' },
+                      { id: 'security', label: 'Security Audit', desc: 'Malware history & vulnerability logs', icon: Shield, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                      { id: 'seo', label: 'SEO Breakdown', desc: 'Keyword & meta optimization reports', icon: Search, color: 'text-purple-600', bg: 'bg-purple-50' },
+                      { id: 'traffic', label: 'Traffic Insights', desc: 'User behavior & source analysis', icon: BarChart3, color: 'text-amber-600', bg: 'bg-amber-50' }
+                    ].map((report) => {
+                      const on = exportCategories[report.id];
+                      return (
+                        <button
+                          key={report.id}
+                          type="button"
+                          onClick={() => setExportCategories((c) => ({ ...c, [report.id]: !c[report.id] }))}
+                          className={`group rounded-2xl p-6 border shadow-lg transition-all text-left flex items-center gap-5 ${
+                            on ? 'bg-brand-50 border-brand-300 shadow-brand-100' : 'bg-white border-brand-100 hover:border-brand-200'
+                          }`}
+                        >
+                          <div className={`w-12 h-12 rounded-2xl ${report.bg} flex items-center justify-center ${report.color}`}>
+                            <report.icon size={20} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-extrabold text-ink tracking-tight">{report.label}</div>
+                            <div className="text-[10px] font-bold text-ink-muted uppercase tracking-widest">{report.desc}</div>
+                          </div>
+                          <span className={`ml-auto w-7 h-7 rounded-lg border-2 flex items-center justify-center text-xs font-extrabold ${on ? 'bg-brand-600 border-brand-600 text-white' : 'border-brand-100 text-transparent'}`}>✓</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1977,24 +2051,26 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
 
       </div>
 
-      {/* Zealot Floating Button */}
+      {/* Zealot floating assistant — branded icon shared with the mobile app */}
       <button
+        type="button"
         onClick={() => setShowAI(!showAI)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-linear-to-r from-purple-600 to-brand-600 rounded-full shadow-card flex items-center justify-center text-white hover:scale-110 transition-transform z-50"
+        className="fixed bottom-6 right-6 z-50 h-16 w-16 rounded-[18px] overflow-hidden border border-white/30 shadow-card hover:scale-105 transition-transform bg-[#0b1028]"
+        aria-label={showAI ? 'Close Zealot' : 'Open Zealot assistant'}
+        title="Zealot AI assistant"
       >
-        <Brain size={24} />
+        <img src="/zealot-fab.png" alt="" className="h-full w-full object-cover" />
       </button>
 
       {/* Zealot Panel */}
       {showAI && (
         <div className="fixed z-50 bottom-24 right-4 sm:right-6 w-[min(400px,calc(100vw-2rem))] h-[min(560px,calc(100vh-8rem))] bg-white rounded-3xl shadow-card border border-brand-100 flex flex-col overflow-hidden">
-          <div className="shrink-0 bg-linear-to-r from-purple-600 to-brand-600 text-white px-4 py-3 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
-              <Brain size={18} />
-            </div>
+          <div className="shrink-0 bg-[#0b1028] text-white px-4 py-3 flex items-center gap-3 border-b border-white/10">
+            <img src="/zealot-fab.png" alt="" className="w-11 h-11 rounded-[14px] object-cover shrink-0 border border-white/25" />
             <div className="min-w-0 flex-1">
-              <h3 className="font-extrabold tracking-tight leading-none">Zealot</h3>
-              <p className="text-[11px] text-white/80 truncate mt-1">{selectedWebsite?.name}</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-cyan-300/90">AI assistant</p>
+              <h3 className="font-extrabold tracking-tight leading-none mt-0.5">Zealot</h3>
+              <p className="text-[11px] text-white/75 truncate mt-1">{selectedWebsite?.name}</p>
             </div>
             <button type="button" onClick={() => setShowAI(false)} className="p-2 rounded-xl hover:bg-white/15" aria-label="Close Zealot">
               <X size={18} />

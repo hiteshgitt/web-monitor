@@ -3,14 +3,54 @@ import {
   ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { api } from '../api';
-import { timeAgo } from '../metrics';
+import { ALERT_KIND, timeAgo } from '../metrics';
 import { colors } from '../theme';
 
-const TONE = {
-  site_down: colors.bad, ssl_off: colors.bad, slow: colors.warn, security_low: colors.warn,
-  site_up: colors.good, slow_ok: colors.good, ssl_ok: colors.good,
+const META = {
+  site_down: { color: colors.bad, bg: colors.badSoft, label: 'Critical', kind: 'Down' },
+  ssl_off: { color: colors.bad, bg: colors.badSoft, label: 'Critical', kind: 'SSL' },
+  slow: { color: colors.warn, bg: colors.warnSoft, label: 'Warning', kind: 'Speed' },
+  security_low: { color: colors.warn, bg: colors.warnSoft, label: 'Warning', kind: 'Security' },
+  plugins: { color: colors.warn, bg: colors.warnSoft, label: 'Warning', kind: 'Updates' },
+  site_up: { color: colors.good, bg: colors.goodSoft, label: 'Recovered', kind: 'Up' },
+  slow_ok: { color: colors.good, bg: colors.goodSoft, label: 'Recovered', kind: 'Speed' },
+  ssl_ok: { color: colors.good, bg: colors.goodSoft, label: 'Recovered', kind: 'SSL' },
 };
+
+function AlertIcon({ type, color }) {
+  const stroke = color || colors.brand;
+  if (type === 'site_down' || type === 'site_up') {
+    return (
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Circle cx={12} cy={12} r={9} stroke={stroke} strokeWidth={2} />
+        <Path d="M12 8v5M12 16.5h.01" stroke={stroke} strokeWidth={2} strokeLinecap="round" />
+      </Svg>
+    );
+  }
+  if (type === 'slow' || type === 'slow_ok') {
+    return (
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Circle cx={12} cy={12} r={9} stroke={stroke} strokeWidth={2} />
+        <Path d="M12 7v5l3 2" stroke={stroke} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+  if (type === 'ssl_off' || type === 'ssl_ok' || type === 'security_low') {
+    return (
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z" stroke={stroke} strokeWidth={2} strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" stroke={stroke} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" stroke={stroke} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
 
 // Alert history plus the switches for which alerts are pushed to this phone (and the customer's browsers)
 export default function AlertsScreen({ session, onBack, onOpenAlert, onExpired }) {
@@ -38,6 +78,7 @@ export default function AlertsScreen({ session, onBack, onOpenAlert, onExpired }
     }
   }, [session.token, onExpired]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   const setPref = async (key, value) => {
@@ -48,7 +89,8 @@ export default function AlertsScreen({ session, onBack, onOpenAlert, onExpired }
       setSettings((s) => ({ ...s, prefs }));
     } catch (err) {
       setSettings((s) => ({ ...s, prefs: previous }));
-      setError(err.message);
+      if (err.status === 401) onExpired();
+      else setError(err.message);
     }
   };
 
@@ -77,23 +119,38 @@ export default function AlertsScreen({ session, onBack, onOpenAlert, onExpired }
         {tab === 'history' && settings ? (
           items.length === 0 ? (
             <Text style={styles.empty}>No alerts yet. You’ll see them here when a site goes down, slows down or has updates waiting.</Text>
-          ) : items.map((item) => (
-            <Pressable
-              key={item._id}
-              disabled={!item.websiteId}
-              onPress={() => onOpenAlert?.(item)}
-              style={[styles.item, !item.read && styles.itemUnread]}
-            >
-              <View style={[styles.itemDot, { backgroundColor: TONE[item.type] || colors.brand }]} />
-              <View style={styles.itemBody}>
-                <View style={styles.itemTop}>
-                  <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
-                  <Text style={styles.itemTime}>{timeAgo(item.createdAt)}</Text>
+          ) : items.map((item) => {
+            const meta = META[item.type] || { color: colors.brand, bg: colors.brandSoft, label: 'Alert', kind: ALERT_KIND[item.type] || 'Alert' };
+            return (
+              <Pressable
+                key={item._id}
+                disabled={!item.websiteId}
+                onPress={() => onOpenAlert?.(item)}
+                style={[styles.item, !item.read && styles.itemUnread]}
+              >
+                <View style={[styles.itemIcon, { backgroundColor: meta.bg }]}>
+                  <AlertIcon type={item.type} color={meta.color} />
                 </View>
-                {item.body ? <Text style={styles.itemText}>{item.body}</Text> : null}
-              </View>
-            </Pressable>
-          ))
+                <View style={styles.itemBody}>
+                  <View style={styles.itemTop}>
+                    <View style={[styles.severity, { backgroundColor: meta.bg }]}>
+                      <Text style={[styles.severityText, { color: meta.color }]}>{meta.label}</Text>
+                    </View>
+                    <Text style={styles.itemTime}>{timeAgo(item.createdAt)}</Text>
+                  </View>
+                  <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
+                  {item.websiteName ? (
+                    <Text style={styles.itemSite} numberOfLines={1}>{item.websiteName}</Text>
+                  ) : item.websiteId ? (
+                    <Text style={styles.itemSite}>Open site details</Text>
+                  ) : null}
+                  {item.body ? <Text style={styles.itemText} numberOfLines={3}>{item.body}</Text> : null}
+                  <Text style={styles.itemKind}>{meta.kind}</Text>
+                </View>
+                {item.websiteId ? <Text style={styles.itemChevron}>›</Text> : null}
+              </Pressable>
+            );
+          })
         ) : null}
 
         {tab === 'settings' && settings ? (
@@ -146,14 +203,35 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingBottom: 32, paddingTop: 4 },
   spinner: { marginTop: 48 },
   empty: { textAlign: 'center', color: colors.inkSoft, fontSize: 15, lineHeight: 22, marginTop: 48, paddingHorizontal: 16 },
-  item: { flexDirection: 'row', backgroundColor: colors.white, borderRadius: 16, padding: 14, marginBottom: 8 },
-  itemUnread: { borderWidth: 1.5, borderColor: colors.brandSoft },
-  itemDot: { width: 9, height: 9, borderRadius: 5, marginTop: 5, marginRight: 10 },
-  itemBody: { flex: 1 },
-  itemTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  itemTitle: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: '800' },
-  itemTime: { color: colors.inkMuted, fontSize: 11, fontWeight: '700', marginTop: 2 },
-  itemText: { color: colors.inkSoft, fontSize: 13, lineHeight: 18, marginTop: 3 },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 12,
+  },
+  itemUnread: { borderColor: colors.brand, backgroundColor: '#f7f8ff' },
+  itemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemBody: { flex: 1, minWidth: 0 },
+  itemTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  severity: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  severityText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  itemTime: { color: colors.inkMuted, fontSize: 11, fontWeight: '700' },
+  itemTitle: { marginTop: 6, color: colors.ink, fontSize: 15, fontWeight: '800' },
+  itemSite: { marginTop: 3, color: colors.brand, fontSize: 12, fontWeight: '800' },
+  itemText: { color: colors.inkSoft, fontSize: 13, lineHeight: 18, marginTop: 4 },
+  itemKind: { marginTop: 6, color: colors.inkMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
+  itemChevron: { color: colors.inkMuted, fontSize: 22, fontWeight: '300', marginTop: 8 },
   card: { backgroundColor: colors.white, borderRadius: 18, paddingHorizontal: 14, marginBottom: 12 },
   dim: { opacity: 0.5 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, gap: 12 },

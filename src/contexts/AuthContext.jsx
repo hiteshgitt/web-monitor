@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { API_BASE_URL } from '../config/api';
 import { apiFetch, getToken, setToken, SESSION_EXPIRED_EVENT } from '../services/session';
 import { disableBrowserPush } from '../services/alerts';
+import ApiService from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -44,6 +45,13 @@ export const AuthProvider = ({ children }) => {
     return signedInUser;
   }, []);
 
+  const endSession = useCallback(() => {
+    setToken(null);
+    setUser(null);
+    setStatus('signed-out');
+    ApiService.clearCache();
+  }, []);
+
   const value = useMemo(() => ({
     user,
     status,
@@ -54,8 +62,15 @@ export const AuthProvider = ({ children }) => {
     requestUpgrade: () => postJson('/auth/upgrade-request').then((data) => setUser(data.user)),
     applyUser: (next) => setUser(next),
     // Stop pushing alerts to this browser before the session goes away
-    logout: () => disableBrowserPush().finally(() => { setToken(null); setUser(null); setStatus('signed-out'); }),
-  }), [user, status, startSession]);
+    logout: () => disableBrowserPush().finally(endSession),
+    // The server drops this browser's push subscription along with the account
+    deleteAccount: async () => {
+      const response = await apiFetch(`${API_BASE_URL}/auth/account`, { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+      await disableBrowserPush({ notifyServer: false }).finally(endSession);
+    },
+  }), [user, status, startSession, endSession]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

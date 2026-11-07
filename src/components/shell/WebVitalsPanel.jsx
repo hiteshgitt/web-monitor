@@ -67,8 +67,9 @@ const WebVitalsPanel = ({ siteId }) => {
 
   const lab = strategy === 'desktop' ? report?.lab?.desktop : report?.lab?.mobile;
   const field = strategy === 'desktop' ? report?.field?.desktop : report?.field?.phone;
-  const scannedAt = report?.lab ? (report.scannedAt || report.checkedAt) : null;
+  const scannedAt = report?.scannedAt || report?.checkedAt || null;
   const checked = scannedAt ? new Date(scannedAt).toLocaleString() : null;
+  const hasLab = Boolean(lab && (lab.score != null || lab.lcp));
 
   return (
     <div className="bg-white rounded-2xl shadow-card border border-brand-100 overflow-hidden">
@@ -103,12 +104,15 @@ const WebVitalsPanel = ({ siteId }) => {
         {report?.configured === false && (
           <p className="text-sm text-ink-muted">PageSpeed is not turned on for this server yet.</p>
         )}
-        {loading && <p className="text-sm text-ink-muted">Loading the saved scan…</p>}
+        {loading && !hasLab && <p className="text-sm text-ink-muted">Loading the saved scan…</p>}
         {!loading && report?.configured !== false && !report?.lab && (
           <p className="text-sm text-ink-muted">The weekly scan has not reached this site yet. The result shows up here on its own.</p>
         )}
+        {checked && hasLab && (
+          <p className="text-xs text-ink-muted -mt-1">Showing the saved scan until the next weekly refresh.</p>
+        )}
 
-        {report?.lab && (
+        {hasLab && (
           <div className="grid lg:grid-cols-2 gap-4">
             <section className="rounded-2xl border border-brand-100 p-4 space-y-3">
               <div className="flex items-end justify-between gap-3">

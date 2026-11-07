@@ -12,15 +12,15 @@ export const ALERT_TYPES = [
   { key: 'account', label: 'Account and plan', description: 'Pro plan approved or declined.' },
 ];
 export const ADMIN_ALERT_TYPES = [
-  { key: 'admin_requests', label: 'Pro requests', description: 'When a customer asks for Pro.' },
-  { key: 'admin_signups', label: 'New sign-ups', description: 'When someone creates an account.' },
+  { key: 'admin_requests', label: 'Customer requests', description: 'When a customer asks for Pro or reports a Zealot answer.' },
+  { key: 'admin_signups', label: 'Sign-ups and deletions', description: 'When someone creates or deletes an account.' },
 ];
 
 // notification.type -> preference key
 const CATEGORY = {
   site_down: 'downtime', site_up: 'downtime', slow: 'slow', slow_ok: 'slow', plugins: 'plugins',
   ssl_off: 'ssl', ssl_ok: 'ssl', security_low: 'security', pro_approved: 'account', pro_declined: 'account',
-  pro_request: 'admin_requests', signup: 'admin_signups',
+  pro_request: 'admin_requests', ai_report: 'admin_requests', signup: 'admin_signups', account_deleted: 'admin_signups',
 };
 export const categoryOf = (type) => CATEGORY[type] || type;
 

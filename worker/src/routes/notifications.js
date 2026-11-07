@@ -16,7 +16,11 @@ export function notificationRoutes({ accountKey, table, types }) {
     const account = c.get(accountKey);
     const limit = Math.min(Number(c.req.query('limit')) || 50, 100);
     const [list, unread] = await c.env.DB.batch([
-      c.env.DB.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').bind(account.id, limit),
+      c.env.DB.prepare(`SELECT n.*, w.name AS website_name
+        FROM notifications n
+        LEFT JOIN websites w ON w.id = n.website_id
+        WHERE n.user_id = ?
+        ORDER BY n.created_at DESC LIMIT ?`).bind(account.id, limit),
       c.env.DB.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL').bind(account.id),
     ]);
     return c.json({ notifications: list.results.map(serializeNotification), unread: unread.results[0].n });

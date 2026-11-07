@@ -24,12 +24,13 @@ function isoDate(daysAgo) {
   return new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-export async function connectUrl(env, requestUrl, userId, websiteId) {
+export async function connectUrl(env, requestUrl, userId, websiteId, { returnTo = 'web' } = {}) {
   assertConfigured(env);
   const state = await sign({
     purpose: 'sc-connect',
     sub: userId,
     websiteId,
+    returnTo: returnTo === 'app' ? 'app' : 'web',
     exp: Math.floor(Date.now() / 1000) + PENDING_MINUTES * 60,
   }, env.JWT_SECRET, 'HS256');
   const params = new URLSearchParams({
@@ -195,12 +196,28 @@ export async function attachSite(env, pendingId, userId, websiteId, siteUrl) {
   return { siteUrl: chosen.id, permission: chosen.permission, connectedAt: now };
 }
 
+function scFinishRedirect(origin, payload, { websiteId = '', pendingId = '', error = '' } = {}) {
+  if (payload?.returnTo === 'app') {
+    const params = new URLSearchParams();
+    if (websiteId) params.set('site', websiteId);
+    if (pendingId) params.set('scPending', pendingId);
+    if (error) params.set('scError', error);
+    return `webmonitor://oauth/sc?${params}`;
+  }
+  if (error) {
+    const site = websiteId ? `site=${encodeURIComponent(websiteId)}&` : '';
+    return `${origin}/app?${site}scError=${encodeURIComponent(error)}`;
+  }
+  return `${origin}/app?site=${encodeURIComponent(websiteId)}&scPending=${encodeURIComponent(pendingId)}`;
+}
+
 export async function handleCallback(c) {
   const origin = new URL(c.req.url).origin;
   let websiteId = '';
+  let payload = null;
   try {
     assertConfigured(c.env);
-    const payload = await readConnectState(c.env, c.req.query('state') || '');
+    payload = await readConnectState(c.env, c.req.query('state') || '');
     websiteId = payload.websiteId;
     if (c.req.query('error')) throw new ApiError(400, 'Google connection was cancelled.');
     const code = c.req.query('code');
@@ -214,11 +231,12 @@ export async function handleCallback(c) {
       websiteId: payload.websiteId,
       refreshToken,
     });
-    return c.redirect(`${origin}/app?site=${encodeURIComponent(websiteId)}&scPending=${encodeURIComponent(pendingId)}`);
+    return c.redirect(scFinishRedirect(origin, payload, { websiteId, pendingId }));
   } catch (error) {
-    const message = encodeURIComponent(error.message || 'Search Console could not be connected.');
-    const site = websiteId ? `site=${encodeURIComponent(websiteId)}&` : '';
-    return c.redirect(`${origin}/app?${site}scError=${message}`);
+    return c.redirect(scFinishRedirect(origin, payload, {
+      websiteId,
+      error: error.message || 'Search Console could not be connected.',
+    }));
   }
 }
 

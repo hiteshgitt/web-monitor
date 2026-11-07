@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LogOut, Sparkles, Globe, BellRing, Radio, Copy, Check } from 'lucide-react';
+import { LogOut, Sparkles, Globe, BellRing, Radio, Copy, Check, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { apiFetch } from '../../services/session';
@@ -81,6 +81,9 @@ const UserMenu = ({ onUpgrade, onAlertSettings, placement = 'right' }) => {
           </button>
           <button type="button" onClick={logout} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-bad-soft hover:text-bad">
             <LogOut size={16} /> Sign out
+          </button>
+          <button type="button" onClick={() => navigate('/delete-account')} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-bad-soft hover:text-bad">
+            <Trash2 size={16} /> Delete account
           </button>
         </div>
       )}

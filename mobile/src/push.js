@@ -26,6 +26,7 @@ export async function registerForPush(sessionToken) {
       // Android 13+ shows the permission prompt only once a channel exists
       await Notifications.setNotificationChannelAsync(ALERT_CHANNEL, {
         name: 'Site alerts',
+        // eslint-disable-next-line import/namespace
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#5868cf',

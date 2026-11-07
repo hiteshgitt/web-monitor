@@ -47,12 +47,13 @@ export async function decryptToken(secret, stored) {
   return new TextDecoder().decode(plain);
 }
 
-export async function connectUrl(env, requestUrl, userId, websiteId) {
+export async function connectUrl(env, requestUrl, userId, websiteId, { returnTo = 'web' } = {}) {
   assertAnalyticsConfigured(env);
   const state = await sign({
     purpose: 'ga-connect',
     sub: userId,
     websiteId,
+    returnTo: returnTo === 'app' ? 'app' : 'web',
     exp: Math.floor(Date.now() / 1000) + PENDING_MINUTES * 60,
   }, env.JWT_SECRET, 'HS256');
   const params = new URLSearchParams({
@@ -250,12 +251,29 @@ export async function attachProperty(env, pendingId, userId, websiteId, property
   return { propertyId: chosen.id, propertyName: chosen.name, connectedAt: now };
 }
 
+function gaFinishRedirect(origin, payload, { websiteId = '', pendingId = '', error = '' } = {}) {
+  // Mobile AuthSession listens for webmonitor://oauth/ga; the website keeps /app handoff.
+  if (payload?.returnTo === 'app') {
+    const params = new URLSearchParams();
+    if (websiteId) params.set('site', websiteId);
+    if (pendingId) params.set('gaPending', pendingId);
+    if (error) params.set('gaError', error);
+    return `webmonitor://oauth/ga?${params}`;
+  }
+  if (error) {
+    const site = websiteId ? `site=${encodeURIComponent(websiteId)}&` : '';
+    return `${origin}/app?${site}gaError=${encodeURIComponent(error)}`;
+  }
+  return `${origin}/app?site=${encodeURIComponent(websiteId)}&gaPending=${encodeURIComponent(pendingId)}`;
+}
+
 export async function handleCallback(c) {
   const origin = new URL(c.req.url).origin;
   let websiteId = '';
+  let payload = null;
   try {
     assertAnalyticsConfigured(c.env);
-    const payload = await readConnectState(c.env, c.req.query('state') || '');
+    payload = await readConnectState(c.env, c.req.query('state') || '');
     websiteId = payload.websiteId;
     if (c.req.query('error')) throw new ApiError(400, 'Google connection was cancelled.');
     const code = c.req.query('code');
@@ -269,11 +287,12 @@ export async function handleCallback(c) {
       websiteId: payload.websiteId,
       refreshToken,
     });
-    return c.redirect(`${origin}/app?site=${encodeURIComponent(websiteId)}&gaPending=${encodeURIComponent(pendingId)}`);
+    return c.redirect(gaFinishRedirect(origin, payload, { websiteId, pendingId }));
   } catch (error) {
-    const message = encodeURIComponent(error.message || 'Google Analytics could not be connected.');
-    const site = websiteId ? `site=${encodeURIComponent(websiteId)}&` : '';
-    return c.redirect(`${origin}/app?${site}gaError=${message}`);
+    return c.redirect(gaFinishRedirect(origin, payload, {
+      websiteId,
+      error: error.message || 'Google Analytics could not be connected.',
+    }));
   }
 }
 

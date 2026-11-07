@@ -148,8 +148,9 @@ websites.get('/:id/analytics', (c) => c.json([]));
 // Google Analytics is a separate permission from sign-in. Pro only, and only for a site this account owns.
 websites.get('/:id/analytics/google/connect', requirePro, async (c) => {
   const site = c.get('website');
-  const url = await connectUrl(c.env, c.req.url, c.get('user').id, site.id);
-  return c.json({ url });
+  const returnTo = c.req.query('return') === 'app' ? 'app' : 'web';
+  const url = await connectUrl(c.env, c.req.url, c.get('user').id, site.id, { returnTo });
+  return c.json({ url, returnTo });
 });
 
 websites.get('/:id/analytics/google/properties', requirePro, async (c) => {
@@ -167,8 +168,9 @@ websites.post('/:id/analytics/google', requirePro, async (c) => {
 
 websites.get('/:id/search-console/google/connect', requirePro, async (c) => {
   const site = c.get('website');
-  const url = await searchConsoleConnectUrl(c.env, c.req.url, c.get('user').id, site.id);
-  return c.json({ url });
+  const returnTo = c.req.query('return') === 'app' ? 'app' : 'web';
+  const url = await searchConsoleConnectUrl(c.env, c.req.url, c.get('user').id, site.id, { returnTo });
+  return c.json({ url, returnTo });
 });
 
 websites.get('/:id/search-console/google/sites', requirePro, async (c) => {
