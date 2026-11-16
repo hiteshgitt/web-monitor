@@ -8,6 +8,8 @@ import AdvancedDashboard from '../AdvancedDashboard';
 import LockedAdvanced from '../pro/LockedAdvanced';
 import RuyaShieldPanel from '../ruyashield/RuyaShieldPanel';
 import { Link } from 'react-router';
+import UpgradeModal from '../pro/UpgradeModal';
+import { REPORT_UPGRADE } from '../report/reportUpgrade';
 import ApiService from '../../services/api';
 import useMonitoringHistory from '../../hooks/useMonitoringHistory';
 import { useAuth } from '../../contexts/AuthContext';
@@ -449,6 +451,7 @@ const SiteDetail = ({ site, tab = 'Overview', onTabChange, onBack, onEdit, onDel
   const [incidentsLoaded, setIncidentsLoaded] = useState(false);
   const { checks, latencySeries, availability, loaded: checksLoaded } = useMonitoringHistory(site._id, 24);
   const { isPro } = useAuth();
+  const [showReportUpgrade, setShowReportUpgrade] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -498,6 +501,7 @@ const SiteDetail = ({ site, tab = 'Overview', onTabChange, onBack, onEdit, onDel
 
   return (
     <div className="h-full flex flex-col">
+      <UpgradeModal isOpen={showReportUpgrade} onClose={() => setShowReportUpgrade(false)} feature={REPORT_UPGRADE} />
       {/* Header */}
       <header className="px-6 lg:px-8 pt-6 lg:pt-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -536,10 +540,14 @@ const SiteDetail = ({ site, tab = 'Overview', onTabChange, onBack, onEdit, onDel
               <BarChart3 size={18} />
               {!isPro && <span className="absolute -top-1 -right-1 px-1 rounded bg-brand-600 text-white text-[8px] font-extrabold tracking-wider">PRO</span>}
             </button>
-            <Link to={`/app/report/${site._id}`} className="btn-ghost relative" title={isPro ? 'Site health report (PDF)' : 'Site health report (preview; full report with Pro)'} aria-label="Site health report">
-              <FileText size={18} />
-              {!isPro && <span className="absolute -top-1 -right-1 px-1 rounded bg-brand-600 text-white text-[8px] font-extrabold tracking-wider">PRO</span>}
-            </Link>
+            {isPro ? (
+              <Link to={`/app/report/${site._id}`} className="btn-ghost" title="Site health report (PDF)" aria-label="Site health report"><FileText size={18} /></Link>
+            ) : (
+              <button type="button" onClick={() => setShowReportUpgrade(true)} className="btn-ghost relative" title="Site health report (Pro)" aria-label="Site health report (Pro)">
+                <FileText size={18} />
+                <span className="absolute -top-1 -right-1 px-1 rounded bg-brand-600 text-white text-[8px] font-extrabold tracking-wider">PRO</span>
+              </button>
+            )}
             <button type="button" onClick={() => onEdit(site)} className="btn-ghost" title="Edit settings"><Settings size={18} /></button>
             {confirmDelete ? (
               <span className="flex items-center gap-1 animate-fade-in">

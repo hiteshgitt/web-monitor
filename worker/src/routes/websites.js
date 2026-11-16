@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { isPro, loadOwnedWebsite, requirePro } from '../lib/auth.js';
-import { buildReport, FREE_REPORT_DAYS, previewReport, REPORT_PERIODS } from '../lib/report.js';
+import { buildReport, REPORT_PERIODS } from '../lib/report.js';
 import { createShare, listShares, revokeShare } from '../lib/reportShares.js';
 import { getReportEmail, saveReportEmail, sendReportEmail } from '../lib/reportEmail.js';
 import { attachProperty, connectUrl, pendingProperties } from '../lib/googleAnalytics.js';
@@ -133,14 +133,13 @@ websites.delete('/:id', async (c) => {
   return c.json({ message: 'Website deleted successfully' });
 });
 
-// Site health report. Pro: the full report for 7, 30 or 90 days. Free: a 30-day headline preview only.
+// Site health report (Pro): the detailed report for 7, 30 or 90 days.
 websites.get('/:id/report', async (c) => {
   const user = c.get('user');
-  const pro = isPro(user);
-  const days = pro ? Number(c.req.query('days')) || 30 : FREE_REPORT_DAYS;
+  if (!isPro(user)) throw new ApiError(402, 'The site health report is part of the Pro plan', { code: 'PRO_REQUIRED' });
+  const days = Number(c.req.query('days')) || 30;
   if (!REPORT_PERIODS.includes(days)) throw new ApiError(400, `Choose a period of ${REPORT_PERIODS.join(', ')} days.`);
-  const report = await buildReport(c.env, user.id, c.get('website'), days);
-  return c.json(pro ? report : previewReport(report));
+  return c.json(await buildReport(c.env, user.id, c.get('website'), days));
 });
 
 // Private client links to the report (Pro).

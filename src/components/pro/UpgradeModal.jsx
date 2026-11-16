@@ -22,7 +22,8 @@ const loadRazorpay = () => {
 
 // Plans dialog. Online payment stays hidden until Razorpay keys and a price are configured.
 // Until then a free customer still asks, and an admin turns Pro on by hand.
-const UpgradeModal = ({ isOpen, onClose }) => {
+// `feature` ({ title, text }) explains which Pro feature the person just tried to open.
+const UpgradeModal = ({ isOpen, onClose, feature = null }) => {
   const { user, isPro, requestUpgrade, applyUser } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -111,9 +112,9 @@ const UpgradeModal = ({ isOpen, onClose }) => {
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-[11px] font-bold uppercase tracking-wider">
             <Sparkles size={12} /> {isPro ? 'You are on Pro' : 'Pro plan'}
           </span>
-          <h2 className="text-2xl font-extrabold mt-4 tracking-tight">{isPro ? 'Everything is unlocked' : 'What you get with Pro'}</h2>
+          <h2 className="text-2xl font-extrabold mt-4 tracking-tight">{isPro ? 'Everything is unlocked' : feature?.title || 'What you get with Pro'}</h2>
           <p className="text-white/80 text-sm mt-1">
-            {isPro ? 'Your account includes the full Advanced view for every site.' : 'Everything in Basic, plus the Advanced view for every site you monitor.'}
+            {isPro ? 'Your account includes the full Advanced view for every site.' : feature?.text || 'Everything in Basic, plus the Advanced view for every site you monitor.'}
           </p>
         </div>
 

@@ -30,4 +30,5 @@ export const PLAN_COMPARISON = [
   { feature: 'PageSpeed & Core Web Vitals', basic: false, pro: true },
   { feature: 'Deep security: SSL grade, malware, vulnerabilities', basic: false, pro: true },
   { feature: 'Logs, alert center & CSV reports', basic: false, pro: true },
+  { feature: 'Detailed site health report (PDF), client links & monthly email', basic: false, pro: true },
 ];

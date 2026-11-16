@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { ArrowLeft, Download, ExternalLink, Lock, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, Download, ExternalLink, ShieldCheck, Sparkles } from 'lucide-react';
 import UpgradeModal from '../pro/UpgradeModal';
 import ReportSharePanel from './ReportSharePanel';
 import ReportEmailPanel from './ReportEmailPanel';
+import { REPORT_UPGRADE } from './reportUpgrade';
 import Logo from '../Logo';
 import { fetchSiteReport } from '../../services/report';
 import { useAuth } from '../../contexts/AuthContext';
@@ -35,8 +36,9 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { da
 const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
 const fmtMinutes = (m) => (m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h`);
 
-const Section = ({ title, aside, children }) => (
-  <section className="bg-white rounded-3xl border border-brand-100 p-6 sm:p-8 print:rounded-none print:border-0 print:border-t print:px-0">
+// `page`: in the PDF this section starts on a new page.
+const Section = ({ title, aside, children, page = false, id }) => (
+  <section id={id} className={`bg-white rounded-3xl border border-brand-100 p-6 sm:p-8 print:rounded-none print:border-0 print:px-0 ${page ? 'print:break-before-page' : 'print:border-t'}`}>
     <div className="flex flex-wrap items-baseline justify-between gap-2 mb-5">
       <h2 className="text-lg font-extrabold text-ink">{title}</h2>
       {aside && <span className="text-xs text-ink-muted">{aside}</span>}
@@ -173,60 +175,100 @@ const SecuritySection = ({ security, shared }) => {
   );
 };
 
-const LOCKED_SECTIONS = [
-  ['Uptime and response time', 'Daily uptime, downtime, response times and the longest incidents'],
-  ['Speed', 'PageSpeed score, Largest Contentful Paint and the top fixes'],
-  ['SSL and security headers', 'SSL Labs grade, Safe Browsing and missing headers'],
-  ['Security findings (RuyaShield)', 'Open vulnerabilities by severity and the latest assessment'],
-];
 
-// Free plan: the headline from the server (it sends nothing more) and what Pro unlocks. No download.
-const PreviewReport = ({ report, onUpgrade }) => {
-  const measured = Object.entries(PART_LABELS).filter(([k]) => report.score.measured[k]);
-  return (
-    <>
-      <Section title="Overall health" aside="Last 30 days">
-        <div className="grid gap-6 sm:grid-cols-[auto_1fr] items-center">
-          <ScoreRing score={report.score.overall} />
-          <div className="space-y-3">
-            <p className="text-sm text-ink-soft">
-              Uptime <span className="font-bold text-ink">{report.uptime.percent == null ? '—' : `${report.uptime.percent}%`}</span>
-              {' '}with {report.uptime.incidentCount} incident{report.uptime.incidentCount === 1 ? '' : 's'} in the last 30 days.
-            </p>
-            <p className="text-sm text-ink-soft">
-              Score built from: {measured.length ? measured.map(([, label]) => label).join(', ') : 'nothing measured yet'}.
-            </p>
-          </div>
-        </div>
-      </Section>
-
-      <section className="relative bg-white rounded-3xl border border-brand-100 p-6 sm:p-8 overflow-hidden">
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {LOCKED_SECTIONS.map(([title, text]) => (
-            <li key={title} className="rounded-2xl bg-canvas px-4 py-3.5 flex gap-3">
-              <Lock size={16} className="text-ink-muted shrink-0 mt-0.5" />
-              <span>
-                <span className="block text-sm font-bold text-ink">{title}</span>
-                <span className="block text-xs text-ink-muted mt-0.5">{text}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-brand-50 px-5 py-4">
-          <p className="text-sm text-ink-soft">
-            <span className="font-bold text-ink">The full report is part of Pro.</span> See every section, switch between 7, 30 and 90 days, and download it as a PDF for your client.
-          </p>
-          <button type="button" onClick={onUpgrade} className="btn-primary shrink-0"><Sparkles size={15} /> Upgrade to Pro</button>
-        </div>
-      </section>
-    </>
-  );
+const PRIORITY_STYLE = {
+  critical: 'bg-rose-50 text-rose-700',
+  high: 'bg-orange-50 text-orange-700',
+  medium: 'bg-amber-50 text-amber-800',
+  low: 'bg-sky-50 text-sky-700',
 };
+const VITAL_LABEL = { lcp: 'Largest Contentful Paint', fcp: 'First Contentful Paint', cls: 'Cumulative Layout Shift', tbt: 'Total Blocking Time', inp: 'Interaction to Next Paint', speedIndex: 'Speed Index' };
+const VITAL_STATUS = { good: ['text-good', 'Good'], 'needs-improvement': ['text-warn', 'Needs improvement'], poor: ['text-bad', 'Poor'] };
+const fmtBytes = (b) => (b == null ? '—' : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
+const fmtP75 = (key, v) => (key === 'cls' ? v.toFixed(2) : v >= 1000 ? `${(v / 1000).toFixed(1)} s` : `${Math.round(v)} ms`);
 
-// The full report (Pro owner, or a client opening a shared link).
+const Table = ({ head, rows, caption }) => (
+  <div className="overflow-x-auto">
+    <table className="w-full text-sm">
+      {caption && <caption className="text-left text-xs font-bold text-ink-soft mb-2">{caption}</caption>}
+      <thead><tr className="text-left text-[11px] uppercase tracking-widest text-ink-muted">{head.map((h) => <th key={h} className="py-2 pr-4 font-bold">{h}</th>)}</tr></thead>
+      <tbody className="divide-y divide-brand-100">
+        {rows.map((r, i) => <tr key={i} className="break-inside-avoid">{r.map((c, j) => <td key={j} className="py-2 pr-4 align-top">{c}</td>)}</tr>)}
+      </tbody>
+    </table>
+  </div>
+);
+
+const NotMeasured = ({ children }) => <p className="text-sm text-ink-muted">{children} Not measured.</p>;
+
+const ActionPlan = ({ items }) => (
+  items.length === 0
+    ? <p className="text-sm text-ink-soft">No problems found in the measured areas for this period.</p>
+    : (
+      <ol className="space-y-2">
+        {items.map((a, i) => (
+          <li key={i} className="flex gap-3 items-start text-sm break-inside-avoid">
+            <span className="w-6 shrink-0 text-right font-extrabold text-ink-muted tabular-nums">{i + 1}.</span>
+            <span className={`shrink-0 px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider ${PRIORITY_STYLE[a.priority]}`}>{a.priority}</span>
+            <span><span className="font-bold text-ink">{a.area}:</span> <span className="text-ink-soft">{a.text}</span></span>
+          </li>
+        ))}
+      </ol>
+    )
+);
+
+const LabCard = ({ lab, label }) => (
+  <div className="rounded-2xl border border-brand-100 p-4 break-inside-avoid">
+    <div className="flex items-baseline justify-between">
+      <h3 className="text-sm font-extrabold text-ink">{label}</h3>
+      <span className="text-2xl font-extrabold tabular-nums text-ink">{lab.score ?? '—'}<span className="text-xs text-ink-muted font-semibold"> / 100</span></span>
+    </div>
+    <ul className="mt-3 space-y-1.5 text-sm">
+      {lab.metrics.map((m) => {
+        const [color, word] = VITAL_STATUS[m.status] || ['text-ink-muted', ''];
+        return (
+          <li key={m.key} className="flex justify-between gap-3">
+            <span className="text-ink-soft">{VITAL_LABEL[m.key] || m.key}</span>
+            <span className="font-bold tabular-nums text-ink whitespace-nowrap">{m.display || '—'} {word && <span className={`text-xs font-semibold ${color}`}>{word}</span>}</span>
+          </li>
+        );
+      })}
+    </ul>
+    {lab.opportunities.length > 0 && (
+      <ul className="mt-3 pt-3 border-t border-brand-100 text-xs text-ink-soft list-disc pl-4 space-y-1">
+        {lab.opportunities.map((o) => <li key={o.title}>{o.title}{o.display ? ` (${o.display})` : ''}</li>)}
+      </ul>
+    )}
+  </div>
+);
+
+const FieldCard = ({ field, label }) => (
+  <div className="rounded-2xl bg-canvas p-4 break-inside-avoid print:bg-white print:border print:border-brand-100">
+    <h3 className="text-sm font-extrabold text-ink">{label}</h3>
+    {field.period && <p className="text-[11px] text-ink-muted">{field.period}</p>}
+    <ul className="mt-2 space-y-1.5 text-sm">
+      {field.metrics.map((m) => {
+        const [color, word] = VITAL_STATUS[m.status] || ['text-ink-muted', ''];
+        return (
+          <li key={m.key} className="flex justify-between gap-3">
+            <span className="text-ink-soft">{VITAL_LABEL[m.key]}</span>
+            <span className="font-bold tabular-nums text-ink whitespace-nowrap">{fmtP75(m.key, m.p75)} <span className={`text-xs font-semibold ${color}`}>{word}</span></span>
+          </li>
+        );
+      })}
+    </ul>
+  </div>
+);
+
+// The detailed report (Pro owner, or a client opening a shared link). In the PDF each part starts on its own page.
 export const FullReport = ({ report }) => {
   const parts = report.score.parts;
   const u = report.uptime;
+  const sp = report.speed;
+  const pc = report.publicChecks;
+  const sh = report.siteHealth;
+  const seo = report.seo;
+  const sec = report.security;
   return (
     <>
       <Section title="Overall health" aside={`Weights: uptime ${report.score.weights.uptime}, security ${report.score.weights.security}, speed ${report.score.weights.speed}, SSL & headers ${report.score.weights.publicChecks}`}>
@@ -247,67 +289,139 @@ export const FullReport = ({ report }) => {
             })}
           </ul>
         </div>
+        <div className="grid grid-cols-2 lg:grid-cols-3 print:grid-cols-3 gap-3 mt-6">
+          <Stat label="Uptime" value={u.percent == null ? '—' : `${u.percent}%`} sub={`${u.incidentCount} incident${u.incidentCount === 1 ? '' : 's'}`} />
+          <Stat label="Downtime" value={fmtMinutes(u.downtimeMinutes)} />
+          <Stat label="Avg response" value={u.avgResponseMs == null ? '—' : `${u.avgResponseMs} ms`} />
+          <Stat label="Mobile speed" value={sp?.lab?.mobile?.score ?? '—'} sub="PageSpeed, out of 100" />
+          <Stat label="SSL grade" value={pc?.sslGrade || '—'} sub={pc?.malware === 'flagged' ? 'Listed by Safe Browsing' : pc?.malware === 'clean' ? 'Safe Browsing: clean' : null} />
+          <Stat label="Open findings" value={sec.open && sec.lastAssessment ? sec.openTotal : '—'} sub={sec.open && sec.lastAssessment ? `${sec.open.critical} critical · ${sec.open.high} high` : 'RuyaShield'} />
+        </div>
         <p className="text-xs text-ink-muted mt-5">Parts marked &quot;not measured&quot; have no data for this period and are left out of the score, never counted as a pass.</p>
       </Section>
 
-      <Section title="Uptime and response time" aside={`${u.checks.toLocaleString()} checks, one a minute`}>
-        <div className="grid grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-3 mb-6 break-inside-avoid">
-          <Stat label="Uptime" value={u.percent == null ? '—' : `${u.percent}%`} />
-          <Stat label="Downtime" value={fmtMinutes(u.downtimeMinutes)} sub={`${u.incidentCount} incident${u.incidentCount === 1 ? '' : 's'}`} />
-          <Stat label="Avg response" value={u.avgResponseMs == null ? '—' : `${u.avgResponseMs} ms`} />
-          <Stat label="Monitored days" value={u.daily.length} sub={`of ${report.period.days}`} />
-        </div>
+      <Section title="What to fix first" aside={`${report.actionPlan.length} item${report.actionPlan.length === 1 ? '' : 's'}`}>
+        <ActionPlan items={report.actionPlan} />
+      </Section>
+
+      <Section page title="Uptime and response time" aside={`${u.checks.toLocaleString()} checks, one a minute`}>
         <div className="space-y-6 break-inside-avoid">
           <UptimeStrip daily={u.daily} />
           <ResponseBars daily={u.daily} />
         </div>
-        {u.longestIncidents.length > 0 && (
-          <div className="mt-6 overflow-x-auto">
-            <table className="w-full text-sm">
-              <caption className="text-left text-xs font-bold text-ink-soft mb-2">Longest incidents</caption>
-              <thead><tr className="text-left text-[11px] uppercase tracking-widest text-ink-muted"><th className="py-2 pr-4">Started</th><th className="py-2 pr-4">Duration</th><th className="py-2">Cause</th></tr></thead>
-              <tbody className="divide-y divide-brand-100">
-                {u.longestIncidents.map((i) => (
-                  <tr key={i.startedAt}><td className="py-2 pr-4 whitespace-nowrap">{fmtDateTime(i.startedAt)}</td><td className="py-2 pr-4 whitespace-nowrap">{fmtMinutes(i.minutes)}{!i.endedAt && ' (ongoing)'}</td><td className="py-2 text-ink-soft">{i.message || i.status}</td></tr>
-                ))}
-              </tbody>
-            </table>
+        {u.incidents.length > 0 ? (
+          <div className="mt-6">
+            <Table caption={`Incidents (${u.incidentCount}${u.incidentCount > u.incidents.length ? `, latest ${u.incidents.length} shown` : ''})`} head={['Started', 'Ended', 'Duration', 'Cause']}
+              rows={u.incidents.map((i) => [fmtDateTime(i.startedAt), i.endedAt ? fmtDateTime(i.endedAt) : 'Ongoing', fmtMinutes(i.minutes), <span className="text-ink-soft">{i.message || i.status}</span>])} />
+          </div>
+        ) : <p className="mt-6 text-sm text-ink-soft">No downtime incidents in this period.</p>}
+        {u.daily.length > 0 && (
+          <div className="mt-6">
+            <Table caption="Day by day" head={['Day', 'Uptime', 'Avg response']}
+              rows={[...u.daily].reverse().map((d) => [d.day, d.uptime == null ? '—' : `${d.uptime}%`, d.avgResponseMs == null ? '—' : `${d.avgResponseMs} ms`])} />
           </div>
         )}
       </Section>
 
-      <div className="grid gap-5 lg:grid-cols-2 print:grid-cols-2">
-        <Section title="Speed" aside={report.speed ? `PageSpeed ${report.speed.strategy}, ${fmtDate(report.speed.checkedAt)}` : null}>
-          {report.speed ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <Stat label="Performance" value={report.speed.score ?? '—'} sub="out of 100" />
-                <Stat label="Largest paint" value={report.speed.lcp || '—'} />
+      <Section page title="Speed" aside={sp ? `PageSpeed Insights, ${fmtDate(sp.checkedAt)}` : null}>
+        {sp ? (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 print:grid-cols-2">
+              {sp.lab.mobile && <LabCard lab={sp.lab.mobile} label="Mobile (lab test)" />}
+              {sp.lab.desktop && <LabCard lab={sp.lab.desktop} label="Desktop (lab test)" />}
+            </div>
+            <h3 className="text-sm font-extrabold text-ink mt-6">Real visitors (Chrome UX Report, 75th percentile)</h3>
+            {sp.field.phone || sp.field.desktop ? (
+              <div className="grid gap-4 md:grid-cols-2 print:grid-cols-2 mt-3">
+                {sp.field.phone && <FieldCard field={sp.field.phone} label="Phones" />}
+                {sp.field.desktop && <FieldCard field={sp.field.desktop} label="Desktops" />}
               </div>
-              {report.speed.opportunities.length > 0 && (
-                <ul className="mt-4 text-sm text-ink-soft list-disc pl-5 space-y-1">
-                  {report.speed.opportunities.map((o) => <li key={o.title}>{o.title}{o.display ? ` (${o.display})` : ''}</li>)}
-                </ul>
-              )}
-            </>
-          ) : <p className="text-sm text-ink-muted">No PageSpeed run yet. Not measured.</p>}
-        </Section>
-        <Section title="SSL and security headers" aside={report.publicChecks ? fmtDate(report.publicChecks.checkedAt) : null}>
-          {report.publicChecks ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <Stat label="SSL Labs grade" value={report.publicChecks.sslGrade || '—'} sub={report.publicChecks.sslMessage} />
-                <Stat label="Safe Browsing" value={report.publicChecks.malware === 'flagged' ? 'Listed' : report.publicChecks.malware === 'clean' ? 'Clean' : '—'} />
-              </div>
-              <p className="mt-4 text-sm text-ink-soft">
-                {report.publicChecks.missingHeaders.length ? `Missing headers: ${report.publicChecks.missingHeaders.join(', ')}.` : 'All checked security headers are present.'}
-              </p>
-            </>
-          ) : <p className="text-sm text-ink-muted">No public security check yet. Not measured.</p>}
-        </Section>
-      </div>
+            ) : <p className="text-sm text-ink-muted mt-2">{sp.field.message || 'No real-visitor data for this site yet.'}</p>}
+          </>
+        ) : <NotMeasured>No PageSpeed run yet.</NotMeasured>}
+      </Section>
 
-      <SecuritySection security={report.security} shared={report.shared} />
+      <Section title="Security" aside={pc ? `Public checks, ${fmtDate(pc.checkedAt)}` : null}>
+        {pc ? (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-3 print:grid-cols-3 gap-3">
+              <Stat label="SSL Labs grade" value={pc.sslGrade || '—'} sub={pc.sslMessage} />
+              <Stat label="Safe Browsing" value={pc.malware === 'flagged' ? 'Listed' : pc.malware === 'clean' ? 'Clean' : '—'} sub={pc.threats.length ? pc.threats.join(', ') : null} />
+              <Stat label="Security headers" value={pc.headersChecked == null ? '—' : `${pc.headersChecked - pc.missingHeaders.length} / ${pc.headersChecked}`} sub="present" />
+            </div>
+            <p className="mt-4 text-sm text-ink-soft">
+              {pc.missingHeaders.length ? <>Missing: <span className="font-semibold text-ink">{pc.missingHeaders.join(', ')}</span>.</> : 'All checked security headers are present.'}
+            </p>
+          </>
+        ) : <NotMeasured>No public security check yet.</NotMeasured>}
+      </Section>
+
+      <SecuritySection security={sec} shared={report.shared} />
+
+      <Section page title="Site health" aside={sh?.checkedAt ? `Reported by the site, ${fmtDateTime(sh.checkedAt)}` : null}>
+        {sh ? (
+          <div className="grid gap-5 md:grid-cols-2 print:grid-cols-2">
+            <div className="break-inside-avoid">
+              <h3 className="text-sm font-extrabold text-ink mb-2">Platform</h3>
+              <Table head={['Component', 'Version']} rows={[['Platform', sh.platform], ...sh.versions.map((v) => [v.name, v.version])]} />
+              {sh.plugins && (
+                <p className="text-sm text-ink-soft mt-3">
+                  {sh.plugins.total ?? '—'} plugins or packages, <span className={sh.plugins.outdated ? 'font-bold text-bad' : ''}>{sh.plugins.outdated ?? 0} outdated</span>, {sh.plugins.security ?? 0} security plugin{sh.plugins.security === 1 ? '' : 's'}{sh.firewall && sh.firewall !== 'none' ? `, firewall: ${sh.firewall}` : ''}.
+                </p>
+              )}
+            </div>
+            {sh.server && (
+              <div className="break-inside-avoid">
+                <h3 className="text-sm font-extrabold text-ink mb-2">Server</h3>
+                <Table head={['Measure', 'Value']} rows={[
+                  ['Performance score', sh.server.performanceScore ?? '—'],
+                  ['Page load (server side)', sh.server.loadTime == null ? '—' : `${sh.server.loadTime} ms`],
+                  ['Server response', sh.server.serverResponseTime == null ? '—' : `${sh.server.serverResponseTime} ms`],
+                  ['Database queries', sh.server.databaseQueryTime == null ? '—' : `${sh.server.databaseQueryTime} ms`],
+                  ['CPU load', sh.server.cpuUsage ?? '—'],
+                  ['Memory', sh.server.memoryUsage ?? '—'],
+                  ['Disk free', sh.server.diskTotalBytes ? `${fmtBytes(sh.server.diskFreeBytes)} of ${fmtBytes(sh.server.diskTotalBytes)}` : '—'],
+                ]} />
+              </div>
+            )}
+          </div>
+        ) : <NotMeasured>The site&apos;s integration has not reported health details yet.</NotMeasured>}
+      </Section>
+
+      <Section title="SEO" aside={seo?.score != null ? `Score ${seo.score} / 100` : null}>
+        {seo ? (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-3">
+              <Stat label="Meta tags" value={seo.metaTags || '—'} />
+              <Stat label="Headings" value={seo.headingStructure || '—'} />
+              <Stat label="Images without alt" value={seo.missingAltTags ?? '—'} />
+              <Stat label="Content items" value={seo.totalContent ?? '—'} sub={seo.internalLinks != null ? `${seo.internalLinks} internal · ${seo.externalLinks ?? 0} external links` : null} />
+            </div>
+            {seo.siteTitle && <p className="mt-4 text-sm text-ink-soft"><span className="font-bold text-ink">Title:</span> {seo.siteTitle}</p>}
+            {seo.siteDescription && <p className="mt-1 text-sm text-ink-soft"><span className="font-bold text-ink">Description:</span> {seo.siteDescription}</p>}
+            {seo.issues.length > 0 && (
+              <ul className="mt-4 text-sm text-ink-soft list-disc pl-5 space-y-1">{seo.issues.map((t) => <li key={t}>{t}</li>)}</ul>
+            )}
+          </>
+        ) : <NotMeasured>The site&apos;s integration has not reported SEO details yet.</NotMeasured>}
+      </Section>
+
+      {report.recommendations.length > 0 && (
+        <Section title="Recommendations from the site">
+          <Table head={['Area', 'Recommendation']} rows={report.recommendations.map((r) => [<span className="font-bold text-ink whitespace-nowrap">{r.area}</span>, <span className="text-ink-soft">{r.text}</span>])} />
+        </Section>
+      )}
+
+      <Section title="How this report is measured">
+        <ul className="text-xs text-ink-soft list-disc pl-5 space-y-1">
+          <li>Uptime and response time come from Web Monitor checking the site once a minute from its own servers.</li>
+          <li>Speed comes from Google PageSpeed Insights (lab test) and the Chrome UX Report (real visitors), refreshed weekly.</li>
+          <li>SSL grade from Qualys SSL Labs, blocklist status from Google Safe Browsing, headers from a request to the home page.</li>
+          <li>Security findings come from RuyaShield assessments of verified sites. Only counts and titles are included, never evidence.</li>
+          <li>Site health and SEO are reported by the Web Monitor integration installed on the site.</li>
+          <li>Anything without data is shown as &quot;not measured&quot;. This report is not a certification.</li>
+        </ul>
+      </Section>
 
       <footer className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted px-1">
         <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Web Monitor and RuyaShield by Ruyalab</span>
@@ -322,29 +436,43 @@ const SiteReport = () => {
   const { isPro } = useAuth();
   const [days, setDays] = useState(30);
   const [result, setResult] = useState({ key: null, report: null, error: '' });
+  const [showUpgrade, setShowUpgrade] = useState(!isPro);
   const key = `${siteId}:${days}`;
 
-  const [showUpgrade, setShowUpgrade] = useState(false);
-
   useEffect(() => {
+    if (!isPro) return undefined;
     let live = true;
     fetchSiteReport(siteId, days)
       .then((report) => live && setResult({ key, report, error: '' }))
       .catch((err) => live && setResult({ key, report: null, error: err.message }));
     return () => { live = false; };
-  }, [siteId, days, key]);
+  }, [siteId, days, key, isPro]);
+
+  if (!isPro) {
+    return (
+      <div className="min-h-screen bg-canvas flex items-center justify-center p-6">
+        <div className="bg-white rounded-3xl border border-brand-100 p-8 max-w-md text-center">
+          <h1 className="text-xl font-extrabold text-ink">{REPORT_UPGRADE.title}</h1>
+          <p className="text-sm text-ink-soft mt-2">{REPORT_UPGRADE.text}</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <button type="button" onClick={() => setShowUpgrade(true)} className="btn-primary"><Sparkles size={15} /> Upgrade to Pro</button>
+            <Link to={`/app?site=${siteId}`} className="btn-ghost">Back to site</Link>
+          </div>
+        </div>
+        <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} feature={REPORT_UPGRADE} />
+      </div>
+    );
+  }
 
   const loading = result.key !== key;
   const { report, error } = result.key === key ? result : { report: null, error: '' };
-
-  const preview = Boolean(report?.preview);
 
   return (
     <div className="min-h-screen bg-canvas print:bg-white print:min-h-0">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-5 print:p-0 print:space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
           <Link to={`/app?site=${siteId}`} className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-700 hover:underline"><ArrowLeft size={16} /> Back to site</Link>
-          {isPro && <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-xl bg-white border border-brand-100 p-1" role="group" aria-label="Report period">
               {PERIODS.map((p) => (
                 <button key={p} type="button" onClick={() => setDays(p)} aria-pressed={days === p}
@@ -352,37 +480,39 @@ const SiteReport = () => {
               ))}
             </div>
             <button type="button" onClick={() => window.print()} disabled={!report} className="btn-primary"><Download size={15} /> <span className="whitespace-nowrap">Download PDF</span></button>
-          </div>}
+          </div>
         </div>
 
-        <header className="bg-white rounded-3xl border border-brand-100 p-6 sm:p-8 print:border-0 print:p-0">
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-brand-600">
-            <Logo variant="brand" className="h-4" /> Site health report
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-ink mt-3">{report?.site.name || 'Loading…'}</h1>
-          {report && (
-            <p className="text-sm text-ink-muted mt-1">
-              <span className="font-mono">{report.site.url}</span> · {fmtDate(report.period.from)} – {fmtDate(report.period.to)} ({report.period.days} days)
-            </p>
-          )}
-        </header>
+        <ReportHeader report={report} />
 
         {error && <p className="text-sm text-bad bg-bad-soft rounded-xl px-4 py-3">{error}</p>}
         {loading && <p className="text-sm text-ink-muted">Building the report…</p>}
 
-        {report && !loading && !preview && (
+        {report && !loading && (
           <div className="grid gap-5 lg:grid-cols-2 print:hidden">
             <ReportSharePanel siteId={siteId} days={days} />
             <ReportEmailPanel siteId={siteId} />
           </div>
         )}
-        {report && !loading && preview && <PreviewReport report={report} onUpgrade={() => setShowUpgrade(true)} />}
-
-        {report && !loading && !preview && <FullReport report={report} />}
+        {report && !loading && <FullReport report={report} />}
       </div>
-      <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
     </div>
   );
 };
+
+// Cover block: on screen a card, in the PDF the first page's title.
+export const ReportHeader = ({ report }) => (
+  <header className="bg-white rounded-3xl border border-brand-100 p-6 sm:p-8 print:border-0 print:p-0 print:pb-4 print:border-b-2 print:border-brand-600 print:rounded-none">
+    <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-brand-600">
+      <Logo variant="brand" className="h-4" /> Site health report
+    </div>
+    <h1 className="text-2xl sm:text-3xl font-extrabold text-ink mt-3">{report?.site.name || 'Loading…'}</h1>
+    {report && (
+      <p className="text-sm text-ink-muted mt-1">
+        <span className="font-mono">{report.site.url}</span> · {fmtDate(report.period.from)} – {fmtDate(report.period.to)} ({report.period.days} days) · prepared {fmtDate(report.generatedAt)}
+      </p>
+    )}
+  </header>
+);
 
 export default SiteReport;
