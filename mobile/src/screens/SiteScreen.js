@@ -8,6 +8,7 @@ import { userIsPro } from '../session';
 import { platformIcon } from '../platforms';
 import AdvancedPanel from './AdvancedPanel';
 import EditSiteScreen from './EditSiteScreen';
+import RuyaShieldPanel from './RuyaShieldPanel';
 import {
   ALERT_KIND, STATUS_LABEL, UP_STATUSES, availability, clock, displayUrl, formatMs, formatPercent, formatRatio,
   formatWhen, healthScore, latencySeries, platformLabel, runtimeRows, scoreTone, statusTone, tabForAlert, timeAgo,
@@ -538,6 +539,7 @@ export default function SiteScreen({ siteId, session, onBack, onExpired, alertFo
               items={sec.recommendations || []}
               empty="No security recommendations."
             />
+            {isPro ? <RuyaShieldPanel siteId={site._id} session={session} onExpired={onExpired} /> : null}
             {isPro ? (
               <Pressable
                 onPress={() => openAdvanced('Security', {

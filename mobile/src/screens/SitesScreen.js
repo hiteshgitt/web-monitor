@@ -7,6 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 import { api } from '../api';
 import { userIsPro } from '../session';
 import DeleteAccountModal from './DeleteAccountModal';
+import RuyaShieldModal from './RuyaShieldModal';
 import {
   STATUS_LABEL, displayUrl, formatMs, healthScore, platformLabel, scoreTone, statusTone, timeAgo,
 } from '../metrics';
@@ -121,6 +122,7 @@ export default function SitesScreen({ session, onOpen, onAlerts, onAdd, onSignOu
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [ruyashield, setRuyashield] = useState(false);
   const [statusUrl, setStatusUrl] = useState('');
   const [accountNote, setAccountNote] = useState('');
   const isPro = userIsPro(session.user);
@@ -213,6 +215,12 @@ export default function SitesScreen({ session, onOpen, onAlerts, onAdd, onSignOu
       <Text style={styles.account} numberOfLines={1}>
         {session.user?.name || session.user?.email} · {isPro ? 'Pro' : 'Free'}
       </Text>
+      <RuyaShieldModal
+        visible={ruyashield}
+        session={session}
+        onClose={() => setRuyashield(false)}
+        onExpired={onExpired}
+      />
       <DeleteAccountModal
         visible={deleting}
         session={session}
@@ -272,6 +280,14 @@ export default function SitesScreen({ session, onOpen, onAlerts, onAdd, onSignOu
                   else setAccountNote(err.message);
                 }
               },
+            },
+            {
+              key: 'ruyashield',
+              icon: ShieldIcon,
+              tint: '#e8eefc',
+              label: 'RuyaShield connection',
+              detail: 'See security findings for your sites',
+              action: () => { setMenuOpen(false); setRuyashield(true); },
             },
             {
               key: 'web',
