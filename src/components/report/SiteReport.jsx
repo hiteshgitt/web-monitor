@@ -272,8 +272,9 @@ export const FullReport = ({ report }) => {
   return (
     <>
       <Section title="Overall health" aside={`Weights: uptime ${report.score.weights.uptime}, security ${report.score.weights.security}, speed ${report.score.weights.speed}, SSL & headers ${report.score.weights.publicChecks}`}>
-        <div className="grid gap-6 sm:grid-cols-[auto_1fr] items-center">
-          <ScoreRing score={report.score.overall} />
+        <div className="grid gap-6 print:grid-cols-[auto_1fr] items-center">
+          {/* On screen the hero shows the score; the PDF shows it here. */}
+          <div className="hidden print:block"><ScoreRing score={report.score.overall} /></div>
           <ul className="space-y-2.5">
             {Object.entries(PART_LABELS).map(([k, label]) => {
               const [color, word] = tone(parts[k]);
@@ -437,6 +438,14 @@ const SiteReport = () => {
   const [days, setDays] = useState(30);
   const [result, setResult] = useState({ key: null, report: null, error: '' });
   const [showUpgrade, setShowUpgrade] = useState(!isPro);
+  // Desktop: actions in a sticky sidebar. Phones: period and PDF first, sharing and email after the report.
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1024px)');
+    const update = () => setIsDesktop(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
   const key = `${siteId}:${days}`;
 
   useEffect(() => {
@@ -467,52 +476,119 @@ const SiteReport = () => {
   const loading = result.key !== key;
   const { report, error } = result.key === key ? result : { report: null, error: '' };
 
+  const periodCard = (
+    <section className="bg-white rounded-3xl border border-brand-100 p-5 shadow-card">
+      <h2 className="text-[11px] font-extrabold uppercase tracking-widest text-ink-muted">Report period</h2>
+      <div className="mt-3 grid grid-cols-3 rounded-xl bg-canvas p-1" role="group" aria-label="Report period">
+        {PERIODS.map((p) => (
+          <button key={p} type="button" onClick={() => setDays(p)} aria-pressed={days === p}
+            className={`py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${days === p ? 'bg-white text-brand-700 shadow-card' : 'text-ink-soft hover:text-ink'}`}>{p} days</button>
+        ))}
+      </div>
+      <button type="button" onClick={() => window.print()} disabled={!report || loading} className="btn-primary w-full justify-center mt-4"><Download size={15} /> <span className="whitespace-nowrap">Download PDF</span></button>
+      <p className="text-[11px] text-ink-muted mt-2 text-center">Choose &quot;Save as PDF&quot; in the print window.</p>
+    </section>
+  );
+
   return (
     <div className="min-h-screen bg-canvas print:bg-white print:min-h-0">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-5 print:p-0 print:space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-          <Link to={`/app?site=${siteId}`} className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-700 hover:underline"><ArrowLeft size={16} /> Back to site</Link>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-xl bg-white border border-brand-100 p-1" role="group" aria-label="Report period">
-              {PERIODS.map((p) => (
-                <button key={p} type="button" onClick={() => setDays(p)} aria-pressed={days === p}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap ${days === p ? 'bg-brand-600 text-white' : 'text-ink-soft hover:bg-brand-50'}`}>{p} days</button>
-              ))}
-            </div>
-            <button type="button" onClick={() => window.print()} disabled={!report} className="btn-primary"><Download size={15} /> <span className="whitespace-nowrap">Download PDF</span></button>
-          </div>
-        </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-5 print:p-0 print:space-y-4">
+        <Link to={`/app?site=${siteId}`} className="print:hidden inline-flex items-center gap-1.5 text-sm font-bold text-brand-700 hover:underline"><ArrowLeft size={16} /> Back to site</Link>
 
         <ReportHeader report={report} />
 
         {error && <p className="text-sm text-bad bg-bad-soft rounded-xl px-4 py-3">{error}</p>}
-        {loading && <p className="text-sm text-ink-muted">Building the report…</p>}
 
-        {report && !loading && (
-          <div className="grid gap-5 lg:grid-cols-2 print:hidden">
-            <ReportSharePanel siteId={siteId} days={days} />
-            <ReportEmailPanel siteId={siteId} />
-          </div>
-        )}
-        {report && !loading && <FullReport report={report} />}
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] items-start">
+          {isDesktop ? (
+            <aside className="space-y-4 sticky top-6 order-last print:hidden">
+              {periodCard}
+              <ReportSharePanel siteId={siteId} days={days} />
+              <ReportEmailPanel siteId={siteId} />
+            </aside>
+          ) : <div className="print:hidden">{periodCard}</div>}
+
+          <main className="space-y-5 min-w-0 print:space-y-4">
+            {loading && (
+              <div className="bg-white rounded-3xl border border-brand-100 p-8 text-sm text-ink-muted animate-pulse">Building the report…</div>
+            )}
+            {report && !loading && <FullReport report={report} />}
+          </main>
+
+          {!isDesktop && (
+            <div className="space-y-4 print:hidden">
+              <ReportSharePanel siteId={siteId} days={days} />
+              <ReportEmailPanel siteId={siteId} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-// Cover block: on screen a card, in the PDF the first page's title.
-export const ReportHeader = ({ report }) => (
-  <header className="bg-white rounded-3xl border border-brand-100 p-6 sm:p-8 print:border-0 print:p-0 print:pb-4 print:border-b-2 print:border-brand-600 print:rounded-none">
-    <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-brand-600">
-      <Logo variant="brand" className="h-4" /> Site health report
-    </div>
-    <h1 className="text-2xl sm:text-3xl font-extrabold text-ink mt-3">{report?.site.name || 'Loading…'}</h1>
-    {report && (
-      <p className="text-sm text-ink-muted mt-1">
-        <span className="font-mono">{report.site.url}</span> · {fmtDate(report.period.from)} – {fmtDate(report.period.to)} ({report.period.days} days) · prepared {fmtDate(report.generatedAt)}
-      </p>
-    )}
-  </header>
-);
+// Cover: a brand hero with the score on screen; a plain title block in the PDF.
+export const ReportHeader = ({ report }) => {
+  const score = report?.score.overall ?? null;
+  const [, word] = tone(score);
+  const ring = score == null ? '#b9bdd4' : score >= 90 ? '#3cc48c' : score >= 70 ? '#e3b23c' : '#e5536a';
+  const r = 46;
+  const c = 2 * Math.PI * r;
+  const u = report?.uptime;
+  return (
+    <>
+      <header className="print:hidden relative overflow-hidden rounded-3xl bg-linear-to-br from-brand-900 via-brand-700 to-brand-400 text-white px-6 sm:px-10 py-8 sm:py-10 shadow-frame">
+        <div className="absolute -top-24 -right-16 w-80 h-80 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
+        <div className="absolute -bottom-28 left-1/3 w-96 h-60 rounded-full bg-brand-300/20 blur-3xl" aria-hidden="true" />
+        <div className="relative flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-6">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 text-[11px] font-extrabold uppercase tracking-[0.2em] text-white/75">
+              <Logo variant="white" className="h-4" /> Site health report
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold mt-4 tracking-tight truncate">{report?.site.name || 'Loading…'}</h1>
+            {report && (
+              <>
+                <p className="text-sm text-white/75 mt-2 font-mono truncate">{report.site.url}</p>
+                <div className="flex flex-wrap gap-2 mt-5">
+                  <span className="px-3 py-1.5 rounded-full bg-white/15 text-xs font-bold">{fmtDate(report.period.from)} – {fmtDate(report.period.to)}</span>
+                  <span className="px-3 py-1.5 rounded-full bg-white/15 text-xs font-bold">Uptime {u.percent == null ? '—' : `${u.percent}%`}</span>
+                  <span className="px-3 py-1.5 rounded-full bg-white/15 text-xs font-bold">{u.incidentCount} incident{u.incidentCount === 1 ? '' : 's'}</span>
+                  <span className="px-3 py-1.5 rounded-full bg-white/15 text-xs font-bold">{report.actionPlan.length} to fix</span>
+                </div>
+              </>
+            )}
+          </div>
+          {report && (
+            <div className="shrink-0 self-start sm:self-center flex flex-col items-center">
+              <div className="relative w-32 h-32 rounded-full bg-white/10 backdrop-blur flex items-center justify-center">
+                <svg viewBox="0 0 108 108" className="absolute inset-0 w-full h-full" aria-hidden="true">
+                  <circle cx="54" cy="54" r={r} fill="none" stroke="rgba(255,255,255,.2)" strokeWidth="8" />
+                  {score != null && <circle cx="54" cy="54" r={r} fill="none" stroke={ring} strokeWidth="8" strokeLinecap="round" strokeDasharray={`${(score / 100) * c} ${c}`} transform="rotate(-90 54 54)" />}
+                </svg>
+                <div className="text-center" role="img" aria-label={score == null ? 'Health score not measured' : `Health score ${score} of 100, ${word}`}>
+                  <div className="text-4xl font-extrabold tabular-nums leading-none">{score ?? '—'}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-white/70 mt-1">of 100</div>
+                </div>
+              </div>
+              <span className="mt-2 text-xs font-bold text-white/85">{word}</span>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <header className="hidden print:block pb-4 border-b-2 border-brand-600">
+        <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-brand-600">
+          <Logo variant="brand" className="h-4" /> Site health report
+        </div>
+        <h1 className="text-3xl font-extrabold text-ink mt-3">{report?.site.name}</h1>
+        {report && (
+          <p className="text-sm text-ink-muted mt-1">
+            <span className="font-mono">{report.site.url}</span> · {fmtDate(report.period.from)} – {fmtDate(report.period.to)} ({report.period.days} days) · prepared {fmtDate(report.generatedAt)}
+          </p>
+        )}
+      </header>
+    </>
+  );
+};
 
 export default SiteReport;
