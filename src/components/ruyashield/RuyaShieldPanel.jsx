@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ShieldCheck, ExternalLink, RefreshCw } from 'lucide-react';
-import { fetchRuyaShieldForSite } from '../../services/ruyashield';
+import { ShieldCheck, ExternalLink, RefreshCw, ScanSearch } from 'lucide-react';
+import { fetchRuyaShieldForSite, requestRuyaShieldScan } from '../../services/ruyashield';
 import RuyaShieldModal from './RuyaShieldModal';
 
 const SEVERITIES = [
@@ -29,6 +29,7 @@ const RuyaShieldPanel = ({ siteId }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [showConnect, setShowConnect] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   const fetchReport = useCallback((refresh) => fetchRuyaShieldForSite(siteId, refresh)
     .then((data) => { setReport(data); setError(''); })
@@ -42,7 +43,33 @@ const RuyaShieldPanel = ({ siteId }) => {
     return fetchReport(refresh);
   };
 
+  // Opens the tab during the click (popup blockers allow that), then points it at RuyaShield's review page.
+  const requestScan = async () => {
+    const tab = window.open('about:blank', '_blank');
+    setScanning(true);
+    setError('');
+    try {
+      const { link } = await requestRuyaShieldScan(siteId);
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = link;
+      } else {
+        window.location.assign(link);
+      }
+    } catch (err) {
+      tab?.close();
+      setError(err.message);
+    } finally {
+      setScanning(false);
+    }
+  };
+
   if (report && !report.configured) return null;
+  const scanButton = report?.connected && report.scanRequests ? (
+    <button type="button" onClick={requestScan} disabled={scanning} className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-bold hover:bg-brand-700 disabled:opacity-50 shrink-0">
+      <ScanSearch size={15} /> {scanning ? 'Opening RuyaShield…' : 'Scan in RuyaShield'}
+    </button>
+  ) : null;
 
   const site = report?.site;
   const findings = site?.tracked ? site.findings : null;
@@ -92,11 +119,14 @@ const RuyaShieldPanel = ({ siteId }) => {
             <p className="text-sm text-ink-soft">
               <span className="font-semibold text-ink">{site.host}</span> is not in your RuyaShield organisation yet. Add and verify it there to start scanning.
             </p>
-            {report.appUrl && (
-              <a href={`${report.appUrl}/assets`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-brand-100 text-sm font-bold text-brand-700 hover:bg-brand-50 shrink-0">
-                Add in RuyaShield <ExternalLink size={14} />
-              </a>
-            )}
+            <div className="flex flex-wrap gap-2 shrink-0">
+              {report.appUrl && (
+                <a href={`${report.appUrl}/assets`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-brand-100 text-sm font-bold text-brand-700 hover:bg-brand-50 shrink-0">
+                  Add in RuyaShield <ExternalLink size={14} />
+                </a>
+              )}
+              {scanButton}
+            </div>
           </div>
         )}
 
@@ -142,9 +172,12 @@ const RuyaShieldPanel = ({ siteId }) => {
                   ? `Last assessment: ${ASSESSMENT_LABEL[last.status] || last.status}${last.finishedAt ? `, ${new Date(last.finishedAt).toLocaleString()}` : ''}${last.complete === false ? ' (some checks did not run)' : ''}`
                   : 'No assessment has run for this site yet.'}
               </span>
-              <a href={site.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-bold text-brand-700 hover:underline shrink-0">
-                Open in RuyaShield <ExternalLink size={14} />
-              </a>
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <a href={site.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-bold text-brand-700 hover:underline">
+                  Open in RuyaShield <ExternalLink size={14} />
+                </a>
+                {scanButton}
+              </div>
             </div>
           </>
         )}

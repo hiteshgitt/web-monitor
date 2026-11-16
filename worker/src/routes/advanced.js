@@ -9,7 +9,7 @@ import { liveStatsFor, recentChecks, serverInfo } from '../lib/stats.js';
 import { analyticsForSite } from '../lib/googleAnalytics.js';
 import { searchConsoleForSite } from '../lib/searchConsole.js';
 import { queueSecurityScan, readSecurityScan } from '../lib/securityScan.js';
-import { ruyashieldForSite } from '../lib/ruyashield.js';
+import { requestScan, ruyashieldForSite } from '../lib/ruyashield.js';
 import { readVitals, refreshVitals } from '../lib/webVitals.js';
 import { ApiError, daysAgo } from '../lib/util.js';
 
@@ -101,6 +101,13 @@ advanced.get('/security-scan/:id', async (c) => {
 advanced.get('/ruyashield/:id', async (c) => c.json(await ruyashieldForSite(c.env, c.get('user').id, c.get('website'), {
   refresh: c.req.query('refresh') === '1',
 })));
+
+// "Scan in RuyaShield": returns RuyaShield's review link; the browser opens it. Nothing is scanned yet.
+advanced.post('/ruyashield/:id/scan', async (c) => {
+  const site = c.get('website');
+  const [scan, rs] = await Promise.all([readSecurityScan(c.env, site), ruyashieldForSite(c.env, c.get('user').id, site)]);
+  return c.json(await requestScan(c.env, site, scan, rs.site?.tracked ? rs.site.host : null));
+});
 
 advanced.get('/vitals/:id', async (c) => c.json(await readVitals(c.env, c.get('website'))));
 

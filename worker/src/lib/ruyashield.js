@@ -58,6 +58,7 @@ const readConnection = (env, userId) => env.DB
 
 const publicStatus = (env, row) => ({
   configured: ruyashieldConfigured(env),
+  scanRequests: handoffConfigured(env),
   appUrl: ruyashieldConfigured(env) ? baseUrl(env) : null,
   connected: Boolean(row),
   orgName: row?.org_name || null,
@@ -166,4 +167,65 @@ export async function refreshRuyaShieldAlerts(env) {
     if (r.error) failed += 1;
   }
   return { refreshed: results.length, failed };
+}
+
+// ---------- "Scan in RuyaShield": a signed referral hand-off ----------
+// WebMonitor only suggests a scan. RuyaShield shows the person a review page; nothing is scanned until they
+// consent there and the site is a verified asset of their organisation. Only the host and a short plain-text
+// note leave WebMonitor (no API keys, page content or monitoring data beyond the public check summary).
+
+export const handoffConfigured = (env) => ruyashieldConfigured(env) && String(env.RUYASHIELD_HANDOFF_SECRET || '').length >= 32;
+
+const toHex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+async function signHandoff(secret, timestamp, body) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return `sha256=${toHex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`)))}`;
+}
+
+// The public check WebMonitor already ran, as a short note for the RuyaShield review page.
+export function handoffSummary(site, scan) {
+  const lines = [`Requested from WebMonitor for ${site.name}.`];
+  if (scan?.ssl?.grade) lines.push(`SSL Labs grade: ${scan.ssl.grade}.`);
+  if (scan?.headers?.missing?.length) lines.push(`Missing security headers: ${scan.headers.missing.join(', ')}.`);
+  if (scan?.malware?.status === 'flagged') lines.push('Google Safe Browsing lists this site.');
+  return lines.join(' ').slice(0, 1000);
+}
+
+// `trackedHost`: the name RuyaShield already knows this site by (bare or www.), so its review page finds the asset.
+export async function requestScan(env, site, scan, trackedHost = null) {
+  if (!handoffConfigured(env)) throw new ApiError(503, 'Scanning from WebMonitor is not turned on yet.');
+  const candidates = hostsForUrl(site.url);
+  const host = candidates.includes(trackedHost) ? trackedHost : candidates[candidates.length - 1];
+  if (!host) throw new ApiError(400, 'This site does not have a valid address.');
+  const body = JSON.stringify({
+    nonce: `wm-${crypto.randomUUID()}`,
+    externalRef: `wm-${site.id}`.slice(0, 100),
+    signalType: 'webmonitor.scan_request',
+    host,
+    observedAt: nowIso(),
+    summary: handoffSummary(site, scan),
+  });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  let res;
+  try {
+    res = await fetch(`${baseUrl(env)}/v1/integrations/webmonitor/handoffs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-WebMonitor-Timestamp': timestamp,
+        'X-WebMonitor-Signature': await signHandoff(env.RUYASHIELD_HANDOFF_SECRET, timestamp, body),
+      },
+      body,
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (error) {
+    throw new ApiError(502, `RuyaShield could not be reached (${error.message}).`);
+  }
+  const data = await res.json().catch(() => null);
+  if (res.status === 202 && data?.link) return { link: data.link, expiresAt: data.expiresAt };
+  const code = data?.error?.code;
+  if (code === 'invalid_host') throw new ApiError(400, 'RuyaShield cannot scan this address.');
+  console.error('RuyaShield handoff failed', res.status, code);
+  throw new ApiError(502, 'RuyaShield did not accept the scan request. Try again later.');
 }

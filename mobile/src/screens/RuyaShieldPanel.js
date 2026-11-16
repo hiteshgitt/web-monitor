@@ -24,6 +24,7 @@ export default function RuyaShieldPanel({ siteId, session, onExpired }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   const load = useCallback((refresh) => api(`/advanced/ruyashield/${siteId}${refresh ? '?refresh=1' : ''}`, { token: session.token, timeoutMs: 20000 })
     .then((next) => { setReport(next); setError(''); })
@@ -37,6 +38,25 @@ export default function RuyaShieldPanel({ siteId, session, onExpired }) {
   const findings = site?.tracked ? site.findings : null;
   const last = site?.tracked ? site.lastAssessment : null;
   const refresh = () => { setLoading(true); load(true); };
+  // Sends a signed scan request; RuyaShield's review page opens in the browser. Nothing is scanned yet.
+  const requestScan = async () => {
+    setScanning(true);
+    setError('');
+    try {
+      const { link } = await api(`/advanced/ruyashield/${siteId}/scan`, { method: 'POST', token: session.token, timeoutMs: 20000 });
+      await Linking.openURL(link);
+    } catch (err) {
+      if (err.status === 401) onExpired();
+      else setError(err.message);
+    } finally {
+      setScanning(false);
+    }
+  };
+  const scanButton = report?.connected && report.scanRequests ? (
+    <Pressable onPress={requestScan} disabled={scanning} style={[styles.primary, styles.scan, scanning && styles.off]}>
+      {scanning ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Scan in RuyaShield</Text>}
+    </Pressable>
+  ) : null;
 
   return (
     <Panel title="RuyaShield">
@@ -73,6 +93,7 @@ export default function RuyaShieldPanel({ siteId, session, onExpired }) {
               <Text style={styles.link}>Add in RuyaShield ›</Text>
             </Pressable>
           ) : null}
+          {scanButton}
         </>
       ) : null}
 
@@ -108,6 +129,7 @@ export default function RuyaShieldPanel({ siteId, session, onExpired }) {
           <Pressable onPress={() => Linking.openURL(site.link)} style={styles.open}>
             <Text style={styles.link}>Open in RuyaShield ›</Text>
           </Pressable>
+          {scanButton}
         </>
       ) : null}
 
@@ -141,4 +163,6 @@ const styles = StyleSheet.create({
   badge: { overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, fontSize: 10, fontWeight: '800' },
   findingTitle: { flex: 1, fontSize: 14, color: colors.ink },
   open: { marginTop: 10 },
+  scan: { marginTop: 12 },
+  off: { opacity: 0.5 },
 });

@@ -15,3 +15,4 @@ export const fetchRuyaShieldStatus = () => call('/integrations/ruyashield');
 export const connectRuyaShield = (token) => call('/integrations/ruyashield', { method: 'PUT', body: JSON.stringify({ token }) });
 export const disconnectRuyaShield = () => call('/integrations/ruyashield', { method: 'DELETE' });
 export const fetchRuyaShieldForSite = (siteId, refresh = false) => call(`/advanced/ruyashield/${siteId}${refresh ? '?refresh=1' : ''}`);
+export const requestRuyaShieldScan = (siteId) => call(`/advanced/ruyashield/${siteId}/scan`, { method: 'POST' });
