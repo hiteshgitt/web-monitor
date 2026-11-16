@@ -9,6 +9,7 @@ import LegalPage from './components/site/LegalPage';
 import DeleteAccountPage from './components/site/DeleteAccountPage';
 import IntegrationsPage from './components/site/IntegrationsPage';
 import StatusPage from './components/site/StatusPage';
+import SiteReport from './components/report/SiteReport';
 
 const FullScreenLoader = () => (
   <div className="min-h-screen bg-canvas flex items-center justify-center">
@@ -39,6 +40,7 @@ const Root = () => (
         <Route path="/signup" element={<AuthPage mode="signup" />} />
         {/* Super admin: separate accounts and sign-in, not linked from the website */}
         <Route path="/ruyashield/*" element={<AdminApp />} />
+        <Route path="/app/report/:siteId" element={<RequireAuth><SiteReport /></RequireAuth>} />
         <Route path="/app/*" element={<RequireAuth><App /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>

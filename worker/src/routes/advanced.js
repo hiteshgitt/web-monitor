@@ -11,6 +11,7 @@ import { searchConsoleForSite } from '../lib/searchConsole.js';
 import { queueSecurityScan, readSecurityScan } from '../lib/securityScan.js';
 import { requestScan, ruyashieldForSite } from '../lib/ruyashield.js';
 import { readVitals, refreshVitals } from '../lib/webVitals.js';
+import { buildReport, REPORT_PERIODS } from '../lib/report.js';
 import { ApiError, daysAgo } from '../lib/util.js';
 
 const advanced = new Hono();
@@ -107,6 +108,13 @@ advanced.post('/ruyashield/:id/scan', async (c) => {
   const site = c.get('website');
   const [scan, rs] = await Promise.all([readSecurityScan(c.env, site), ruyashieldForSite(c.env, c.get('user').id, site)]);
   return c.json(await requestScan(c.env, site, scan, rs.site?.tracked ? rs.site.host : null));
+});
+
+// Site health report (uptime, speed, public checks and RuyaShield) for the last 7, 30 or 90 days.
+advanced.get('/report/:id', async (c) => {
+  const days = Number(c.req.query('days')) || 30;
+  if (!REPORT_PERIODS.includes(days)) throw new ApiError(400, `Choose a period of ${REPORT_PERIODS.join(', ')} days.`);
+  return c.json(await buildReport(c.env, c.get('user').id, c.get('website'), days));
 });
 
 advanced.get('/vitals/:id', async (c) => c.json(await readVitals(c.env, c.get('website'))));

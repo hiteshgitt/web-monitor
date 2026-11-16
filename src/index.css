@@ -571,3 +571,9 @@
 .spacing-lg { gap: 1.5rem; } /* 24px */
 .spacing-xl { gap: 2rem; } /* 32px */
 
+
+/* Site health report: print on white, A4 with a small margin. */
+@media print {
+  @page { size: A4; margin: 12mm; }
+  html, body { background: #fff !important; }
+}
