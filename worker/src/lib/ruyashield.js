@@ -7,6 +7,8 @@ import { ApiError, nowIso, parseJson } from './util.js';
 
 const TOKEN_PATTERN = /^rs_[A-Za-z0-9_-]{20,100}$/;
 const CACHE_MINUTES = 10;
+// While a site shows "not in RuyaShield yet" the customer is probably adding it there right now.
+const UNTRACKED_CACHE_MINUTES = 1;
 const MAX_HOSTS = 100;
 
 export const ruyashieldConfigured = (env) => Boolean(env.RUYASHIELD_URL);
@@ -93,9 +95,11 @@ export async function disconnect(env, userId) {
 // One call covers every site the customer monitors; the answer is cached for a few minutes.
 async function postureForUser(env, userId, row, { refresh = false, needHosts = [] } = {}) {
   const cached = parseJson(row.posture);
-  const fresh = row.posture_at && Date.now() - Date.parse(row.posture_at) < CACHE_MINUTES * 60 * 1000;
   // A site added since the last call is not in the cached answer yet.
   const covers = cached && needHosts.every((h) => cached.hosts?.some((entry) => entry.host === h));
+  const tracked = covers && needHosts.some((h) => cached.hosts.some((entry) => entry.host === h && entry.tracked));
+  const maxAge = (tracked ? CACHE_MINUTES : UNTRACKED_CACHE_MINUTES) * 60 * 1000;
+  const fresh = row.posture_at && Date.now() - Date.parse(row.posture_at) < maxAge;
   if (fresh && covers && !refresh) return { data: cached, fetchedAt: row.posture_at };
 
   const { results } = await env.DB.prepare('SELECT url FROM websites WHERE owner_id = ?').bind(userId).all();
