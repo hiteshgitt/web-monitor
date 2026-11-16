@@ -175,3 +175,15 @@ npx wrangler d1 export web-monitor --remote --output=backup-$(date +%F).sql
 ```
 D1 also keeps **Time Travel** (point-in-time restore of the last 7 days on the free plan):
 `npx wrangler d1 time-travel restore web-monitor --timestamp=<ISO time>`.
+
+## RuyaShield integration
+
+Customers can connect their RuyaShield organisation (account menu → **RuyaShield connection**) and see each
+site's open findings on the Security tab of the Advanced view (Pro).
+
+1. Apply the migration: `npm run db:migrate:remote` (adds `ruyashield_connections`).
+2. Set `RUYASHIELD_URL` in `wrangler.jsonc` to RuyaShield's public HTTPS origin, no trailing slash. Empty keeps the feature hidden.
+3. RuyaShield must expose `GET /v1/integrations/webmonitor/posture`. Customers create a token there under
+   Settings → API tokens with the `assets:read` and `findings:read` scopes.
+
+Tokens are encrypted with `JWT_SECRET` (same as the Google tokens). Rotating `JWT_SECRET` means customers reconnect.

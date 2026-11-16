@@ -21,6 +21,7 @@ import GoogleAnalyticsPanel from './shell/GoogleAnalyticsPanel';
 import SearchConsolePanel from './shell/SearchConsolePanel';
 import WebVitalsPanel from './shell/WebVitalsPanel';
 import SecurityScanPanel from './shell/SecurityScanPanel';
+import RuyaShieldPanel from './ruyashield/RuyaShieldPanel';
 
 // Used and total gigabytes from a saved performance payload. Null until the site has reported disk bytes.
 function transferOf(bandwidth, performance) {
@@ -1383,6 +1384,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
         {activeTab === 'security' && (
           <div className="space-y-6">
             <SecurityScanPanel siteId={selectedWebsite._id} />
+            <RuyaShieldPanel siteId={selectedWebsite._id} />
             <div className="bg-white rounded-2xl shadow-card border border-brand-100 overflow-hidden">
               <div className="px-8 py-6 border-b border-brand-100 flex items-center justify-between bg-linear-to-r from-gray-50 to-white">
                 <h3 className="text-sm font-extrabold text-ink uppercase tracking-widest flex items-center gap-3">

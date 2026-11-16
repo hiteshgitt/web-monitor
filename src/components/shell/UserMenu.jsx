@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LogOut, Sparkles, Globe, BellRing, Radio, Copy, Check, Trash2 } from 'lucide-react';
+import { LogOut, Sparkles, Globe, BellRing, Radio, Copy, Check, Trash2, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { API_BASE_URL } from '../../config/api';
 import { apiFetch } from '../../services/session';
@@ -9,7 +9,7 @@ const initials = (user) => (user?.name || user?.email || '?')
   .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('');
 
 // Avatar button with account details, plan, alert settings and sign-out
-const UserMenu = ({ onUpgrade, onAlertSettings, placement = 'right' }) => {
+const UserMenu = ({ onUpgrade, onAlertSettings, onRuyaShield, placement = 'right' }) => {
   const { user, isPro, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -63,6 +63,11 @@ const UserMenu = ({ onUpgrade, onAlertSettings, placement = 'right' }) => {
           <button type="button" onClick={() => { setOpen(false); onAlertSettings?.(); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-brand-50">
             <BellRing size={16} /> Alert settings
           </button>
+          {onRuyaShield && (
+            <button type="button" onClick={() => { setOpen(false); onRuyaShield(); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold text-ink-soft hover:bg-brand-50">
+              <ShieldCheck size={16} /> RuyaShield connection
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {

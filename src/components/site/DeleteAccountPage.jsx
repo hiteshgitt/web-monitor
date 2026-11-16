@@ -11,7 +11,7 @@ const REMOVED = [
   'Your account, name, email address and password hash, or your Google sign-in link',
   'Your websites, their API keys, check history, incidents and saved scan results',
   'Your alerts, alert settings and the phones and browsers registered for push',
-  'Your connected Google Analytics and Search Console access tokens',
+  'Your connected Google Analytics and Search Console access tokens, and your RuyaShield API token',
 ];
 
 const KEPT = [

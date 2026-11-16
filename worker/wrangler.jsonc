@@ -64,7 +64,9 @@
     "ALLOWED_ORIGINS": "",
     // Browser push (Web Push). The matching private key is the VAPID_PRIVATE_JWK secret; see deploy/CLOUDFLARE.md
     "VAPID_PUBLIC_KEY": "BCJ4qOYn7CslcpDg5cSTgbueenp-9ArETwhJ0xfjSTFwwRcSHRE_VhhswEduHtRsuB4kNVNN0hBBHK4FGPnqIIU",
-    "VAPID_SUBJECT": "mailto:hiteshgml@gmail.com"
+    "VAPID_SUBJECT": "mailto:hiteshgml@gmail.com",
+    // RuyaShield base URL for the "Connect RuyaShield" integration (no trailing slash). Empty keeps it off.
+    "RUYASHIELD_URL": ""
   },
 
   "observability": { "enabled": true }

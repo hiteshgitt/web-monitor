@@ -7,6 +7,7 @@ import AddWebsiteModal from '../AddWebsiteModal';
 import EditWebsiteModal from '../EditWebsiteModal';
 import NotificationPanel from '../NotificationPanel';
 import AlertSettingsModal from '../AlertSettingsModal';
+import RuyaShieldModal from '../ruyashield/RuyaShieldModal';
 import useNotifications from '../../hooks/useNotifications';
 import { useAuth } from '../../contexts/AuthContext';
 import UserMenu from './UserMenu';
@@ -109,6 +110,7 @@ const AppShell = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   const [showAlertSettings, setShowAlertSettings] = useState(false);
+  const [showRuyaShield, setShowRuyaShield] = useState(false);
   const { notifications, unread: notificationCount, markAllRead } = useNotifications();
   const { isPro, user } = useAuth();
   const [showUpgrade, setShowUpgrade] = useState(false);
@@ -269,7 +271,7 @@ const AppShell = ({
           {selectedWebsite && <RailButton icon={BarChart3} label="Advanced analytics (Pro)" pro={!isPro} onClick={() => onOpenAdvanced(selectedWebsite)} />}
           <div className="flex-1" />
           <RailButton icon={RefreshCw} label="Reload data" onClick={() => onRefresh?.()} />
-          <div className="mt-2"><UserMenu onUpgrade={() => setShowUpgrade(true)} onAlertSettings={() => setShowAlertSettings(true)} /></div>
+          <div className="mt-2"><UserMenu onUpgrade={() => setShowUpgrade(true)} onAlertSettings={() => setShowAlertSettings(true)} onRuyaShield={() => setShowRuyaShield(true)} /></div>
         </nav>
 
         {/* Site list */}
@@ -286,7 +288,7 @@ const AppShell = ({
             <div className="flex gap-1">
               <RailButton icon={Bell} label="Alerts" badge={notificationCount} onClick={() => setShowNotifications(true)} />
               <RailButton icon={Plus} label="Add site" onClick={() => setShowAdd(true)} />
-              <UserMenu placement="below" onUpgrade={() => setShowUpgrade(true)} onAlertSettings={() => setShowAlertSettings(true)} />
+              <UserMenu placement="below" onUpgrade={() => setShowUpgrade(true)} onAlertSettings={() => setShowAlertSettings(true)} onRuyaShield={() => setShowRuyaShield(true)} />
             </div>
           </div>
           <div className="flex-1 min-h-0">
@@ -380,6 +382,7 @@ const AppShell = ({
         onMarkRead={markAllRead}
       />
       {showAlertSettings && <AlertSettingsModal onClose={() => setShowAlertSettings(false)} />}
+      {showRuyaShield && <RuyaShieldModal onClose={() => setShowRuyaShield(false)} />}
     </div>
   );
 };

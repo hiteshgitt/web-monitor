@@ -16,6 +16,7 @@ import advancedRoutes from './routes/advanced.js';
 import authRoutes from './routes/auth.js';
 import { adminNotifications, customerNotifications, pushPull } from './routes/notifications.js';
 import billingRoutes, { razorpayWebhook } from './routes/billing.js';
+import integrationRoutes from './routes/integrations.js';
 import statusRoutes from './routes/status.js';
 import websiteRoutes from './routes/websites.js';
 import { handleCallback as googleAnalyticsCallback } from './lib/googleAnalytics.js';
@@ -52,6 +53,9 @@ app.route('/advanced', advancedRoutes);
 app.post('/billing/razorpay', razorpayWebhook);
 app.use('/billing/*', requireAuth);
 app.route('/billing', billingRoutes);
+
+app.use('/integrations/*', requireAuth);
+app.route('/integrations', integrationRoutes);
 
 app.use('/notifications', requireAuth);
 app.use('/notifications/*', requireAuth);
