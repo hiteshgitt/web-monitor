@@ -68,7 +68,10 @@
     // RuyaShield base URL for the "Connect RuyaShield" integration (no trailing slash). Empty keeps it off.
     "RUYASHIELD_URL": "https://ruyashield.ruyalab.com",
     // Public address of this app, used in shared report links and report emails (no trailing slash)
-    "APP_URL": "https://webmonitor.ruyalab.com"
+    "APP_URL": "https://webmonitor.ruyalab.com",
+    // Monthly report email (Resend). Stays off until this sender is set and the RESEND_API_KEY secret exists;
+    // the domain must be verified in Resend first.
+    "REPORT_EMAIL_FROM": ""
   },
 
   "observability": { "enabled": true }

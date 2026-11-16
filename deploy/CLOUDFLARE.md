@@ -187,3 +187,18 @@ site's open findings on the Security tab of the Advanced view (Pro).
    Settings → API tokens with the `assets:read` and `findings:read` scopes.
 
 Tokens are encrypted with `JWT_SECRET` (same as the Google tokens). Rotating `JWT_SECRET` means customers reconnect.
+
+## Monthly report email (Resend)
+
+The Pro "Monthly email" on the site health report sends through [Resend](https://resend.com). It stays off
+(the panel says "not turned on yet") until both of these exist:
+
+1. In Resend, add and verify the sending domain (Domains → Add domain → `ruyalab.com`, then add the DNS records
+   it lists in Cloudflare DNS). Create an API key with "Sending access".
+2. `cd worker && npx wrangler secret put RESEND_API_KEY` (paste the key), and set the sender in
+   `wrangler.jsonc`: `"REPORT_EMAIL_FROM": "Web Monitor <reports@ruyalab.com>"`, then `npm run deploy`.
+
+The 15-minute cron sends each enabled site's email once a month, from the 1st (UTC), at most 5 sites per run;
+a failed send is retried after 6 hours. Every email has a one-click unsubscribe link
+(`/api/report-email/unsubscribe`, signed with `JWT_SECRET`) that removes only that address.
+`RESEND_API_BASE` exists only for local testing against a stand-in server; never set it in production.

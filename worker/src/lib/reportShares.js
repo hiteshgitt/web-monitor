@@ -35,9 +35,10 @@ export async function createShare(env, userId, siteId, input = {}) {
   const days = Number(input.days) || 30;
   const expiresInDays = Number(input.expiresInDays) || 30;
   if (!REPORT_PERIODS.includes(days)) throw new ApiError(400, `Choose a report period of ${REPORT_PERIODS.join(', ')} days.`);
-  if (!SHARE_EXPIRY_DAYS.includes(expiresInDays)) throw new ApiError(400, `Choose an expiry of ${SHARE_EXPIRY_DAYS.join(', ')} days.`);
+  if (!input.system && !SHARE_EXPIRY_DAYS.includes(expiresInDays)) throw new ApiError(400, `Choose an expiry of ${SHARE_EXPIRY_DAYS.join(', ')} days.`);
   const label = String(input.label || '').trim().slice(0, 80);
-  const active = await listShares(env, userId, siteId);
+  // Links made for the monthly email (system) do not count against the customer's own limit.
+  const active = input.system ? [] : (await listShares(env, userId, siteId)).filter((sh) => !sh.label.startsWith('Monthly email '));
   if (active.length >= MAX_ACTIVE_SHARES_PER_SITE) {
     throw new ApiError(409, `A site can have at most ${MAX_ACTIVE_SHARES_PER_SITE} active links. Revoke one first.`);
   }

@@ -29,3 +29,7 @@ export async function fetchSharedReport(token) {
   if (!response.ok) throw new Error(data.error || 'This report could not be loaded.');
   return data;
 }
+
+export const fetchReportEmail = (siteId) => call(`/websites/${siteId}/report/email`);
+export const saveReportEmail = (siteId, body) => call(`/websites/${siteId}/report/email`, { method: 'PUT', body: JSON.stringify(body) });
+export const sendReportEmailNow = (siteId) => call(`/websites/${siteId}/report/email/send`, { method: 'POST' });

@@ -21,6 +21,7 @@ import integrationRoutes from './routes/integrations.js';
 import statusRoutes from './routes/status.js';
 import websiteRoutes from './routes/websites.js';
 import { sharedReport } from './lib/reportShares.js';
+import { sendDueReportEmails, unsubscribe } from './lib/reportEmail.js';
 import { handleCallback as googleAnalyticsCallback } from './lib/googleAnalytics.js';
 import { handleCallback as searchConsoleCallback } from './lib/searchConsole.js';
 
@@ -50,6 +51,18 @@ app.get('/shared-report/:token', async (c) => {
   c.header('X-Robots-Tag', 'noindex');
   return c.json(await sharedReport(c.env, c.req.param('token')));
 });
+
+// One-click unsubscribe from a report email (GET from the link, POST from mail clients' unsubscribe button).
+const reportUnsubscribe = async (c) => {
+  const ok = await unsubscribe(c.env, c.req.query('s'), c.req.query('a'), c.req.query('t'));
+  if (c.req.method === 'POST') return c.body(null, ok ? 200 : 400);
+  return c.html(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Web Monitor</title>
+<body style="font-family:Arial,sans-serif;background:#eef1fb;color:#1f2557;display:grid;place-items:center;min-height:100vh;margin:0">
+<div style="background:#fff;border-radius:16px;padding:28px;max-width:420px;margin:16px"><h1 style="font-size:20px;margin:0 0 8px">${ok ? 'You are unsubscribed' : 'This link is not valid'}</h1>
+<p style="margin:0;color:#4a5079">${ok ? 'You will not receive this site health report any more.' : 'The unsubscribe link is incomplete. Copy the whole link from the email.'}</p></div></body>`, ok ? 200 : 400);
+};
+app.get('/report-email/unsubscribe', reportUnsubscribe);
+app.post('/report-email/unsubscribe', reportUnsubscribe);
 
 app.use('/auth/*', authRateLimit);
 app.route('/auth', authRoutes);
@@ -98,6 +111,10 @@ export default {
   async scheduled(controller, env, ctx) {
     // PageSpeed is its own run so it does not use the health-check request budget.
     if (controller.cron === '*/15 * * * *') {
+      ctx.waitUntil(sendDueReportEmails(env, new Date(controller.scheduledTime)).then(
+        (summary) => console.log('Report emails', summary),
+        (error) => console.error('Report emails failed:', error),
+      ));
       ctx.waitUntil(refreshRuyaShieldAlerts(env).then(
         (summary) => console.log('RuyaShield alerts', summary),
         (error) => console.error('RuyaShield alerts failed:', error),

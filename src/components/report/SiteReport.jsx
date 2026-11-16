@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { ArrowLeft, Download, ExternalLink, Lock, ShieldCheck, Sparkles } from 'lucide-react';
 import UpgradeModal from '../pro/UpgradeModal';
 import ReportSharePanel from './ReportSharePanel';
+import ReportEmailPanel from './ReportEmailPanel';
 import Logo from '../Logo';
 import { fetchSiteReport } from '../../services/report';
 import { useAuth } from '../../contexts/AuthContext';
@@ -369,7 +370,12 @@ const SiteReport = () => {
         {error && <p className="text-sm text-bad bg-bad-soft rounded-xl px-4 py-3">{error}</p>}
         {loading && <p className="text-sm text-ink-muted">Building the report…</p>}
 
-        {report && !loading && !preview && <ReportSharePanel siteId={siteId} days={days} />}
+        {report && !loading && !preview && (
+          <div className="grid gap-5 lg:grid-cols-2 print:hidden">
+            <ReportSharePanel siteId={siteId} days={days} />
+            <ReportEmailPanel siteId={siteId} />
+          </div>
+        )}
         {report && !loading && preview && <PreviewReport report={report} onUpgrade={() => setShowUpgrade(true)} />}
 
         {report && !loading && !preview && <FullReport report={report} />}

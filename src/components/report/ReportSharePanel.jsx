@@ -63,9 +63,9 @@ const ReportSharePanel = ({ siteId, days }) => {
       </div>
       <p className="text-sm text-ink-soft mt-1">A private link to this {days}-day report. Your client opens it without an account and can download the PDF. Links stop working when they expire, when you revoke them, or if your Pro plan ends.</p>
 
-      <form onSubmit={create} className="mt-4 flex flex-col sm:flex-row gap-2">
+      <form onSubmit={create} className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
         <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder="Who is it for? (optional)"
-          className="flex-1 min-w-0 rounded-xl border border-brand-100 px-3 py-2.5 text-sm" aria-label="Link label" />
+          className="sm:col-span-2 min-w-0 rounded-xl border border-brand-100 px-3 py-2.5 text-sm" aria-label="Link label" />
         <select value={expiresInDays} onChange={(e) => setExpiresInDays(Number(e.target.value))} className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm" aria-label="Link expires after">
           {EXPIRY.map((d) => <option key={d} value={d}>Expires in {d} days</option>)}
         </select>

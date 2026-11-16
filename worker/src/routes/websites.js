@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { isPro, loadOwnedWebsite, requirePro } from '../lib/auth.js';
 import { buildReport, FREE_REPORT_DAYS, previewReport, REPORT_PERIODS } from '../lib/report.js';
 import { createShare, listShares, revokeShare } from '../lib/reportShares.js';
+import { getReportEmail, saveReportEmail, sendReportEmail } from '../lib/reportEmail.js';
 import { attachProperty, connectUrl, pendingProperties } from '../lib/googleAnalytics.js';
 import { attachSite, connectUrl as searchConsoleConnectUrl, pendingSites } from '../lib/searchConsole.js';
 import { checkAndRecord, performHealthCheck } from '../lib/monitor.js';
@@ -151,6 +152,21 @@ websites.post('/:id/report/shares', requirePro, async (c) => {
 websites.delete('/:id/report/shares/:shareId', requirePro, async (c) => {
   await revokeShare(c.env, c.get('user').id, c.get('website').id, c.req.param('shareId'));
   return c.json({ ok: true });
+});
+
+// Monthly report email (Pro).
+websites.get('/:id/report/email', requirePro, async (c) => c.json(await getReportEmail(c.env, c.get('user').id, c.get('website').id)));
+websites.put('/:id/report/email', requirePro, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  return c.json(await saveReportEmail(c.env, c.get('user').id, c.get('website').id, body));
+});
+// Sends this month's email now to the saved recipients (a test, or after a change).
+websites.post('/:id/report/email/send', requirePro, async (c) => {
+  const user = c.get('user');
+  const site = c.get('website');
+  const saved = await getReportEmail(c.env, user.id, site.id);
+  if (!saved.recipients.length) throw new ApiError(400, 'Save at least one address first.');
+  return c.json(await sendReportEmail(c.env, user.id, site, saved.recipients));
 });
 
 websites.get('/:id/monitoring', async (c) => {
