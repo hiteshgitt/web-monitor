@@ -9,6 +9,7 @@ export const ALERT_TYPES = [
   { key: 'plugins', label: 'Plugin updates', description: 'When plugins or packages have updates waiting.' },
   { key: 'ssl', label: 'SSL problems', description: 'When HTTPS stops working on a site.' },
   { key: 'security', label: 'Security score', description: 'When a site’s security score drops below 70.' },
+  { key: 'ruyashield', label: 'RuyaShield findings', description: 'When RuyaShield finds a new critical or high issue on a site, and when they are all fixed.' },
   { key: 'account', label: 'Account and plan', description: 'Pro plan approved or declined.' },
 ];
 export const ADMIN_ALERT_TYPES = [
@@ -20,6 +21,7 @@ export const ADMIN_ALERT_TYPES = [
 const CATEGORY = {
   site_down: 'downtime', site_up: 'downtime', slow: 'slow', slow_ok: 'slow', plugins: 'plugins',
   ssl_off: 'ssl', ssl_ok: 'ssl', security_low: 'security', pro_approved: 'account', pro_declined: 'account',
+  ruyashield_critical: 'ruyashield', ruyashield_high: 'ruyashield', ruyashield_ok: 'ruyashield',
   pro_request: 'admin_requests', ai_report: 'admin_requests', signup: 'admin_signups', account_deleted: 'admin_signups',
 };
 export const categoryOf = (type) => CATEGORY[type] || type;
@@ -106,4 +108,49 @@ export function alertStatements(db, site, result, at = new Date()) {
     statements.push(db.prepare('UPDATE websites SET alert_state = ? WHERE id = ?').bind(JSON.stringify(state), site.id));
   }
   return statements;
+}
+
+// RuyaShield: alerts when open critical/high findings on a site go up, and an all-clear when they reach zero.
+// `before` is the per-host state from the last answer alerts were raised against; a host seen for the first
+// time only sets the baseline, so connecting does not announce findings the customer can already see.
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+export function ruyashieldAlerts(sites, before, posture) {
+  const state = { ...(before || {}) };
+  const alerts = [];
+  const byHost = new Map((posture?.hosts || []).filter((h) => h.tracked && h.findings).map((h) => [h.host, h]));
+  const seen = new Set();
+  for (const site of sites) {
+    let host;
+    try { host = new URL(site.url).hostname.toLowerCase(); } catch { continue; }
+    const entry = byHost.get(host) || byHost.get(host.replace(/^www\./, ''));
+    if (!entry) continue;
+    const { critical = 0, high = 0 } = entry.findings.open;
+    const titles = entry.findings.top.filter((f) => f.severity === 'critical' || f.severity === 'high').map((f) => f.title);
+    const prev = state[entry.host];
+    seen.add(entry.host);
+    if (prev) {
+      const fresh = titles.filter((t) => !(prev.titles || []).includes(t));
+      const detail = fresh.length ? fresh.join('; ') : 'Open the Security tab to see the details.';
+      if (critical > prev.critical) {
+        alerts.push({ userId: site.owner_id, websiteId: site.id, type: 'ruyashield_critical',
+          title: `${plural(critical - prev.critical, 'new critical finding')} on ${site.name}`, body: detail });
+      } else if (high > prev.high) {
+        alerts.push({ userId: site.owner_id, websiteId: site.id, type: 'ruyashield_high',
+          title: `${plural(high - prev.high, 'new high finding')} on ${site.name}`, body: detail });
+      } else if (prev.critical + prev.high > 0 && critical + high === 0) {
+        alerts.push({ userId: site.owner_id, websiteId: site.id, type: 'ruyashield_ok',
+          title: `No critical or high findings left on ${site.name}`, body: 'RuyaShield reports them all fixed or resolved.' });
+      }
+    }
+  }
+  for (const host of seen) {
+    const entry = byHost.get(host);
+    state[host] = {
+      critical: entry.findings.open.critical || 0,
+      high: entry.findings.open.high || 0,
+      titles: entry.findings.top.filter((f) => f.severity === 'critical' || f.severity === 'high').map((f) => f.title),
+    };
+  }
+  return { alerts, state };
 }

@@ -9,6 +9,7 @@ import { authRateLimit, requireAuth, requirePro } from './lib/auth.js';
 import { runMonitoringCycle } from './lib/monitor.js';
 import { scanDueSecurity } from './lib/securityScan.js';
 import { scanDueVitals } from './lib/webVitals.js';
+import { refreshRuyaShieldAlerts } from './lib/ruyashield.js';
 import { ApiError } from './lib/util.js';
 import adminRoutes from './routes/admin.js';
 import adminAuthRoutes from './routes/adminAuth.js';
@@ -85,6 +86,10 @@ export default {
   async scheduled(controller, env, ctx) {
     // PageSpeed is its own run so it does not use the health-check request budget.
     if (controller.cron === '*/15 * * * *') {
+      ctx.waitUntil(refreshRuyaShieldAlerts(env).then(
+        (summary) => console.log('RuyaShield alerts', summary),
+        (error) => console.error('RuyaShield alerts failed:', error),
+      ));
       ctx.waitUntil((async () => {
         const security = await scanDueSecurity(env).catch((error) => {
           console.error('Security scan failed:', error);

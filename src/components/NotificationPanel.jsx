@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import {
-  Bell, X, AlertTriangle, CheckCircle2, Gauge, Puzzle, Lock, ShieldAlert, Sparkles, UserPlus, Settings, ChevronRight, Info,
+  Bell, X, AlertTriangle, CheckCircle2, Gauge, Puzzle, Lock, ShieldAlert, ShieldCheck, Sparkles, UserPlus, Settings, ChevronRight, Info,
 } from 'lucide-react';
 import { timeAgo } from '../utils/siteMetrics';
 
@@ -13,6 +13,9 @@ const LOOK = {
   ssl_off: { icon: Lock, tone: 'bg-bad-soft text-bad' },
   ssl_ok: { icon: Lock, tone: 'bg-good-soft text-good' },
   security_low: { icon: ShieldAlert, tone: 'bg-warn-soft text-warn' },
+  ruyashield_critical: { icon: ShieldAlert, tone: 'bg-bad-soft text-bad' },
+  ruyashield_high: { icon: ShieldAlert, tone: 'bg-warn-soft text-warn' },
+  ruyashield_ok: { icon: ShieldCheck, tone: 'bg-good-soft text-good' },
   pro_approved: { icon: Sparkles, tone: 'bg-brand-50 text-brand-600' },
   pro_declined: { icon: Info, tone: 'bg-canvas text-ink-muted' },
   pro_request: { icon: Sparkles, tone: 'bg-brand-50 text-brand-600' },

@@ -126,7 +126,7 @@ export const clock = (date) => (
 );
 
 export const tabForAlert = (type) => {
-  if (['plugins', 'ssl_off', 'ssl_ok', 'security_low'].includes(type)) return 'Security';
+  if (['plugins', 'ssl_off', 'ssl_ok', 'security_low', 'ruyashield_critical', 'ruyashield_high', 'ruyashield_ok'].includes(type)) return 'Security';
   if (['site_down', 'site_up', 'slow', 'slow_ok'].includes(type)) return 'History';
   return 'Overview';
 };
@@ -140,6 +140,9 @@ export const ALERT_KIND = {
   ssl_off: 'SSL problem',
   ssl_ok: 'SSL recovered',
   security_low: 'Security score',
+  ruyashield_critical: 'RuyaShield: new critical finding',
+  ruyashield_high: 'RuyaShield: new high finding',
+  ruyashield_ok: 'RuyaShield: all clear',
 };
 
 export const formatWhen = (iso) => (iso ? new Date(iso).toLocaleString() : '—');

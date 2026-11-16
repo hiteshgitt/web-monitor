@@ -3,6 +3,7 @@
 // monitored site's RuyaShield status: open findings by severity, the top few titles, and the last assessment.
 // Only RuyaShield's /v1/integrations/webmonitor/posture endpoint is called; it returns counts and titles, never evidence.
 import { decryptToken, encryptToken } from './googleAnalytics.js';
+import { notificationStatement, ruyashieldAlerts } from './alerts.js';
 import { ApiError, nowIso, parseJson } from './util.js';
 
 const TOKEN_PATTERN = /^rs_[A-Za-z0-9_-]{20,100}$/;
@@ -102,7 +103,7 @@ async function postureForUser(env, userId, row, { refresh = false, needHosts = [
   const fresh = row.posture_at && Date.now() - Date.parse(row.posture_at) < maxAge;
   if (fresh && covers && !refresh) return { data: cached, fetchedAt: row.posture_at };
 
-  const { results } = await env.DB.prepare('SELECT url FROM websites WHERE owner_id = ?').bind(userId).all();
+  const { results } = await env.DB.prepare('SELECT id, owner_id, name, url FROM websites WHERE owner_id = ?').bind(userId).all();
   const hosts = [...new Set(results.flatMap((site) => hostsForUrl(site.url)))].slice(0, MAX_HOSTS);
   let token;
   try {
@@ -121,8 +122,13 @@ async function postureForUser(env, userId, row, { refresh = false, needHosts = [
       .bind(res.message, userId).run();
     return rejected || !cached ? { error: res.message } : { data: cached, fetchedAt: row.posture_at, error: res.message };
   }
-  await env.DB.prepare('UPDATE ruyashield_connections SET posture = ?, posture_at = ?, last_error = NULL, org_name = ? WHERE user_id = ?')
-    .bind(JSON.stringify(res.data), now, String(res.data.org?.name || row.org_name).slice(0, 120), userId).run();
+  // Alerts are raised here, on every fresh answer (panel view or the 15-minute job), against alert_state.
+  const { alerts, state } = ruyashieldAlerts(results, parseJson(row.alert_state), res.data);
+  await env.DB.batch([
+    env.DB.prepare('UPDATE ruyashield_connections SET posture = ?, posture_at = ?, last_error = NULL, org_name = ?, alert_state = ? WHERE user_id = ?')
+      .bind(JSON.stringify(res.data), now, String(res.data.org?.name || row.org_name).slice(0, 120), JSON.stringify(state), userId),
+    ...alerts.map((alert) => notificationStatement(env.DB, alert)),
+  ]);
   return { data: res.data, fetchedAt: now };
 }
 
@@ -142,4 +148,22 @@ export async function ruyashieldForSite(env, userId, site, options = {}) {
     fetchedAt: fetchedAt || null,
     site: match || (data ? { host: candidates[0] || null, tracked: false } : null),
   };
+}
+
+// 15-minute job: refresh Pro customers whose answer is older than the display cache, so alerts arrive even
+// when nobody has the dashboard open. A few per run keeps it inside the Worker's per-invocation request budget.
+const REFRESH_PER_RUN = 10;
+
+export async function refreshRuyaShieldAlerts(env) {
+  if (!ruyashieldConfigured(env)) return { skipped: 'not-configured' };
+  const cutoff = new Date(Date.now() - CACHE_MINUTES * 60 * 1000).toISOString();
+  const { results } = await env.DB.prepare(`SELECT c.* FROM ruyashield_connections c JOIN users u ON u.id = c.user_id
+    WHERE (u.plan = 'pro' OR u.role = 'admin') AND (c.posture_at IS NULL OR c.posture_at < ?)
+    ORDER BY c.posture_at LIMIT ?`).bind(cutoff, REFRESH_PER_RUN).all();
+  let failed = 0;
+  for (const row of results) {
+    const r = await postureForUser(env, row.user_id, row, { refresh: true }).catch(() => ({ error: 'exception' }));
+    if (r.error) failed += 1;
+  }
+  return { refreshed: results.length, failed };
 }

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import AdvancedDashboard from '../AdvancedDashboard';
 import LockedAdvanced from '../pro/LockedAdvanced';
+import RuyaShieldPanel from '../ruyashield/RuyaShieldPanel';
 import ApiService from '../../services/api';
 import useMonitoringHistory from '../../hooks/useMonitoringHistory';
 import { useAuth } from '../../contexts/AuthContext';
@@ -136,6 +137,9 @@ const ALERT_KIND = {
   ssl_off: 'SSL problem',
   ssl_ok: 'SSL recovered',
   security_low: 'Security score',
+  ruyashield_critical: 'RuyaShield: new critical finding',
+  ruyashield_high: 'RuyaShield: new high finding',
+  ruyashield_ok: 'RuyaShield: all clear',
 };
 
 const AlertContext = ({ focus, incidents, incidentsLoaded, checks, checksLoaded, threshold, onDismiss }) => {
@@ -603,6 +607,7 @@ const SiteDetail = ({ site, tab = 'Overview', onTabChange, onBack, onEdit, onDel
                 itemsTitle="Recommendations" items={sec.recommendations || []} emptyText="No security recommendations."
               />
             )}
+            {tab === 'Security' && isPro && <div className="mt-6"><RuyaShieldPanel siteId={site._id} /></div>}
             {tab === 'History' && (
               <HistoryTab
                 checks={checks}

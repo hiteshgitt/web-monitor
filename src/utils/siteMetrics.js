@@ -67,7 +67,7 @@ export const formatSpan = (startedAt, endedAt) => {
 };
 
 export const tabForAlert = (type) => {
-  if (['plugins', 'ssl_off', 'ssl_ok', 'security_low'].includes(type)) return 'Security';
+  if (['plugins', 'ssl_off', 'ssl_ok', 'security_low', 'ruyashield_critical', 'ruyashield_high', 'ruyashield_ok'].includes(type)) return 'Security';
   // Downtime and slow alerts open History so the matching incident / check is visible under the detail card.
   if (['site_down', 'site_up', 'slow', 'slow_ok'].includes(type)) return 'History';
   return 'Overview';
