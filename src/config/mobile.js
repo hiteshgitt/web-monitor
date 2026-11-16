@@ -5,14 +5,14 @@
  */
 export const EARLY_ACCESS_APK = {
   enabled: true,
-  url: 'https://expo.dev/artifacts/eas/mXxDAgHE5yQcs6mjES3XEeHhySAAQ4f6eMx2-W3vTMU.apk',
-  version: '1.2.0',
-  sizeMb: 75,
-  nextVersion: '1.2.0',
+  url: 'https://expo.dev/artifacts/eas/5MyE1KsKdZ0G5BYTM-OnMH-uE3IoECNoXpsnY08X1nM.apk',
+  version: '1.3.0',
+  sizeMb: 72,
+  nextVersion: '1.3.0',
   whatsNew: [
+    'RuyaShield findings on each site’s Security tab (Pro)',
+    'Connect your RuyaShield account from the app menu',
+    'Alerts when RuyaShield finds a new critical or high issue',
     'Push notifications on Android when a site goes down or recovers',
-    'Delete your account from the app menu',
-    'Report a Zealot answer that looks wrong',
-    'A crashed screen now offers Try again instead of closing the app',
   ],
 };
