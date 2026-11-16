@@ -20,6 +20,7 @@ import billingRoutes, { razorpayWebhook } from './routes/billing.js';
 import integrationRoutes from './routes/integrations.js';
 import statusRoutes from './routes/status.js';
 import websiteRoutes from './routes/websites.js';
+import { sharedReport } from './lib/reportShares.js';
 import { handleCallback as googleAnalyticsCallback } from './lib/googleAnalytics.js';
 import { handleCallback as searchConsoleCallback } from './lib/searchConsole.js';
 
@@ -38,6 +39,17 @@ app.route('/status', statusRoutes);
 // Google redirects the browser here. The signed state identifies the user; there is no bearer token on a redirect.
 app.get('/analytics/google/callback', googleAnalyticsCallback);
 app.get('/search-console/google/callback', searchConsoleCallback);
+
+// A client opening a shared site health report link: no sign-in, the token is the permission.
+app.get('/shared-report/:token', async (c) => {
+  if (c.env.AUTH_LIMITER) {
+    const { success } = await c.env.AUTH_LIMITER.limit({ key: `report:${c.req.header('CF-Connecting-IP') || 'unknown'}` });
+    if (!success) throw new ApiError(429, 'Too many requests. Please wait a minute and try again.');
+  }
+  c.header('Cache-Control', 'no-store');
+  c.header('X-Robots-Tag', 'noindex');
+  return c.json(await sharedReport(c.env, c.req.param('token')));
+});
 
 app.use('/auth/*', authRateLimit);
 app.route('/auth', authRoutes);

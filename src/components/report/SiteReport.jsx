@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { ArrowLeft, Download, ExternalLink, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Download, ExternalLink, Lock, ShieldCheck, Sparkles } from 'lucide-react';
+import UpgradeModal from '../pro/UpgradeModal';
+import ReportSharePanel from './ReportSharePanel';
 import Logo from '../Logo';
 import { fetchSiteReport } from '../../services/report';
 import { useAuth } from '../../contexts/AuthContext';
@@ -120,7 +122,9 @@ const ResponseBars = ({ daily }) => {
   );
 };
 
-const SecuritySection = ({ security }) => {
+const SecuritySection = ({ security, shared }) => {
+  // A client never sees a prompt to connect the owner's account.
+  if (!security.connected && shared) return null;
   if (!security.connected) {
     return (
       <Section title="Security findings (RuyaShield)">
@@ -168,6 +172,150 @@ const SecuritySection = ({ security }) => {
   );
 };
 
+const LOCKED_SECTIONS = [
+  ['Uptime and response time', 'Daily uptime, downtime, response times and the longest incidents'],
+  ['Speed', 'PageSpeed score, Largest Contentful Paint and the top fixes'],
+  ['SSL and security headers', 'SSL Labs grade, Safe Browsing and missing headers'],
+  ['Security findings (RuyaShield)', 'Open vulnerabilities by severity and the latest assessment'],
+];
+
+// Free plan: the headline from the server (it sends nothing more) and what Pro unlocks. No download.
+const PreviewReport = ({ report, onUpgrade }) => {
+  const measured = Object.entries(PART_LABELS).filter(([k]) => report.score.measured[k]);
+  return (
+    <>
+      <Section title="Overall health" aside="Last 30 days">
+        <div className="grid gap-6 sm:grid-cols-[auto_1fr] items-center">
+          <ScoreRing score={report.score.overall} />
+          <div className="space-y-3">
+            <p className="text-sm text-ink-soft">
+              Uptime <span className="font-bold text-ink">{report.uptime.percent == null ? '—' : `${report.uptime.percent}%`}</span>
+              {' '}with {report.uptime.incidentCount} incident{report.uptime.incidentCount === 1 ? '' : 's'} in the last 30 days.
+            </p>
+            <p className="text-sm text-ink-soft">
+              Score built from: {measured.length ? measured.map(([, label]) => label).join(', ') : 'nothing measured yet'}.
+            </p>
+          </div>
+        </div>
+      </Section>
+
+      <section className="relative bg-white rounded-3xl border border-brand-100 p-6 sm:p-8 overflow-hidden">
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {LOCKED_SECTIONS.map(([title, text]) => (
+            <li key={title} className="rounded-2xl bg-canvas px-4 py-3.5 flex gap-3">
+              <Lock size={16} className="text-ink-muted shrink-0 mt-0.5" />
+              <span>
+                <span className="block text-sm font-bold text-ink">{title}</span>
+                <span className="block text-xs text-ink-muted mt-0.5">{text}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl bg-brand-50 px-5 py-4">
+          <p className="text-sm text-ink-soft">
+            <span className="font-bold text-ink">The full report is part of Pro.</span> See every section, switch between 7, 30 and 90 days, and download it as a PDF for your client.
+          </p>
+          <button type="button" onClick={onUpgrade} className="btn-primary shrink-0"><Sparkles size={15} /> Upgrade to Pro</button>
+        </div>
+      </section>
+    </>
+  );
+};
+
+// The full report (Pro owner, or a client opening a shared link).
+export const FullReport = ({ report }) => {
+  const parts = report.score.parts;
+  const u = report.uptime;
+  return (
+    <>
+      <Section title="Overall health" aside={`Weights: uptime ${report.score.weights.uptime}, security ${report.score.weights.security}, speed ${report.score.weights.speed}, SSL & headers ${report.score.weights.publicChecks}`}>
+        <div className="grid gap-6 sm:grid-cols-[auto_1fr] items-center">
+          <ScoreRing score={report.score.overall} />
+          <ul className="space-y-2.5">
+            {Object.entries(PART_LABELS).map(([k, label]) => {
+              const [color, word] = tone(parts[k]);
+              return (
+                <li key={k} className="grid grid-cols-[1fr_auto] sm:grid-cols-[12rem_1fr_9rem] items-center gap-x-3 gap-y-1 text-sm">
+                  <span className="text-ink-soft">{label}</span>
+                  <span className={`sm:order-last text-right font-bold tabular-nums whitespace-nowrap ${color}`}>{parts[k] ?? '—'} <span className="font-semibold text-xs">{word}</span></span>
+                  <span className="col-span-2 sm:col-span-1 h-2 rounded-full bg-brand-100 overflow-hidden">
+                    {parts[k] != null && <span className={`block h-full rounded-full ${barColor(parts[k])}`} style={{ width: `${parts[k]}%` }} />}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+        <p className="text-xs text-ink-muted mt-5">Parts marked &quot;not measured&quot; have no data for this period and are left out of the score, never counted as a pass.</p>
+      </Section>
+
+      <Section title="Uptime and response time" aside={`${u.checks.toLocaleString()} checks, one a minute`}>
+        <div className="grid grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-3 mb-6 break-inside-avoid">
+          <Stat label="Uptime" value={u.percent == null ? '—' : `${u.percent}%`} />
+          <Stat label="Downtime" value={fmtMinutes(u.downtimeMinutes)} sub={`${u.incidentCount} incident${u.incidentCount === 1 ? '' : 's'}`} />
+          <Stat label="Avg response" value={u.avgResponseMs == null ? '—' : `${u.avgResponseMs} ms`} />
+          <Stat label="Monitored days" value={u.daily.length} sub={`of ${report.period.days}`} />
+        </div>
+        <div className="space-y-6 break-inside-avoid">
+          <UptimeStrip daily={u.daily} />
+          <ResponseBars daily={u.daily} />
+        </div>
+        {u.longestIncidents.length > 0 && (
+          <div className="mt-6 overflow-x-auto">
+            <table className="w-full text-sm">
+              <caption className="text-left text-xs font-bold text-ink-soft mb-2">Longest incidents</caption>
+              <thead><tr className="text-left text-[11px] uppercase tracking-widest text-ink-muted"><th className="py-2 pr-4">Started</th><th className="py-2 pr-4">Duration</th><th className="py-2">Cause</th></tr></thead>
+              <tbody className="divide-y divide-brand-100">
+                {u.longestIncidents.map((i) => (
+                  <tr key={i.startedAt}><td className="py-2 pr-4 whitespace-nowrap">{fmtDateTime(i.startedAt)}</td><td className="py-2 pr-4 whitespace-nowrap">{fmtMinutes(i.minutes)}{!i.endedAt && ' (ongoing)'}</td><td className="py-2 text-ink-soft">{i.message || i.status}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      <div className="grid gap-5 lg:grid-cols-2 print:grid-cols-2">
+        <Section title="Speed" aside={report.speed ? `PageSpeed ${report.speed.strategy}, ${fmtDate(report.speed.checkedAt)}` : null}>
+          {report.speed ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Stat label="Performance" value={report.speed.score ?? '—'} sub="out of 100" />
+                <Stat label="Largest paint" value={report.speed.lcp || '—'} />
+              </div>
+              {report.speed.opportunities.length > 0 && (
+                <ul className="mt-4 text-sm text-ink-soft list-disc pl-5 space-y-1">
+                  {report.speed.opportunities.map((o) => <li key={o.title}>{o.title}{o.display ? ` (${o.display})` : ''}</li>)}
+                </ul>
+              )}
+            </>
+          ) : <p className="text-sm text-ink-muted">No PageSpeed run yet. Not measured.</p>}
+        </Section>
+        <Section title="SSL and security headers" aside={report.publicChecks ? fmtDate(report.publicChecks.checkedAt) : null}>
+          {report.publicChecks ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Stat label="SSL Labs grade" value={report.publicChecks.sslGrade || '—'} sub={report.publicChecks.sslMessage} />
+                <Stat label="Safe Browsing" value={report.publicChecks.malware === 'flagged' ? 'Listed' : report.publicChecks.malware === 'clean' ? 'Clean' : '—'} />
+              </div>
+              <p className="mt-4 text-sm text-ink-soft">
+                {report.publicChecks.missingHeaders.length ? `Missing headers: ${report.publicChecks.missingHeaders.join(', ')}.` : 'All checked security headers are present.'}
+              </p>
+            </>
+          ) : <p className="text-sm text-ink-muted">No public security check yet. Not measured.</p>}
+        </Section>
+      </div>
+
+      <SecuritySection security={report.security} shared={report.shared} />
+
+      <footer className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted px-1">
+        <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Web Monitor and RuyaShield by Ruyalab</span>
+        <span>Generated {fmtDateTime(report.generatedAt)}</span>
+      </footer>
+    </>
+  );
+};
+
 const SiteReport = () => {
   const { siteId } = useParams();
   const { isPro } = useAuth();
@@ -175,39 +323,27 @@ const SiteReport = () => {
   const [result, setResult] = useState({ key: null, report: null, error: '' });
   const key = `${siteId}:${days}`;
 
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
   useEffect(() => {
-    if (!isPro) return undefined;
     let live = true;
     fetchSiteReport(siteId, days)
       .then((report) => live && setResult({ key, report, error: '' }))
       .catch((err) => live && setResult({ key, report: null, error: err.message }));
     return () => { live = false; };
-  }, [siteId, days, key, isPro]);
+  }, [siteId, days, key]);
 
-  const loading = isPro && result.key !== key;
+  const loading = result.key !== key;
   const { report, error } = result.key === key ? result : { report: null, error: '' };
 
-  if (!isPro) {
-    return (
-      <div className="min-h-screen bg-canvas flex items-center justify-center p-6">
-        <div className="bg-white rounded-3xl border border-brand-100 p-8 max-w-md text-center">
-          <h1 className="text-xl font-extrabold text-ink">Site health report is a Pro feature</h1>
-          <p className="text-sm text-ink-soft mt-2">One page with uptime, speed, SSL and RuyaShield security findings, ready to send to a client as a PDF.</p>
-          <Link to="/app" className="btn-primary mt-6 inline-flex">Back to the dashboard</Link>
-        </div>
-      </div>
-    );
-  }
-
-  const parts = report?.score.parts || {};
-  const u = report?.uptime;
+  const preview = Boolean(report?.preview);
 
   return (
     <div className="min-h-screen bg-canvas print:bg-white print:min-h-0">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-5 print:p-0 print:space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
           <Link to={`/app?site=${siteId}`} className="inline-flex items-center gap-1.5 text-sm font-bold text-brand-700 hover:underline"><ArrowLeft size={16} /> Back to site</Link>
-          <div className="flex flex-wrap items-center gap-2">
+          {isPro && <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-xl bg-white border border-brand-100 p-1" role="group" aria-label="Report period">
               {PERIODS.map((p) => (
                 <button key={p} type="button" onClick={() => setDays(p)} aria-pressed={days === p}
@@ -215,7 +351,7 @@ const SiteReport = () => {
               ))}
             </div>
             <button type="button" onClick={() => window.print()} disabled={!report} className="btn-primary"><Download size={15} /> <span className="whitespace-nowrap">Download PDF</span></button>
-          </div>
+          </div>}
         </div>
 
         <header className="bg-white rounded-3xl border border-brand-100 p-6 sm:p-8 print:border-0 print:p-0">
@@ -233,95 +369,12 @@ const SiteReport = () => {
         {error && <p className="text-sm text-bad bg-bad-soft rounded-xl px-4 py-3">{error}</p>}
         {loading && <p className="text-sm text-ink-muted">Building the report…</p>}
 
-        {report && !loading && (
-          <>
-            <Section title="Overall health" aside={`Weights: uptime ${report.score.weights.uptime}, security ${report.score.weights.security}, speed ${report.score.weights.speed}, SSL & headers ${report.score.weights.publicChecks}`}>
-              <div className="grid gap-6 sm:grid-cols-[auto_1fr] items-center">
-                <ScoreRing score={report.score.overall} />
-                <ul className="space-y-2.5">
-                  {Object.entries(PART_LABELS).map(([k, label]) => {
-                    const [color, word] = tone(parts[k]);
-                    return (
-                      <li key={k} className="grid grid-cols-[1fr_auto] sm:grid-cols-[12rem_1fr_9rem] items-center gap-x-3 gap-y-1 text-sm">
-                        <span className="text-ink-soft">{label}</span>
-                        <span className={`sm:order-last text-right font-bold tabular-nums whitespace-nowrap ${color}`}>{parts[k] ?? '—'} <span className="font-semibold text-xs">{word}</span></span>
-                        <span className="col-span-2 sm:col-span-1 h-2 rounded-full bg-brand-100 overflow-hidden">
-                          {parts[k] != null && <span className={`block h-full rounded-full ${barColor(parts[k])}`} style={{ width: `${parts[k]}%` }} />}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-              <p className="text-xs text-ink-muted mt-5">Parts marked &quot;not measured&quot; have no data for this period and are left out of the score, never counted as a pass.</p>
-            </Section>
+        {report && !loading && !preview && <ReportSharePanel siteId={siteId} days={days} />}
+        {report && !loading && preview && <PreviewReport report={report} onUpgrade={() => setShowUpgrade(true)} />}
 
-            <Section title="Uptime and response time" aside={`${u.checks.toLocaleString()} checks, one a minute`}>
-              <div className="grid grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-3 mb-6 break-inside-avoid">
-                <Stat label="Uptime" value={u.percent == null ? '—' : `${u.percent}%`} />
-                <Stat label="Downtime" value={fmtMinutes(u.downtimeMinutes)} sub={`${u.incidentCount} incident${u.incidentCount === 1 ? '' : 's'}`} />
-                <Stat label="Avg response" value={u.avgResponseMs == null ? '—' : `${u.avgResponseMs} ms`} />
-                <Stat label="Monitored days" value={u.daily.length} sub={`of ${report.period.days}`} />
-              </div>
-              <div className="space-y-6 break-inside-avoid">
-                <UptimeStrip daily={u.daily} />
-                <ResponseBars daily={u.daily} />
-              </div>
-              {u.longestIncidents.length > 0 && (
-                <div className="mt-6 overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <caption className="text-left text-xs font-bold text-ink-soft mb-2">Longest incidents</caption>
-                    <thead><tr className="text-left text-[11px] uppercase tracking-widest text-ink-muted"><th className="py-2 pr-4">Started</th><th className="py-2 pr-4">Duration</th><th className="py-2">Cause</th></tr></thead>
-                    <tbody className="divide-y divide-brand-100">
-                      {u.longestIncidents.map((i) => (
-                        <tr key={i.startedAt}><td className="py-2 pr-4 whitespace-nowrap">{fmtDateTime(i.startedAt)}</td><td className="py-2 pr-4 whitespace-nowrap">{fmtMinutes(i.minutes)}{!i.endedAt && ' (ongoing)'}</td><td className="py-2 text-ink-soft">{i.message || i.status}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Section>
-
-            <div className="grid gap-5 lg:grid-cols-2 print:grid-cols-2">
-              <Section title="Speed" aside={report.speed ? `PageSpeed ${report.speed.strategy}, ${fmtDate(report.speed.checkedAt)}` : null}>
-                {report.speed ? (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <Stat label="Performance" value={report.speed.score ?? '—'} sub="out of 100" />
-                      <Stat label="Largest paint" value={report.speed.lcp || '—'} />
-                    </div>
-                    {report.speed.opportunities.length > 0 && (
-                      <ul className="mt-4 text-sm text-ink-soft list-disc pl-5 space-y-1">
-                        {report.speed.opportunities.map((o) => <li key={o.title}>{o.title}{o.display ? ` (${o.display})` : ''}</li>)}
-                      </ul>
-                    )}
-                  </>
-                ) : <p className="text-sm text-ink-muted">No PageSpeed run yet. Not measured.</p>}
-              </Section>
-              <Section title="SSL and security headers" aside={report.publicChecks ? fmtDate(report.publicChecks.checkedAt) : null}>
-                {report.publicChecks ? (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <Stat label="SSL Labs grade" value={report.publicChecks.sslGrade || '—'} sub={report.publicChecks.sslMessage} />
-                      <Stat label="Safe Browsing" value={report.publicChecks.malware === 'flagged' ? 'Listed' : report.publicChecks.malware === 'clean' ? 'Clean' : '—'} />
-                    </div>
-                    <p className="mt-4 text-sm text-ink-soft">
-                      {report.publicChecks.missingHeaders.length ? `Missing headers: ${report.publicChecks.missingHeaders.join(', ')}.` : 'All checked security headers are present.'}
-                    </p>
-                  </>
-                ) : <p className="text-sm text-ink-muted">No public security check yet. Not measured.</p>}
-              </Section>
-            </div>
-
-            <SecuritySection security={report.security} />
-
-            <footer className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted px-1">
-              <span className="inline-flex items-center gap-1.5"><ShieldCheck size={13} /> Web Monitor and RuyaShield by Ruyalab</span>
-              <span>Generated {fmtDateTime(report.generatedAt)}</span>
-            </footer>
-          </>
-        )}
+        {report && !loading && !preview && <FullReport report={report} />}
       </div>
+      <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
     </div>
   );
 };

@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { CustomTooltip, CustomLabel } from './CustomTooltip';
 import RealTimeIndicator from './RealTimeIndicator';
+import { Link } from 'react-router';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
 import { 
   TrendingUp, Shield, Zap, Search, AlertTriangle, CheckCircle, Globe, Activity, MessageSquare, 
@@ -12,7 +13,7 @@ import {
   BarChart3, Gauge, Lock, Users, Mail, Share2, Download, Upload, Filter, Calendar,
   Target, Award, Star, Heart, ThumbsUp, ThumbsDown, Info, HelpCircle, Lightbulb,
   AlertCircle, CheckSquare, Clock, DollarSign, ShoppingCart, CreditCard, PieChart as PieChartIcon,
-  ChevronDown, ChevronUp, FileCode, Image, Server, HardDrive, Wifi, GripVertical, LogOut
+  ChevronDown, ChevronUp, FileCode, Image, Server, HardDrive, Wifi, GripVertical, LogOut, ArrowRight
 } from 'lucide-react';
 import { getApiUrl, API_BASE_URL } from '../config/api';
 import { apiFetch } from '../services/session';
@@ -1673,6 +1674,18 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                       </p>
                     </div>
                   </div>
+
+                  {/* The one-page site health report (PDF) lives on its own page */}
+                  <Link
+                    to={`/app/report/${selectedWebsite._id}`}
+                    className="flex items-center justify-between gap-4 rounded-2xl border border-brand-100 bg-brand-50 px-5 py-4 hover:bg-brand-100 transition-colors"
+                  >
+                    <span>
+                      <span className="block text-sm font-extrabold text-ink">Site health report (PDF)</span>
+                      <span className="block text-xs text-ink-muted mt-0.5">Uptime, speed, SSL and RuyaShield findings on one page, ready to send to a client.</span>
+                    </span>
+                    <span className="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-brand-700">Open report <ArrowRight size={14} /></span>
+                  </Link>
 
                   {/* Export Actions */}
                   <div className="flex flex-col md:flex-row gap-4">

@@ -138,3 +138,23 @@ export async function buildReport(env, userId, site, days, now = new Date()) {
     security,
   };
 }
+
+// Free plans see the headline only: the overall score, uptime and which parts were measured. Everything else
+// (incidents, daily data, speed, SSL, RuyaShield findings) and every download stays Pro, enforced here.
+export const FREE_REPORT_DAYS = 30;
+
+export function previewReport(report) {
+  return {
+    preview: true,
+    site: report.site,
+    period: report.period,
+    generatedAt: report.generatedAt,
+    score: {
+      overall: report.score.overall,
+      weights: report.score.weights,
+      measured: Object.fromEntries(Object.entries(report.score.parts).map(([k, v]) => [k, v != null])),
+    },
+    uptime: { percent: report.uptime.percent, incidentCount: report.uptime.incidentCount },
+    security: { connected: report.security.connected, tracked: report.security.tracked },
+  };
+}

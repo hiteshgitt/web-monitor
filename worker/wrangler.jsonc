@@ -66,7 +66,9 @@
     "VAPID_PUBLIC_KEY": "BCJ4qOYn7CslcpDg5cSTgbueenp-9ArETwhJ0xfjSTFwwRcSHRE_VhhswEduHtRsuB4kNVNN0hBBHK4FGPnqIIU",
     "VAPID_SUBJECT": "mailto:hiteshgml@gmail.com",
     // RuyaShield base URL for the "Connect RuyaShield" integration (no trailing slash). Empty keeps it off.
-    "RUYASHIELD_URL": "https://ruyashield.ruyalab.com"
+    "RUYASHIELD_URL": "https://ruyashield.ruyalab.com",
+    // Public address of this app, used in shared report links and report emails (no trailing slash)
+    "APP_URL": "https://webmonitor.ruyalab.com"
   },
 
   "observability": { "enabled": true }

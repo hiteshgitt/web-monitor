@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
-import { loadOwnedWebsite, requirePro } from '../lib/auth.js';
+import { isPro, loadOwnedWebsite, requirePro } from '../lib/auth.js';
+import { buildReport, FREE_REPORT_DAYS, previewReport, REPORT_PERIODS } from '../lib/report.js';
+import { createShare, listShares, revokeShare } from '../lib/reportShares.js';
 import { attachProperty, connectUrl, pendingProperties } from '../lib/googleAnalytics.js';
 import { attachSite, connectUrl as searchConsoleConnectUrl, pendingSites } from '../lib/searchConsole.js';
 import { checkAndRecord, performHealthCheck } from '../lib/monitor.js';
@@ -123,9 +125,32 @@ websites.delete('/:id', async (c) => {
     c.env.DB.prepare('DELETE FROM sc_pending WHERE website_id = ?').bind(id),
     c.env.DB.prepare('DELETE FROM vitals_scans WHERE website_id = ?').bind(id),
     c.env.DB.prepare('DELETE FROM security_scans WHERE website_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM report_shares WHERE website_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM report_emails WHERE website_id = ?').bind(id),
     c.env.DB.prepare('DELETE FROM websites WHERE id = ?').bind(id),
   ]);
   return c.json({ message: 'Website deleted successfully' });
+});
+
+// Site health report. Pro: the full report for 7, 30 or 90 days. Free: a 30-day headline preview only.
+websites.get('/:id/report', async (c) => {
+  const user = c.get('user');
+  const pro = isPro(user);
+  const days = pro ? Number(c.req.query('days')) || 30 : FREE_REPORT_DAYS;
+  if (!REPORT_PERIODS.includes(days)) throw new ApiError(400, `Choose a period of ${REPORT_PERIODS.join(', ')} days.`);
+  const report = await buildReport(c.env, user.id, c.get('website'), days);
+  return c.json(pro ? report : previewReport(report));
+});
+
+// Private client links to the report (Pro).
+websites.get('/:id/report/shares', requirePro, async (c) => c.json(await listShares(c.env, c.get('user').id, c.get('website').id)));
+websites.post('/:id/report/shares', requirePro, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  return c.json(await createShare(c.env, c.get('user').id, c.get('website').id, body), 201);
+});
+websites.delete('/:id/report/shares/:shareId', requirePro, async (c) => {
+  await revokeShare(c.env, c.get('user').id, c.get('website').id, c.req.param('shareId'));
+  return c.json({ ok: true });
 });
 
 websites.get('/:id/monitoring', async (c) => {
