@@ -29,7 +29,7 @@ const RuyaShieldModal = ({ onClose, onChanged }) => {
     }
   };
 
-  const tokensUrl = status?.appUrl ? `${status.appUrl}/settings/tokens` : null;
+  const tokensUrl = status?.appUrl ? `${status.appUrl}/settings/webmonitor` : null;
 
   return (
     <div className="fixed inset-0 z-[60] bg-ink/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6 animate-fade-in" onClick={onClose}>
@@ -76,14 +76,14 @@ const RuyaShieldModal = ({ onClose, onChanged }) => {
               {!status.connected && (
                 <ol className="text-[13px] text-ink-soft space-y-1.5 list-decimal pl-5">
                   <li>
-                    Sign in to RuyaShield and open <span className="font-semibold text-ink">Settings → API tokens</span>
+                    Sign in to RuyaShield and open <span className="font-semibold text-ink">Settings → WebMonitor</span>
                     {tokensUrl && (
                       <a href={tokensUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 ml-1 text-brand-700 font-semibold hover:underline">
                         open <ExternalLink size={12} />
                       </a>
                     )}.
                   </li>
-                  <li>Create a token with the <code className="text-[12px] bg-canvas px-1 rounded">assets:read</code> and <code className="text-[12px] bg-canvas px-1 rounded">findings:read</code> scopes.</li>
+                  <li>Click <span className="font-semibold text-ink">Create token for WebMonitor</span> and copy it. It has only the <code className="text-[12px] bg-canvas px-1 rounded">assets:read</code> and <code className="text-[12px] bg-canvas px-1 rounded">findings:read</code> scopes.</li>
                   <li>Paste it here. It is stored encrypted and can only read. It cannot start scans or change anything.</li>
                 </ol>
               )}

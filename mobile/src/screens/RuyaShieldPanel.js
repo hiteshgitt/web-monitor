@@ -89,7 +89,7 @@ export default function RuyaShieldPanel({ siteId, session, onExpired }) {
             <Text style={styles.strong}>{site.host}</Text> is not in your RuyaShield organisation yet. Add and verify it there to start scanning.
           </Text>
           {report.appUrl ? (
-            <Pressable onPress={() => Linking.openURL(`${report.appUrl}/assets`)}>
+            <Pressable onPress={() => Linking.openURL(`${report.appUrl}/assets?host=${encodeURIComponent(site.host)}`)}>
               <Text style={styles.link}>Add in RuyaShield ›</Text>
             </Pressable>
           ) : null}

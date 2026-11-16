@@ -2,13 +2,15 @@ import React, { useState } from 'react';
 import { X, Globe, Info, Copy, CheckCircle2, Sparkles, Key, Eye } from 'lucide-react';
 import ApiService from '../services/api';
 
-const AddWebsiteModal = ({ isOpen, onClose, onAdd }) => {
-  const [formData, setFormData] = useState({
-    name: '',
-    url: '',
+const AddWebsiteModal = ({ isOpen, onClose, onAdd, initialUrl = '' }) => {
+  // A link from RuyaShield (/app?addSite=https://example.com) fills in the address; the parent remounts this
+  // dialog (key) when that address changes.
+  const [formData, setFormData] = useState(() => ({
+    name: initialUrl ? new URL(initialUrl).hostname.replace(/^www\./, '') : '',
+    url: initialUrl,
     platform: 'wordpress',
     apiKey: ''
-  });
+  }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);

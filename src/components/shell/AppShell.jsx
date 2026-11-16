@@ -100,17 +100,32 @@ const RailButton = ({ icon: Icon, label, onClick, active, badge, pro }) => (
  * Master-detail layout: icon rail, site list and the selected site's detail.
  * On small screens the list and detail are shown one at a time.
  */
+/** The site address in a RuyaShield "Watch in WebMonitor" link (?addSite=), as an origin, or ''. */
+const linkedSiteUrl = (search) => {
+  const raw = new URLSearchParams(search).get('addSite');
+  if (!raw) return '';
+  try {
+    const u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.origin : '';
+  } catch {
+    return '';
+  }
+};
+
 const AppShell = ({
   websites, selectedWebsite, loading, onSelectWebsite, onClearSelection, onRefresh, onDeleteWebsite,
   onOpenAdvanced, onOpenCommandPalette, detailTab, onDetailTabChange, alertFocus, onOpenAlert, onDismissAlert,
 }) => {
   const navigate = useNavigate();
-  const [showAdd, setShowAdd] = useState(false);
+  // Links from RuyaShield: /app?addSite=https://example.com opens Add site with the address filled in,
+  // /app?connect=ruyashield opens the RuyaShield connection dialog.
+  const [addSiteUrl, setAddSiteUrl] = useState(() => linkedSiteUrl(window.location.search));
+  const [showAdd, setShowAdd] = useState(() => !!linkedSiteUrl(window.location.search));
   const [editing, setEditing] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   const [showAlertSettings, setShowAlertSettings] = useState(false);
-  const [showRuyaShield, setShowRuyaShield] = useState(false);
+  const [showRuyaShield, setShowRuyaShield] = useState(() => new URLSearchParams(window.location.search).get('connect') === 'ruyashield');
   const { notifications, unread: notificationCount, markAllRead } = useNotifications();
   const { isPro, user } = useAuth();
   const [showUpgrade, setShowUpgrade] = useState(false);
@@ -135,6 +150,16 @@ const AppShell = ({
     }
     onSelectWebsite(websites[0]);
   }, [isDesktop, selectedWebsite, websites, onSelectWebsite]);
+
+  // Links from RuyaShield were read into the initial state above; drop them from the address bar.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('addSite') && !params.has('connect')) return;
+    params.delete('addSite');
+    params.delete('connect');
+    const rest = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
+  }, []);
 
   // Command palette / other components can still ask for the add dialog
   useEffect(() => {
@@ -351,10 +376,13 @@ const AppShell = ({
       </div>
 
       <AddWebsiteModal
+        key={addSiteUrl}
         isOpen={showAdd}
-        onClose={() => setShowAdd(false)}
+        initialUrl={addSiteUrl}
+        onClose={() => { setShowAdd(false); setAddSiteUrl(''); }}
         onAdd={(site) => {
           setShowAdd(false);
+          setAddSiteUrl('');
           onRefresh?.();
           if (site?._id) onSelectWebsite(site);
         }}

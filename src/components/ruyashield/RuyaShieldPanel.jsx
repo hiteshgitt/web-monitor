@@ -121,7 +121,7 @@ const RuyaShieldPanel = ({ siteId }) => {
             </p>
             <div className="flex flex-wrap gap-2 shrink-0">
               {report.appUrl && (
-                <a href={`${report.appUrl}/assets`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-brand-100 text-sm font-bold text-brand-700 hover:bg-brand-50 shrink-0">
+                <a href={`${report.appUrl}/assets?host=${encodeURIComponent(site.host)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-brand-100 text-sm font-bold text-brand-700 hover:bg-brand-50 shrink-0">
                   Add in RuyaShield <ExternalLink size={14} />
                 </a>
               )}

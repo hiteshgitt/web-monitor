@@ -48,7 +48,7 @@ export default function RuyaShieldModal({ visible, session, onClose, onChanged, 
     onClose();
   };
 
-  const tokensUrl = status?.appUrl ? `${status.appUrl}/settings/tokens` : null;
+  const tokensUrl = status?.appUrl ? `${status.appUrl}/settings/webmonitor` : null;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
@@ -77,13 +77,13 @@ export default function RuyaShieldModal({ visible, session, onClose, onChanged, 
             <>
               {!status.connected ? (
                 <View style={styles.steps}>
-                  <Text style={styles.step}>1. In RuyaShield, open Settings → API tokens.</Text>
+                  <Text style={styles.step}>1. In RuyaShield, open Settings → WebMonitor.</Text>
                   {tokensUrl ? (
                     <Pressable onPress={() => Linking.openURL(tokensUrl)}>
                       <Text style={styles.link}>Open RuyaShield ›</Text>
                     </Pressable>
                   ) : null}
-                  <Text style={styles.step}>2. Create a token with the assets:read and findings:read scopes.</Text>
+                  <Text style={styles.step}>2. Tap Create token for WebMonitor and copy it (read-only: assets:read and findings:read).</Text>
                   <Text style={styles.step}>3. Paste it below. It can only read; it cannot start scans or change anything.</Text>
                 </View>
               ) : null}

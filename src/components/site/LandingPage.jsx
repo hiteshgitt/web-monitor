@@ -36,6 +36,13 @@ const FEATURES = [
   { icon: Puzzle, title: 'Plugin audits', text: 'Pro: every plugin and package, with outdated and inactive ones flagged.', pro: true },
 ];
 
+const RUYASHIELD_URL = 'https://ruyashield.ruyalab.com';
+const RUYASHIELD_POINTS = [
+  { icon: ShieldCheck, title: 'Findings on every site', text: 'Pro: open vulnerabilities by severity and the latest assessment, on the Security tab and in the app.' },
+  { icon: BellRing, title: 'Alerts on critical issues', text: 'Pro: a notification when RuyaShield finds a new critical or high issue on a site you monitor.' },
+  { icon: Search, title: 'Scan in one click', text: 'Ask RuyaShield to scan a site from Web Monitor. Nothing runs until you accept it in RuyaShield.' },
+];
+
 const STEPS = [
   { icon: Plug, title: 'Install the integration', text: 'Add the Web Monitor plugin to WordPress, or the package to your Laravel, Next.js or PHP app.' },
   { icon: KeyRound, title: 'Connect with your API key', text: 'Paste the site URL and its API key. We verify the connection before saving.' },
@@ -415,6 +422,38 @@ const LandingPage = () => {
         </div>
       </section>
 
+      {/* RuyaShield: the sister security product */}
+      <section id="ruyashield" className="py-24 lg:py-32 bg-canvas">
+        <div className="max-w-7xl mx-auto px-5 lg:px-8 grid gap-12 lg:grid-cols-2 lg:items-center">
+          <Reveal>
+            <span className="text-xs font-extrabold uppercase tracking-widest text-brand-600">Works with RuyaShield</span>
+            <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight">Uptime and security, side by side</h2>
+            <p className="mt-4 text-lg text-ink-soft">
+              RuyaShield, also by Ruyalab, scans the sites you own for security issues and re-tests every fix. Connect it to Web Monitor and each site’s open findings sit right next to its uptime.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <a href={RUYASHIELD_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-brand-600 text-white font-bold hover:bg-brand-700">
+                Explore RuyaShield <ArrowRight size={16} />
+              </a>
+              <Link to="/app?connect=ruyashield" className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl border border-brand-200 font-bold text-brand-700 hover:bg-brand-50">
+                Connect your account
+              </Link>
+            </div>
+          </Reveal>
+          <ul className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+            {RUYASHIELD_POINTS.map(({ icon: Icon, title, text }, i) => (
+              <Reveal as="li" key={title} delay={i * 80} className="flex gap-4 rounded-3xl bg-white border border-brand-100 p-5 shadow-card">
+                <div className="w-11 h-11 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0"><Icon size={20} /></div>
+                <div>
+                  <h3 className="font-bold">{title}</h3>
+                  <p className="mt-1 text-sm text-ink-muted">{text}</p>
+                </div>
+              </Reveal>
+            ))}
+          </ul>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="py-20 px-5">
         <Reveal className="relative max-w-5xl mx-auto rounded-[36px] bg-linear-to-br from-brand-400 via-brand-500 to-brand-700 text-white px-8 py-14 text-center overflow-hidden shadow-frame">
@@ -438,6 +477,7 @@ const LandingPage = () => {
           <nav className="grid grid-cols-2 gap-x-8 gap-y-2.5 text-center text-sm font-semibold text-ink-muted sm:flex sm:max-w-none sm:flex-wrap sm:justify-center sm:gap-x-4 xl:gap-x-5 xl:flex-nowrap">
             {NAV.map((item) => <a key={item.href} href={item.href} className="whitespace-nowrap hover:text-brand-600">{item.label}</a>)}
             <Link to="/integrations" className="whitespace-nowrap hover:text-brand-600">Integrations</Link>
+            <a href={RUYASHIELD_URL} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap hover:text-brand-600">RuyaShield</a>
             <Link to="/login" className="whitespace-nowrap hover:text-brand-600">Sign in</Link>
             <Link to="/privacy" className="whitespace-nowrap hover:text-brand-600">Privacy</Link>
             <Link to="/terms" className="whitespace-nowrap hover:text-brand-600">Terms</Link>
