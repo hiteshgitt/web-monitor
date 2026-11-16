@@ -71,7 +71,7 @@
     "APP_URL": "https://webmonitor.ruyalab.com",
     // Monthly report email (Resend). Stays off until this sender is set and the RESEND_API_KEY secret exists;
     // the domain must be verified in Resend first.
-    "REPORT_EMAIL_FROM": ""
+    "REPORT_EMAIL_FROM": "Web Monitor <reports@ruyalab.com>"
   },
 
   "observability": { "enabled": true }
