@@ -67,6 +67,8 @@
     "VAPID_SUBJECT": "mailto:hiteshgml@gmail.com",
     // RuyaShield base URL for the "Connect RuyaShield" integration (no trailing slash). Empty keeps it off.
     "RUYASHIELD_URL": "https://ruyashield.ruyalab.com",
+    "RUYALAB_ISSUER": "https://accounts.ruyalab.com",
+    "RUYALAB_CLIENT_ID": "webmonitor",
     // Public address of this app, used in shared report links and report emails (no trailing slash)
     "APP_URL": "https://webmonitor.ruyalab.com",
     // Monthly report email (Resend). Stays off until this sender is set and the RESEND_API_KEY secret exists;

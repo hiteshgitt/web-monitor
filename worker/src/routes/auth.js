@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { deleteCustomerStatements } from '../lib/accounts.js';
 import { notifyAdmins } from '../lib/alerts.js';
 import { assertActive, checkPassword, hashPassword, needsRehash, requireAuth, signToken } from '../lib/auth.js';
 import { serializeUser } from '../lib/serialize.js';
+import { finishLogin, ruyaLabConfigured, startLogin } from '../lib/ruyalab.js';
 import { ApiError, newId, nowIso } from '../lib/util.js';
 
 const auth = new Hono();
@@ -103,6 +105,55 @@ auth.post('/google', async (c) => {
   const result = await finishSignIn(c, user);
   if (isNew) await announceSignup(c, user);
   return c.json(result);
+});
+
+// ---------- Continue with Ruya Lab (one account across Ruya Lab products) ----------
+
+const RL_COOKIE = 'wm_rl';
+const appOrigin = (c) => c.env.APP_URL || new URL(c.req.url).origin;
+
+auth.get('/ruyalab/start', async (c) => {
+  if (!ruyaLabConfigured(c.env)) return c.redirect('/login?rl_error=unavailable', 302);
+  const { url, cookie } = await startLogin(c.env, appOrigin(c), c.req.query('screen'));
+  setCookie(c, RL_COOKIE, cookie, { httpOnly: true, secure: appOrigin(c).startsWith('https://'), sameSite: 'Lax', path: '/api/auth/ruyalab', maxAge: 600 });
+  return c.redirect(url, 302);
+});
+
+auth.get('/ruyalab/callback', async (c) => {
+  const q = c.req.query();
+  const cookie = getCookie(c, RL_COOKIE);
+  deleteCookie(c, RL_COOKIE, { path: '/api/auth/ruyalab' });
+  const fail = (why) => c.redirect(`/login?rl_error=${encodeURIComponent(why)}`, 302);
+  if (q.error) return fail(q.error === 'access_denied' ? 'cancelled' : 'failed');
+  if (!ruyaLabConfigured(c.env)) return fail('unavailable');
+  let id;
+  try { id = await finishLogin(c.env, appOrigin(c), q, cookie); } catch (e) {
+    console.error('ruyalab.callback', e?.message);
+    return fail(e?.message === 'expired' ? 'expired' : 'failed');
+  }
+  if (!id.email || !id.emailVerified) return fail('unverified');
+
+  // Linked already, or the same verified email: one person, one account.
+  let user = await c.env.DB.prepare('SELECT * FROM users WHERE ruyalab_sub = ?').bind(id.sub).first()
+    || await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(id.email).first();
+  const isNew = !user;
+  const now = nowIso();
+  if (user) {
+    if (user.ruyalab_sub && user.ruyalab_sub !== id.sub) return fail('linked_elsewhere');
+    await c.env.DB.prepare('UPDATE users SET ruyalab_sub = ?, name = CASE WHEN name = \'\' THEN ? ELSE name END, avatar_url = COALESCE(avatar_url, ?) WHERE id = ?')
+      .bind(id.sub, id.name, id.picture, user.id).run();
+    user = { ...user, ruyalab_sub: id.sub, name: user.name || id.name, avatar_url: user.avatar_url || id.picture };
+  } else {
+    user = { id: newId(), email: id.email, name: id.name, avatar_url: id.picture, password_hash: null, google_id: null, plan: 'free', role: 'user',
+      upgrade_requested_at: null, last_login_at: null, created_at: now, updated_at: now, ruyalab_sub: id.sub };
+    await c.env.DB.prepare(`INSERT INTO users (id, email, name, avatar_url, plan, role, ruyalab_sub, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'free', 'user', ?, ?, ?)`).bind(user.id, user.email, user.name, user.avatar_url, id.sub, now, now).run();
+  }
+  let result;
+  try { result = await finishSignIn(c, user); } catch { return fail('suspended'); }
+  if (isNew) await announceSignup(c, user);
+  // The token travels in the fragment: never sent to a server or written to logs; the app stores it and clears it.
+  return c.redirect(`/app#rl_token=${encodeURIComponent(result.token)}`, 302);
 });
 
 auth.get('/me', requireAuth, (c) => c.json({ user: serializeUser(c.get('user')) }));

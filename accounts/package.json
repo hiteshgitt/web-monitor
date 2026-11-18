@@ -1,0 +1,29 @@
+{
+  "name": "ruyalab-accounts",
+  "private": true,
+  "type": "module",
+  "description": "Ruya Lab accounts: one sign-in (OpenID Connect provider) for WebMonitor, RuyaShield and future products",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply ruyalab-accounts --local",
+    "db:migrate:remote": "wrangler d1 migrations apply ruyalab-accounts --remote",
+    "keys": "node scripts/genkey.mjs",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "hono": "^4.13.13",
+    "jose": "^6.2.13"
+  },
+  "devDependencies": {
+    "wrangler": "^4.154.0"
+  },
+  "engines": {
+    "node": ">=22.23.4 || >=24.22.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261019.1": true,
+    "workerd@1.20261023.1": true
+  }
+}

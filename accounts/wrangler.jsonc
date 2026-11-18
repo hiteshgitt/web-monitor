@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ruyalab-accounts",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "routes": [{ "pattern": "accounts.ruyalab.com", "custom_domain": true }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ruyalab-accounts",
+      // Filled in by `wrangler d1 create ruyalab-accounts` before the first deploy.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": { "crons": ["17 3 * * *"] },
+  "ratelimits": [{ "name": "AUTH_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } }],
+  "vars": {
+    "ISSUER": "https://accounts.ruyalab.com",
+    "ACCOUNTS_EMAIL_FROM": "Ruya Lab <accounts@ruyalab.com>",
+    "GOOGLE_CLIENT_ID": "",
+    "CLIENTS": "[{\"id\":\"webmonitor\",\"name\":\"WebMonitor\",\"home\":\"https://webmonitor.ruyalab.com/app\",\"redirect_uris\":[\"https://webmonitor.ruyalab.com/api/auth/ruyalab/callback\"],\"post_logout_redirect_uris\":[\"https://webmonitor.ruyalab.com/\"]},{\"id\":\"ruyashield\",\"name\":\"RuyaShield\",\"home\":\"https://ruyashield.ruyalab.com/\",\"redirect_uris\":[\"https://ruyashield.ruyalab.com/auth/ruyalab/callback\"],\"post_logout_redirect_uris\":[\"https://ruyashield.ruyalab.com/\"]}]"
+  }
+  // Secrets (wrangler secret put): OIDC_PRIVATE_JWK, CLIENT_SECRET_WEBMONITOR, CLIENT_SECRET_RUYASHIELD,
+  // RESEND_API_KEY, GOOGLE_CLIENT_SECRET.
+}

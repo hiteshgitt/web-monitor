@@ -4,7 +4,7 @@ import { Mail, Lock, User, ArrowRight, Zap, ShieldCheck, BellRing, LineChart, Ey
 import { useAuth } from '../../contexts/AuthContext';
 import GoogleButton from './GoogleButton';
 import Logo from '../Logo';
-import { googleSignInEnabled } from '../../config/google';
+import { googleSignInEnabled, ruyaLabSignInEnabled } from '../../config/google';
 
 const FEATURES = [
   { icon: Zap, title: 'Real response times', text: 'Every site checked each minute from the server, not estimated.' },
@@ -29,13 +29,31 @@ const Field = ({ icon: Icon, type = 'text', ...props }) => {
   );
 };
 
+const RL_ERRORS = {
+  cancelled: 'Ruya Lab sign-in was cancelled.',
+  expired: 'The Ruya Lab sign-in took too long. Please try again.',
+  unverified: 'Confirm your email in your Ruya Lab account first, then try again.',
+  linked_elsewhere: 'This Web Monitor account is already linked to a different Ruya Lab account.',
+  suspended: 'This account is suspended. Contact support.',
+  unavailable: 'Ruya Lab sign-in is not available right now. Use email or Google.',
+  failed: 'Ruya Lab sign-in failed. Please try again.',
+};
+
+const RuyaLabButton = ({ isSignup }) => (
+  <a href={`/api/auth/ruyalab/start${isSignup ? '?screen=signup' : ''}`}
+    className="flex items-center justify-center gap-3 w-full h-12 rounded-xl bg-ink text-white font-bold text-[15px] hover:opacity-90 transition-opacity">
+    <span className="w-6 h-6 rounded-md bg-gradient-to-br from-brand-400 to-[#ff5a1f] flex items-center justify-center text-xs font-extrabold">R</span>
+    Continue with Ruya Lab
+  </a>
+);
+
 const AuthPage = ({ mode }) => {
   const isSignup = mode === 'signup';
   const { status, login, register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => RL_ERRORS[new URLSearchParams(location.search).get('rl_error')] || '');
   const [busy, setBusy] = useState(false);
   const destination = location.state?.from || '/app';
 
@@ -108,9 +126,16 @@ const AuthPage = ({ mode }) => {
           <h2 className="text-3xl font-extrabold text-ink tracking-tight">{isSignup ? 'Create your account' : 'Welcome back'}</h2>
           <p className="text-ink-muted mt-1.5">{isSignup ? 'Start monitoring your sites in minutes.' : 'Sign in to your monitoring dashboard.'}</p>
 
+          {ruyaLabSignInEnabled && (
+            <div className="mt-8">
+              <RuyaLabButton isSignup={isSignup} />
+              <p className="text-xs text-ink-muted mt-2 text-center">One account for Web Monitor, RuyaShield and every Ruya Lab product.</p>
+            </div>
+          )}
+
           {googleSignInEnabled && (
             <>
-              <div className="mt-8"><GoogleButton onCredential={handleGoogle} text={isSignup ? 'signup_with' : 'signin_with'} /></div>
+              <div className={ruyaLabSignInEnabled ? 'mt-4' : 'mt-8'}><GoogleButton onCredential={handleGoogle} text={isSignup ? 'signup_with' : 'signin_with'} /></div>
               <div className="flex items-center gap-3 my-6 label-caps"><span className="h-px flex-1 bg-brand-100" />or with email<span className="h-px flex-1 bg-brand-100" /></div>
             </>
           )}

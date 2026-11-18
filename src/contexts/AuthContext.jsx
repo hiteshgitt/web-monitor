@@ -17,6 +17,19 @@ const postJson = async (path, body) => {
   return data;
 };
 
+// "Continue with Ruya Lab" returns to /app#rl_token=…: store the token and clear it from the address bar.
+const takeRuyaLabToken = () => {
+  try {
+    const m = /(?:^#|&)rl_token=([^&]+)/.exec(window.location.hash);
+    if (!m) return;
+    setToken(decodeURIComponent(m[1]));
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  } catch {
+    // no window (tests) or blocked storage: ignore
+  }
+};
+takeRuyaLabToken();
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   // 'loading' until the stored token has been checked against the API
