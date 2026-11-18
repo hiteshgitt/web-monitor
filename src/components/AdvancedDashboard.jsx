@@ -1922,27 +1922,29 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
               ? (advancedData?.packages || {})
               : (advancedData?.plugins || {});
 
+          // npm (Next.js) and Composer (PHP) inventories: dependencies vs dev dependencies, and real updates
+          // from the registries (outdated_count is null until checked). WordPress keeps plugin semantics.
+          const isDeps = isLibraries || isPackages;
           const activeCount = tabData.active_count ?? tabData.dependencies_count ?? 0;
-          const outdatedCount = tabData.outdated_count ?? tabData.devDependencies_count ?? 0;
+          const outdatedCount = isDeps ? tabData.outdated_count : (tabData.outdated_count ?? 0);
           const totalCount = tabData.total_plugins ?? tabData.total_packages ?? tabData.total_libraries ?? 0;
           const securityLabel = tabData.security_status || 'Protected';
+          const registry = isLibraries ? 'npm' : 'Packagist';
 
           // All items list - support different field naming conventions
           const allItems = tabData.all_plugins || tabData.all_packages || tabData.all_libraries || tabData.dependencies || [];
-          const activeItems = tabData.active_plugins || tabData.dependencies || [];
-          const inactiveItems = tabData.inactive_plugins || tabData.devDependencies || [];
-          const outdatedItems = tabData.outdated_plugins || tabData.outdated_packages || [];
+          const outdatedItems = tabData.outdated || tabData.outdated_plugins || tabData.outdated_packages || [];
 
           // Choose filter labels based on tab type
-          const filterLabels = isPackages
-            ? ['All', 'Dependencies', 'Dev Dependencies', 'Outdated']
+          const filterLabels = isDeps
+            ? ['All', 'Dependencies', 'Dev Dependencies', 'Updates Available']
             : ['Installed', 'Active', 'Inactive', 'Updates Available'];
 
           const getFilteredList = (view) => {
-            if (isPackages) {
-              if (view === 'Dependencies') return activeItems;
-              if (view === 'Dev Dependencies') return inactiveItems;
-              if (view === 'Outdated') return outdatedItems;
+            if (isDeps) {
+              if (view === 'Dependencies') return tabData.dependencies || allItems.filter((i) => !i.isDev);
+              if (view === 'Dev Dependencies') return tabData.devDependencies || allItems.filter((i) => i.isDev);
+              if (view === 'Updates Available') return outdatedItems;
               return allItems;
             } else {
               if (view === 'Active') return tabData.active_plugins || [];
@@ -1969,18 +1971,34 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                 <div className="p-8">
                   {/* Summary cards */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                    {[
-                      { label: isPackages ? 'Dependencies' : 'Active', value: activeCount, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                      { label: isPackages ? 'Dev Deps' : 'Outdated', value: outdatedCount, color: 'text-amber-600', bg: 'bg-amber-50' },
-                      { label: 'Security', value: securityLabel, color: 'text-brand-600', bg: 'bg-brand-50' },
-                      { label: 'Total', value: totalCount, color: 'text-brand-600', bg: 'bg-brand-50' }
-                    ].map((stat, i) => (
+                    {(isDeps ? [
+                      { label: 'Dependencies', value: tabData.dependencies_count ?? 0, color: 'text-emerald-600' },
+                      { label: 'Dev dependencies', value: tabData.devDependencies_count ?? 0, color: 'text-brand-600' },
+                      { label: 'Updates available', value: outdatedCount == null ? '—' : outdatedCount, color: outdatedCount ? 'text-amber-600' : 'text-emerald-600' },
+                      { label: 'Total', value: totalCount, color: 'text-brand-600' },
+                    ] : [
+                      { label: 'Active', value: activeCount, color: 'text-emerald-600' },
+                      { label: 'Outdated', value: outdatedCount, color: 'text-amber-600' },
+                      { label: 'Security', value: securityLabel, color: 'text-brand-600' },
+                      { label: 'Total', value: totalCount, color: 'text-brand-600' },
+                    ]).map((stat, i) => (
                       <div key={i} className="bg-brand-50/50 rounded-2xl p-5 border border-brand-100 flex flex-col items-center">
                         <div className="text-[9px] font-extrabold text-ink-muted uppercase tracking-widest mb-1">{stat.label}</div>
                         <div className={`text-xl font-extrabold tracking-tight ${stat.color}`}>{stat.value}</div>
                       </div>
                     ))}
                   </div>
+
+                  {isDeps && (
+                    <p className="text-xs text-ink-muted -mt-4 mb-6">
+                      {outdatedCount == null
+                        ? `Latest versions are checked against ${registry}.`
+                        : outdatedCount === 0
+                          ? `Every dependency is on its latest ${registry} release.`
+                          : `${outdatedCount} ${outdatedCount === 1 ? 'library has' : 'libraries have'} a newer release on ${registry}${tabData.outdated_major ? `, ${tabData.outdated_major} of them a major version (check the changelog before upgrading)` : ''}.`}
+                      {tabData.unchecked_count > 0 && ` ${tabData.unchecked_count} not checked yet; they fill in on the next visit.`}
+                    </p>
+                  )}
 
                   {/* Filter pills */}
                   <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide">
@@ -2017,6 +2035,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                         const newVersion = item.new_version || item.latest_version || item.update_version;
                         const isActive = item.is_active === true || item.status === 'active';
                         const isOutdated = item.is_outdated || item.update_available || item.has_update;
+                        const updateStyle = { major: 'bg-rose-50 text-rose-700 border-rose-200', minor: 'bg-amber-50 text-amber-700 border-amber-200', patch: 'bg-sky-50 text-sky-700 border-sky-200' }[item.update] || 'bg-amber-100 text-amber-700 border-amber-200';
 
                         return (
                           <div key={i} className="px-8 py-5 flex items-center justify-between hover:bg-brand-50 transition-colors">
@@ -2035,22 +2054,25 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              {!isPackages && (
+                              {!isDeps && (
                                 <div className={`px-3 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-widest ${
                                   isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-brand-100 text-ink-muted'
                                 }`}>
                                   {isActive ? 'Active' : 'Inactive'}
                                 </div>
                               )}
-                              {isPackages && (
+                              {isDeps && (
                                 <div className="px-3 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-widest bg-brand-50 text-brand-600">
                                   {item.type === 'dev' || item.isDev ? 'Dev' : 'Prod'}
                                 </div>
                               )}
                               {isOutdated && (
-                                <div className="px-3 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-widest bg-amber-100 text-amber-700 border border-amber-200 animate-pulse">
-                                  Update
+                                <div className={`px-3 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-widest border ${updateStyle}`}>
+                                  {item.update ? `${item.update} update` : 'Update'}
                                 </div>
+                              )}
+                              {isDeps && item.checked && !isOutdated && item.latest_version && (
+                                <div className="px-3 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-widest bg-emerald-50 text-emerald-600">Latest</div>
                               )}
                             </div>
                           </div>

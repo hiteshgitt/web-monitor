@@ -122,3 +122,16 @@ test('normalizeComponents cleans and caps', () => {
   assert.equal(out[0].message.length, 200);
   assert.equal(normalizeComponents(undefined), null);
 });
+
+import { parseVersion, updateKind } from '../src/lib/packageVersions.js';
+
+test('version comparison', () => {
+  assert.deepEqual(parseVersion('v15.1.0'), [15, 1, 0]);
+  assert.equal(parseVersion('15.0.0-canary.3'), null);
+  assert.equal(updateKind('15.1.0', '15.3.2'), 'minor');
+  assert.equal(updateKind('14.2.3', '15.0.0'), 'major');
+  assert.equal(updateKind('2.1.2', '2.1.5'), 'patch');
+  assert.equal(updateKind('2.1.5', '2.1.5'), null);
+  assert.equal(updateKind('3.0.0', '2.9.9'), null);
+  assert.equal(updateKind(null, '1.0.0'), null);
+});

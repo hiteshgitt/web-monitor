@@ -11,6 +11,7 @@ import { searchConsoleForSite } from '../lib/searchConsole.js';
 import { queueSecurityScan, readSecurityScan } from '../lib/securityScan.js';
 import { requestScan, ruyashieldForSite } from '../lib/ruyashield.js';
 import { readVitals, refreshVitals } from '../lib/webVitals.js';
+import { withUpdates } from '../lib/packageVersions.js';
 import { ApiError, daysAgo } from '../lib/util.js';
 
 const advanced = new Hono();
@@ -59,7 +60,7 @@ advanced.get('/comprehensive/:id', async (c) => {
   // so mobile/web show the last score immediately instead of waiting on a second request.
   const [live, plugins, logs, recommendations, analytics, searchConsole, vitals, securityScan] = await Promise.all([
     liveStatsFor(c.env.DB, [site.id]).then((m) => m.get(site.id)),
-    endpoint ? fetchIntegration(site, endpoint) : Promise.resolve(null),
+    endpoint ? fetchIntegration(site, endpoint).then((d) => (site.platform === 'wordpress' ? d : withUpdates(c.env, site.platform, d))) : Promise.resolve(null),
     fetchIntegration(site, 'logs'),
     fetchIntegration(site, 'recommendations'),
     analyticsForSite(c.env, site),
@@ -119,7 +120,8 @@ advanced.get('/plugins/:id', async (c) => {
   if (!endpoint) throw new ApiError(400, 'Platform not supported for plugins/libraries/packages endpoint');
   const data = await fetchIntegration(site, endpoint);
   if (data?.error) return c.json(data, data.status && data.status >= 400 ? data.status : 503);
-  return c.json(data);
+  // npm / Composer: which dependencies have a newer release (WordPress reports its own plugin updates).
+  return c.json(site.platform === 'wordpress' ? data : await withUpdates(c.env, site.platform, data));
 });
 
 advanced.get('/incidents/:id', async (c) => {
