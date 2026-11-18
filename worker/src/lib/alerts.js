@@ -6,6 +6,7 @@ import { DOWN_STATUSES, newId, parseJson } from './util.js';
 export const ALERT_TYPES = [
   { key: 'downtime', label: 'Site down and recovered', description: 'When a site stops answering, and when it is back.' },
   { key: 'slow', label: 'Slow responses', description: 'When a site gets slower than its alert threshold.' },
+  { key: 'components', label: 'Site components', description: 'When the database, queue worker, scheduler, cron, disk or another part of a site fails, and when it recovers.' },
   { key: 'plugins', label: 'Plugin updates', description: 'When plugins or packages have updates waiting.' },
   { key: 'ssl', label: 'SSL problems', description: 'When HTTPS stops working on a site.' },
   { key: 'security', label: 'Security score', description: 'When a site’s security score drops below 70.' },
@@ -22,6 +23,7 @@ const CATEGORY = {
   site_down: 'downtime', site_up: 'downtime', slow: 'slow', slow_ok: 'slow', plugins: 'plugins',
   ssl_off: 'ssl', ssl_ok: 'ssl', security_low: 'security', pro_approved: 'account', pro_declined: 'account',
   ruyashield_critical: 'ruyashield', ruyashield_high: 'ruyashield', ruyashield_ok: 'ruyashield',
+  component_failed: 'components', component_ok: 'components',
   pro_request: 'admin_requests', ai_report: 'admin_requests', signup: 'admin_signups', account_deleted: 'admin_signups',
 };
 export const categoryOf = (type) => CATEGORY[type] || type;
@@ -81,6 +83,27 @@ export function alertStatements(db, site, result, at = new Date()) {
       state.slow = false;
       add('slow_ok', `${name} is fast again`, `Responded in ${Math.round(result.responseTime)} ms.`);
     }
+  }
+
+  // Components (database, queue, cron, disk...): alert when one is failing on two checks in a row, and when
+  // it recovers. Warnings are shown on the site page but do not alert.
+  if (Array.isArray(result.components)) {
+    const previous = new Map((parseJson(site.components) || []).map((c) => [c.id, c.status]));
+    const alerted = { ...(state.components || {}) };
+    for (const c of result.components) {
+      const failing = c.status === 'error';
+      if (failing && previous.get(c.id) === 'error' && !alerted[c.id]) {
+        alerted[c.id] = true;
+        add('component_failed', `${c.name} failing on ${name}`, c.hint ? `${c.message} What to do: ${c.hint}` : c.message);
+      } else if (!failing && c.status === 'ok' && alerted[c.id]) {
+        delete alerted[c.id];
+        add('component_ok', `${c.name} is working again on ${name}`, c.message);
+      }
+    }
+    // Components that disappeared from the report are forgotten.
+    for (const id of Object.keys(alerted)) if (!result.components.some((c) => c.id === id)) delete alerted[id];
+    if (Object.keys(alerted).length) state.components = alerted;
+    else delete state.components;
   }
 
   // Integration details (refreshed every DETAILS_REFRESH_MINUTES)

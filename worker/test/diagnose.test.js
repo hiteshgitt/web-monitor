@@ -81,3 +81,44 @@ test('errorFor keeps the fallback when there is no diagnosis', () => {
   assert.equal(e.cause, 'database');
   assert.match(e.message, /^Database connection failing: /);
 });
+
+import { alertStatements } from '../src/lib/alerts.js';
+import { normalizeComponents } from '../src/lib/monitor.js';
+
+// A fake D1: records the notifications and alert_state each check would write.
+const fakeDb = () => {
+  const writes = [];
+  return { writes, prepare: (sql) => ({ bind: (...args) => { writes.push({ sql, args }); return {}; } }) };
+};
+const notes = (db) => db.writes.filter((w) => w.sql.includes('INSERT INTO notifications')).map((w) => `${w.args[3]}: ${w.args[4]}`);
+const stateOf = (db) => db.writes.find((w) => w.sql.includes('alert_state'))?.args[0] ?? null;
+
+test('component alerts: failing twice in a row, once, then recovery', () => {
+  const queueDown = [{ id: 'queue', name: 'Queue worker', status: 'error', message: 'Queue worker stopped', hint: 'Restart it' }];
+  let site = { id: 's', owner_id: 'u', name: 'Shop', status: 'warning', components: null, alert_state: null, url: 'https://x' };
+  const run = (components) => {
+    const db = fakeDb();
+    alertStatements(db, site, { status: 'warning', responseTime: 100, components }, new Date());
+    site = { ...site, components: JSON.stringify(components), alert_state: stateOf(db) ?? site.alert_state };
+    return notes(db);
+  };
+  assert.deepEqual(run(queueDown), []);                                   // first failure: no alert yet
+  assert.deepEqual(run(queueDown), ['component_failed: Queue worker failing on Shop']);
+  assert.deepEqual(run(queueDown), []);                                   // announced once
+  assert.deepEqual(run([{ id: 'queue', name: 'Queue worker', status: 'ok', message: 'Processing jobs' }]), ['component_ok: Queue worker is working again on Shop']);
+});
+
+test('warnings never alert', () => {
+  const site = { id: 's', owner_id: 'u', name: 'Shop', status: 'warning', url: 'https://x', components: JSON.stringify([{ id: 'disk', status: 'warning' }]), alert_state: null };
+  const db = fakeDb();
+  alertStatements(db, site, { status: 'warning', responseTime: 100, components: [{ id: 'disk', name: 'Disk', status: 'warning', message: '9% free' }] });
+  assert.deepEqual(notes(db), []);
+});
+
+test('normalizeComponents cleans and caps', () => {
+  const out = normalizeComponents([{ id: 'db', status: 'weird', message: 'x'.repeat(500) }, { nope: 1 }, null]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].status, 'unknown');
+  assert.equal(out[0].message.length, 200);
+  assert.equal(normalizeComponents(undefined), null);
+});

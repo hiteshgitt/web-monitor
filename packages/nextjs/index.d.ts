@@ -1,6 +1,11 @@
 export declare const VERSION: string;
 export declare const ENDPOINTS: string[];
 
+/** instrumentation.ts: export { register, onRequestError } from '@ruyalab/webmonitor-nextjs/instrumentation'; */
+export declare function register(): void;
+export declare function onRequestError(error: unknown, request: { path?: string; method?: string }, context?: { routePath?: string }): void;
+export declare function getComponents(): { id: string; name: string; status: 'ok' | 'warning' | 'error' | 'unknown'; message: string; hint?: string }[];
+
 export declare function handleWebMonitorRequest(
   endpoint: string,
   request: { authorization?: string | null; origin: string; forwardedProto?: string | null },

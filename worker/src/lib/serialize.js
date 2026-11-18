@@ -40,6 +40,8 @@ export const serializeWebsite = (row, live = {}) => ({
   performance: parseJson(row.performance),
   seo: parseJson(row.seo),
   security: parseJson(row.security),
+  components: parseJson(row.components) || [],
+  componentsAt: row.components_at || null,
   googleAnalytics: {
     connected: Boolean(row.ga_property_id && row.ga_refresh_token),
     propertyId: row.ga_property_id || null,

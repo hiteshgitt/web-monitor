@@ -16,6 +16,8 @@ const LOOK = {
   ruyashield_critical: { icon: ShieldAlert, tone: 'bg-bad-soft text-bad' },
   ruyashield_high: { icon: ShieldAlert, tone: 'bg-warn-soft text-warn' },
   ruyashield_ok: { icon: ShieldCheck, tone: 'bg-good-soft text-good' },
+  component_failed: { icon: AlertTriangle, tone: 'bg-bad-soft text-bad' },
+  component_ok: { icon: CheckCircle2, tone: 'bg-good-soft text-good' },
   pro_approved: { icon: Sparkles, tone: 'bg-brand-50 text-brand-600' },
   pro_declined: { icon: Info, tone: 'bg-canvas text-ink-muted' },
   pro_request: { icon: Sparkles, tone: 'bg-brand-50 text-brand-600' },

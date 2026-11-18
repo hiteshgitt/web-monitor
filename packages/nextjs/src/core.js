@@ -3,11 +3,13 @@
 // is reported as null / "not_available", never guessed.
 import fs from 'node:fs';
 import os from 'node:os';
+import v8 from 'node:v8';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { timingSafeEqual } from 'node:crypto';
+import { errorStore } from './instrumentation.js';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 export const ENDPOINTS = ['health', 'analytics', 'performance', 'seo', 'security', 'libraries', 'logs', 'recommendations'];
 
 const projectRoot = () => process.cwd();
@@ -91,15 +93,67 @@ function diskStats() {
   }
 }
 
+// ---- server errors (Next.js onRequestError hook) ---------------------------------------------
+// Kept on globalThis: Next.js bundles instrumentation.ts and the API route separately, so a module-level
+// variable would not be shared. Counts cover this server process (on serverless, the instance answering).
+
+const component = (id, name, status, message, hint) => ({ id, name, status, message: String(message).slice(0, 200), ...(hint ? { hint } : {}) });
+
+function errorsComponent() {
+  const store = errorStore();
+  if (!store.hooked && store.items.length === 0) {
+    return component('server_errors', 'Server errors', 'unknown', 'Not tracked yet.',
+      "Add instrumentation.ts with: export { register, onRequestError } from '@ruyalab/webmonitor-nextjs/instrumentation';");
+  }
+  const now = Date.now();
+  const recent = store.items.filter((e) => e.at >= now - 15 * 60_000);
+  const hour = store.items.filter((e) => e.at >= now - 60 * 60_000);
+  if (!hour.length) return component('server_errors', 'Server errors', 'ok', 'No server errors in the last hour.');
+  const last = hour[hour.length - 1];
+  // The route that failed most often in the last hour.
+  const byRoute = {};
+  for (const e of hour) byRoute[e.route || e.path] = (byRoute[e.route || e.path] || 0) + 1;
+  const [worst, worstCount] = Object.entries(byRoute).sort((a, b) => b[1] - a[1])[0];
+  const status = recent.length >= 5 ? 'error' : 'warning';
+  return component('server_errors', 'Server errors', status,
+    `${hour.length} server error${hour.length === 1 ? '' : 's'} in the last hour (${recent.length} in 15 min), most on ${worst} (${worstCount}). Latest: ${last.message}`,
+    (() => {
+      const lastOnWorst = [...hour].reverse().find((e) => (e.route || e.path) === worst);
+      return `Check the server logs for ${worst}${lastOnWorst?.digest ? ` (digest ${lastOnWorst.digest})` : ''}.`;
+    })());
+}
+
+function heapComponent() {
+  const h = v8.getHeapStatistics();
+  const pct = round((h.used_heap_size / h.heap_size_limit) * 100, 1);
+  return component('node_memory', 'Node.js memory', pct >= 95 ? 'error' : pct >= 85 ? 'warning' : 'ok',
+    `Heap ${pct}% of its ${Math.round(h.heap_size_limit / 1048576)} MB limit.`,
+    pct >= 85 ? 'Look for a memory leak (large caches, unclosed connections) or raise --max-old-space-size.' : null);
+}
+
+function diskComponent() {
+  const d = diskStats();
+  if (d.freePercent == null) return null;
+  return component('disk', 'Disk space', d.freePercent < 5 ? 'error' : d.freePercent < 15 ? 'warning' : 'ok',
+    `${d.freePercent}% free (${round(d.freeBytes / 1073741824, 1)} GB).`,
+    d.freePercent < 15 ? 'Free space: build caches (.next/cache), logs and old deployments.' : null);
+}
+
+export function getComponents() {
+  return [errorsComponent(), heapComponent(), diskComponent()].filter(Boolean);
+}
+
 // ---- endpoints ------------------------------------------------------------------------------
 
 function getHealth() {
   const start = performance.now();
   const memory = systemMemoryPercent();
-  const status = memory >= 95 ? 'warning' : 'healthy';
+  const components = getComponents();
+  const failing = components.find((c) => c.status === 'error') || components.find((c) => c.status === 'warning');
+  const status = failing || memory >= 95 ? 'warning' : 'healthy';
   return {
     status,
-    message: status === 'healthy' ? 'Site is healthy' : 'Server memory usage is above 95%',
+    message: failing ? `${failing.name}: ${failing.message}` : memory >= 95 ? 'Server memory usage is above 95%' : 'Site is healthy',
     timestamp: new Date().toISOString(),
     response_time: round(performance.now() - start),
     node_version: process.version,
@@ -111,6 +165,7 @@ function getHealth() {
       memory_usage: `${memory}%`,
       load_average: process.platform === 'win32' ? null : round(os.loadavg()[0]),
     },
+    components,
   };
 }
 

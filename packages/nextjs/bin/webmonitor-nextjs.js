@@ -79,6 +79,30 @@ function ensureKey() {
   return key;
 }
 
+// Server-error tracking: Next.js loads instrumentation.(ts|js) from the project root or src/.
+function writeInstrumentation() {
+  const router = findRouterDir();
+  const base = router && router.dir.startsWith('src/') ? 'src' : '.';
+  const ext = fs.existsSync(path.join(root, 'tsconfig.json')) ? 'ts' : 'js';
+  const existing = ['instrumentation.ts', 'instrumentation.js', 'src/instrumentation.ts', 'src/instrumentation.js']
+    .find((f) => fs.existsSync(path.join(root, f)));
+  const line = "export { register, onRequestError } from '@ruyalab/webmonitor-nextjs/instrumentation';";
+  if (existing) {
+    const text = fs.readFileSync(path.join(root, existing), 'utf8');
+    if (text.includes('@ruyalab/webmonitor-nextjs/instrumentation')) {
+      console.log(green(`✔ Server-error tracking already in ${existing}`));
+    } else {
+      console.log(yellow(`! ${existing} already exists. To track server errors, call Web Monitor's hooks from it:`));
+      console.log("    import { register as wmRegister, onRequestError as wmError } from '@ruyalab/webmonitor-nextjs/instrumentation';");
+      console.log('    // call wmRegister() in your register(), and wmError(error, request, context) in your onRequestError()');
+    }
+    return;
+  }
+  const file = path.join(base, `instrumentation.${ext}`);
+  fs.writeFileSync(path.join(root, file), `// Web Monitor: counts server errors so the dashboard can say which route is failing (Next.js 15+).\n${line}\n`);
+  console.log(green(`✔ Created ${file} (server-error tracking)`));
+}
+
 if (command === 'init') {
   const pkgFile = path.join(root, 'package.json');
   if (!fs.existsSync(pkgFile)) fail('No package.json here. Run this in the root of your Next.js project.');
@@ -87,6 +111,7 @@ if (command === 'init') {
     console.log(yellow('! "next" is not in package.json — make sure you are in your Next.js project root.'));
   }
   writeRoute();
+  writeInstrumentation();
   const key = ensureKey();
   console.log(`
   Next steps

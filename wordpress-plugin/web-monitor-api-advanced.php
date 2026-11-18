@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Web Monitor API (Advanced)
  * Description: Advanced REST API endpoints for the Web Monitor Dashboard. Exposes real, dynamic WordPress health, analytics, performance, SEO and security data (no simulated/random values).
- * Version: 1.1.5
+ * Version: 1.2.0
  * Author: Web Monitor Team
  * Requires at least: 5.6
  * Tested up to: 7.0
@@ -72,6 +72,143 @@ function webmonitor_disk_stats() {
         'total_bytes' => (int) $total,
         'free_percent' => round($free / $total * 100, 1),
     );
+}
+
+// ---------- Components: what is healthy inside WordPress (shared format of every Web Monitor integration) ----------
+
+function webmonitor_component($id, $name, $status, $message, $hint = null) {
+    $c = array('id' => $id, 'name' => $name, 'status' => $status, 'message' => substr($message, 0, 200));
+    if ($hint !== null) {
+        $c['hint'] = substr($hint, 0, 240);
+    }
+    return $c;
+}
+
+function webmonitor_minutes($seconds) {
+    return $seconds < 7200 ? round($seconds / 60) . ' min' : ($seconds < 172800 ? round($seconds / 3600) . ' h' : round($seconds / 86400) . ' days');
+}
+
+// WP-Cron: scheduled tasks (publishing, backups, emails, WooCommerce jobs) that are overdue mean cron is not running.
+function webmonitor_cron_component() {
+    if (!function_exists('_get_cron_array')) {
+        return null;
+    }
+    $crons = _get_cron_array();
+    if (!is_array($crons)) {
+        return webmonitor_component('wp_cron', 'WP-Cron', 'unknown', 'No scheduled tasks found.');
+    }
+    $now = time();
+    $overdue = 0;
+    $oldest = 0;
+    foreach ($crons as $timestamp => $hooks) {
+        if ($timestamp < $now - 600) {          // 10 minutes late counts as overdue
+            $overdue += is_array($hooks) ? count($hooks) : 1;
+            $oldest = max($oldest, $now - $timestamp);
+        }
+    }
+    $disabled = defined('DISABLE_WP_CRON') && DISABLE_WP_CRON;
+    if ($overdue === 0) {
+        return webmonitor_component('wp_cron', 'WP-Cron', 'ok', $disabled ? 'Running from a system cron (DISABLE_WP_CRON is set).' : 'Scheduled tasks are running on time.');
+    }
+    $status = $oldest >= 3600 ? 'error' : 'warning';
+    $msg = "{$overdue} scheduled task" . ($overdue === 1 ? ' is' : 's are') . ' overdue (oldest by ' . webmonitor_minutes($oldest) . ').';
+    $hint = $disabled
+        ? 'DISABLE_WP_CRON is set, so a system cron must call wp-cron.php: add */5 * * * * wget -q -O - https://your-site/wp-cron.php?doing_wp_cron'
+        : 'WP-Cron only runs on visits and can be blocked by caching or a loopback error. Set up a real cron job for wp-cron.php and check Tools > Site Health.';
+    return webmonitor_component('wp_cron', 'WP-Cron', $status, ($status === 'error' ? 'WP-Cron not running: ' : '') . $msg, $hint);
+}
+
+// WooCommerce and many plugins queue background work in Action Scheduler.
+function webmonitor_action_scheduler_component() {
+    global $wpdb;
+    $table = $wpdb->prefix . 'actionscheduler_actions';
+    if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) !== $table) {
+        return null;
+    }
+    $since = gmdate('Y-m-d H:i:s', time() - DAY_IN_SECONDS);
+    $late = gmdate('Y-m-d H:i:s', time() - HOUR_IN_SECONDS);
+    $failed = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE status = 'failed' AND last_attempt_gmt >= %s", $since));
+    $pending = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE status = 'pending' AND scheduled_date_gmt < %s", $late));
+    if ($pending >= 20) {
+        return webmonitor_component('action_scheduler', 'Background jobs (Action Scheduler)', 'error',
+            "{$pending} background jobs are more than an hour late" . ($failed ? " and {$failed} failed today." : '.'),
+            'The queue is stuck, usually because WP-Cron is not running. Check Tools > Scheduled Actions.');
+    }
+    if ($failed > 0 || $pending > 0) {
+        return webmonitor_component('action_scheduler', 'Background jobs (Action Scheduler)', 'warning',
+            trim(($failed ? "{$failed} failed in the last 24 hours. " : '') . ($pending ? "{$pending} more than an hour late." : '')),
+            'Open Tools > Scheduled Actions to see the errors.');
+    }
+    return webmonitor_component('action_scheduler', 'Background jobs (Action Scheduler)', 'ok', 'No failed or late jobs.');
+}
+
+// Fatal errors in debug.log during the last hour (only when the log exists).
+function webmonitor_php_errors_component() {
+    $log_file = defined('WP_DEBUG_LOG') && is_string(WP_DEBUG_LOG) ? WP_DEBUG_LOG : WP_CONTENT_DIR . '/debug.log';
+    if (!is_file($log_file) || !is_readable($log_file)) {
+        return null;
+    }
+    $size = filesize($log_file);
+    $fh = @fopen($log_file, 'r');
+    if (!$fh) {
+        return null;
+    }
+    fseek($fh, max(0, $size - 65536));
+    $chunk = (string) fread($fh, 65536);
+    fclose($fh);
+    $since = time() - HOUR_IN_SECONDS;
+    $count = 0;
+    $last = '';
+    foreach (explode("\n", $chunk) as $line) {
+        if (stripos($line, 'PHP Fatal error') === false && stripos($line, 'PHP Parse error') === false) {
+            continue;
+        }
+        if (preg_match('/^\[([^\]]+)\]/', $line, $m)) {
+            $at = strtotime($m[1]);
+            if ($at !== false && $at < $since) {
+                continue;
+            }
+        }
+        $count++;
+        $last = trim(preg_replace('/^\[[^\]]+\]\s*/', '', $line));
+    }
+    if ($count === 0) {
+        return webmonitor_component('php_errors', 'PHP errors', 'ok', 'No fatal errors in debug.log in the last hour.');
+    }
+    $plugin = preg_match('#wp-content/plugins/([a-z0-9._-]+)/#i', $last, $p) ? $p[1] : null;
+    return webmonitor_component('php_errors', 'PHP errors', 'warning',
+        "{$count} fatal error" . ($count === 1 ? '' : 's') . ' in the last hour' . ($plugin ? " (latest in the {$plugin} plugin)" : '') . ': ' . substr($last, 0, 120),
+        $plugin ? "Update or deactivate the {$plugin} plugin and check its changelog." : 'Open wp-content/debug.log for the full error.');
+}
+
+function webmonitor_components($db_status, $memory_percentage) {
+    $out = array();
+    $out[] = $db_status === 'connected'
+        ? webmonitor_component('database', 'Database', 'ok', 'Connected.')
+        : webmonitor_component('database', 'Database', 'error', 'The database check query failed.', 'Check the MySQL server and the DB_* settings in wp-config.php.');
+    if ($memory_percentage !== null) {
+        $out[] = webmonitor_component('php_memory', 'PHP memory', $memory_percentage >= 95 ? 'error' : ($memory_percentage >= 80 ? 'warning' : 'ok'),
+            "Using {$memory_percentage}% of memory_limit (" . ini_get('memory_limit') . ').',
+            $memory_percentage >= 80 ? 'Raise WP_MEMORY_LIMIT in wp-config.php or find the plugin that uses so much memory.' : null);
+    }
+    $disk = webmonitor_disk_stats();
+    if ($disk['free_percent'] !== null) {
+        $free = $disk['free_percent'];
+        $out[] = webmonitor_component('disk', 'Disk space', $free < 5 ? 'error' : ($free < 15 ? 'warning' : 'ok'),
+            "{$free}% free (" . round($disk['free_bytes'] / 1073741824, 1) . ' GB).',
+            $free < 15 ? 'Free space: old backups (e.g. in wp-content/uploads or backup plugin folders), logs and cache.' : null);
+    }
+    foreach (array('webmonitor_cron_component', 'webmonitor_action_scheduler_component', 'webmonitor_php_errors_component') as $fn) {
+        try {
+            $c = $fn();
+            if ($c) {
+                $out[] = $c;
+            }
+        } catch (Throwable $e) {
+            // One broken check must not break the health endpoint.
+        }
+    }
+    return $out;
 }
 
 function webmonitor_memory_percent($bytes) {
@@ -515,14 +652,23 @@ function webmonitor_advanced_health_check($request) {
     }
 
     // Report what the checks above actually found instead of always "healthy"
+    $components = webmonitor_components($db_status, $memory_percentage);
     $status = 'healthy';
-    $message = 'WordPress site is healthy - Advanced Plugin!';
+    $message = 'WordPress site is healthy';
     if ($db_status !== 'connected') {
         $status = 'error';
         $message = 'Database connection check failed';
-    } elseif ($memory_percentage !== null && $memory_percentage >= 90) {
-        $status = 'warning';
-        $message = 'Memory usage is above 90% of the PHP memory limit';
+    } else {
+        // The site answered: a failing component makes it "needs attention", naming the worst one.
+        foreach (array('error', 'warning') as $level) {
+            foreach ($components as $c) {
+                if ($c['status'] === $level) {
+                    $status = 'warning';
+                    $message = $c['name'] . ': ' . $c['message'];
+                    break 2;
+                }
+            }
+        }
     }
 
     return array(
@@ -535,7 +681,8 @@ function webmonitor_advanced_health_check($request) {
         'site_url' => home_url(),
         'wordpress_version' => get_bloginfo('version'),
         'php_version' => PHP_VERSION,
-        'plugin_version' => '1.1.5',
+        'plugin_version' => '1.2.0',
+        'components' => $components,
         'checks' => array(
             'database' => $db_status,
             'memory' => ($memory_percentage === null || $memory_percentage < 80) ? 'normal' : 'high',

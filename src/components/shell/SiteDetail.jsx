@@ -65,7 +65,10 @@ const StatusCard = ({ site, availability, incident = null }) => {
     bad: { bg: 'from-rose-400 to-bad', shadow: 'shadow-card', Icon: XCircle, title: site.status === 'offline' ? 'Site is offline' : 'Check failing' },
     muted: { bg: 'from-brand-300 to-brand-500', shadow: 'shadow-card', Icon: Clock, title: 'Waiting for first check' },
   }[tone];
-  const detail = UP_STATUSES.includes(site.status)
+  const failingPart = (site.components || []).find((c) => c.status === 'error') || (site.components || []).find((c) => c.status === 'warning');
+  const detail = tone === 'warn' && failingPart
+    ? `${failingPart.name}: ${failingPart.message}`
+    : UP_STATUSES.includes(site.status)
     ? `Responded in ${formatMs(site.responseTime)} · ${formatPercent(availability)} of checks passed in 24h`
     : tone === 'muted'
       ? 'Checks run every minute; the first result will appear here shortly.'
@@ -149,6 +152,8 @@ const ALERT_KIND = {
   ruyashield_critical: 'RuyaShield: new critical finding',
   ruyashield_high: 'RuyaShield: new high finding',
   ruyashield_ok: 'RuyaShield: all clear',
+  component_failed: 'Component failing',
+  component_ok: 'Component recovered',
 };
 
 const AlertContext = ({ focus, incidents, incidentsLoaded, checks, checksLoaded, threshold, onDismiss }) => {
@@ -275,6 +280,48 @@ const ChecksTable = ({ checks, limit, highlightId }) => (
   </div>
 );
 
+// What the site's integration reports about its parts: database, memory, disk, cron, queue, scheduler...
+const COMPONENT_TONE = {
+  error: ['bg-bad', 'text-bad', 'Failing'],
+  warning: ['bg-warn', 'text-amber-700', 'Attention'],
+  ok: ['bg-good', 'text-good', 'OK'],
+  unknown: ['bg-ink-faint', 'text-ink-muted', 'Not checked'],
+};
+const COMPONENT_ORDER = { error: 0, warning: 1, unknown: 2, ok: 3 };
+
+const ComponentsSection = ({ site }) => {
+  const list = [...(site.components || [])].sort((a, b) => COMPONENT_ORDER[a.status] - COMPONENT_ORDER[b.status]);
+  if (!list.length) return null;
+  const failing = list.filter((c) => c.status === 'error' || c.status === 'warning').length;
+  return (
+    <section>
+      <SectionTitle>Components</SectionTitle>
+      <p className="text-[12px] text-ink-muted -mt-2 mb-3">
+        {failing ? `${failing} of ${list.length} need attention.` : `All ${list.length} checked parts of the site are working.`}
+        {site.componentsAt && ` Updated ${new Date(site.componentsAt).toLocaleString()}.`}
+      </p>
+      <div className="grid sm:grid-cols-2 gap-2.5">
+        {list.map((c) => {
+          const [dot, text, word] = COMPONENT_TONE[c.status] || COMPONENT_TONE.unknown;
+          return (
+            <div key={c.id} className={`panel p-3 ${c.status === 'error' ? 'ring-1 ring-bad/40' : ''}`}>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} aria-hidden="true" />
+                <span className="text-[13px] font-bold text-ink flex-1 min-w-0 truncate">{c.name}</span>
+                <span className={`text-[10px] font-extrabold uppercase tracking-wider ${text}`}>{word}</span>
+              </div>
+              <p className="text-[12px] text-ink-soft mt-1.5 leading-snug">{c.message}</p>
+              {c.hint && c.status !== 'ok' && (
+                <p className="mt-2 rounded-lg bg-brand-50 px-2.5 py-1.5 text-[12px] text-ink-soft"><span className="font-bold text-brand-700">What to do: </span>{c.hint}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
+
 const OverviewTab = ({ site, availability, checks, latencySeries }) => {
   const threshold = site.settings?.alertThresholds?.responseTime || 5000;
   const isUp = UP_STATUSES.includes(site.status);
@@ -336,6 +383,8 @@ const OverviewTab = ({ site, availability, checks, latencySeries }) => {
           </div>
         </div>
       </section>
+
+      <ComponentsSection site={site} />
 
       <InventorySection site={site} />
 
@@ -503,7 +552,13 @@ const SiteDetail = ({ site, tab = 'Overview', onTabChange, onBack, onEdit, onDel
 
   const recommendations = useMemo(() => {
     const seen = new Set();
+    // Failing components lead the checklist: their "what to do" is the most urgent work on the site.
+    const parts = [...(site.components || [])]
+      .filter((c) => (c.status === 'error' || c.status === 'warning') && c.hint)
+      .sort((x, y) => (x.status === 'error' ? 0 : 1) - (y.status === 'error' ? 0 : 1))
+      .map((c) => ({ text: `${c.name}: ${c.hint}`, area: c.status === 'error' ? 'failing' : 'attention' }));
     return [
+      ...parts,
       ...(site.performance?.recommendations || []).map((text) => ({ text, area: 'performance' })),
       ...(site.seo?.recommendations || []).map((text) => ({ text, area: 'seo' })),
       ...(site.security?.recommendations || []).map((text) => ({ text, area: 'security' })),

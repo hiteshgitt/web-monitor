@@ -143,6 +143,8 @@ export const ALERT_KIND = {
   ruyashield_critical: 'RuyaShield: new critical finding',
   ruyashield_high: 'RuyaShield: new high finding',
   ruyashield_ok: 'RuyaShield: all clear',
+  component_failed: 'Component failing',
+  component_ok: 'Component recovered',
 };
 
 export const formatWhen = (iso) => (iso ? new Date(iso).toLocaleString() : '—');

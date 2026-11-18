@@ -70,6 +70,19 @@ async function diagnoseFailure(site, response) {
   return page ? diagnoseResponse(page) : null;
 }
 
+// Components reported by an integration (shared format, see diagnose/health docs): cleaned and capped.
+const COMPONENT_STATUSES = ['ok', 'warning', 'error', 'unknown'];
+export function normalizeComponents(list) {
+  if (!Array.isArray(list)) return null;
+  return list.slice(0, 20).filter((c) => c && typeof c.id === 'string').map((c) => ({
+    id: String(c.id).slice(0, 40),
+    name: String(c.name || c.id).slice(0, 60),
+    status: COMPONENT_STATUSES.includes(c.status) ? c.status : 'unknown',
+    message: String(c.message || '').slice(0, 200),
+    ...(c.hint ? { hint: String(c.hint).slice(0, 240) } : {}),
+  }));
+}
+
 // Integrations may report their own status words; anything unknown is treated as a warning
 const normalizeStatus = (status) => {
   if (!status) return 'healthy';
@@ -189,6 +202,7 @@ async function checkWordPress(site, withDetails) {
     responseTime: health.elapsedMs,
     statusCode: health.status,
     serverProcessingTime: health.data.response_time ?? null,
+    components: normalizeComponents(health.data.components),
   };
   if (withDetails) {
     const parts = await Promise.all(['analytics', 'performance', 'seo', 'security'].map((ep) => (
@@ -247,6 +261,7 @@ async function checkApiIntegration(site, frameworkName, withDetails = false) {
     responseTime: health.elapsedMs,
     statusCode: health.status,
     serverProcessingTime: health.data.response_time ?? null,
+    components: normalizeComponents(health.data.components),
   };
   if (withDetails) {
     const parts = await Promise.all(['analytics', 'performance', 'seo', 'security'].map((ep) => (
@@ -339,6 +354,14 @@ export function recordCheckStatements(db, site, result, at = new Date()) {
       ON CONFLICT (website_id, day) DO UPDATE SET total = total + 1, up = up + ?3, response_sum = response_sum + ?4`)
       .bind(site.id, dayKey(at), isUp ? 1 : 0, responseTime ?? 0),
   ];
+
+  // Component health: written only when it changes.
+  if (result.components) {
+    const json = JSON.stringify(result.components);
+    if (json !== (site.components || null)) {
+      statements.push(db.prepare('UPDATE websites SET components = ?, components_at = ? WHERE id = ?').bind(json, timestamp, site.id));
+    }
+  }
 
   // An open incident without a cause gets one as soon as a later check can diagnose it (one write).
   if (result.status === site.status && DOWN_STATUSES.includes(result.status) && result.error?.cause) {

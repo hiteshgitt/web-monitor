@@ -30,7 +30,7 @@ const INTEGRATIONS = [
     summary: 'An npm package. One command creates the API route and your key.',
     steps: [
       { title: 'Install the package', text: 'In your Next.js project run the install command below (works with App Router and Pages Router).' },
-      { title: 'Run the setup', text: 'npx webmonitor-nextjs init creates app/api/webmonitor/[...slug]/route and saves a new WEBMONITOR_API_KEY in .env.local. It prints the key.' },
+      { title: 'Run the setup', text: 'npx webmonitor-nextjs init creates app/api/webmonitor/[...slug]/route, an instrumentation file that counts server errors per route (Next.js 15+), and saves a new WEBMONITOR_API_KEY in .env.local. It prints the key.' },
       { title: 'Add the key to your host', text: 'Add the same WEBMONITOR_API_KEY to your hosting environment variables (e.g. Vercel → Settings → Environment Variables), then deploy.' },
       { title: 'Add the site', text: 'In the dashboard click Add site, choose Next.js and paste the key.' },
     ],
@@ -49,6 +49,7 @@ const INTEGRATIONS = [
       { title: 'Install the package', text: 'Run composer require in your Laravel project. It registers /api/webmonitor automatically — no route or controller to edit.' },
       { title: 'Run the setup', text: 'php artisan webmonitor:install saves a new WEBMONITOR_API_KEY in .env and prints it with your site URL.' },
       { title: 'Check APP_URL', text: 'Make sure APP_URL in .env is your public https:// address — it is used for the SEO and security checks.' },
+      { title: 'Keep the scheduler running', text: 'Web Monitor checks your database, cache, scheduler and queue worker. The scheduler and queue checks use a tiny heartbeat task, so keep the usual cron entry (php artisan schedule:run every minute) and your queue worker running.' },
       { title: 'Add the site', text: 'In the dashboard click Add site, choose Laravel and paste the key.' },
     ],
     snippets: [
