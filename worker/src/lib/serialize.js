@@ -74,5 +74,8 @@ export const serializeIncident = (row) => ({
   endedAt: row.ended_at || null,
   status: row.status,
   message: row.message,
+  cause: row.cause || null,
+  component: row.component || null,
+  hint: row.hint || null,
   lastChecked: row.last_checked,
 });

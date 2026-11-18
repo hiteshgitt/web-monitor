@@ -92,7 +92,7 @@ export async function buildReport(env, userId, site, days, now = new Date()) {
   const [dayRows, incidentRows, scan, vitals, ruyashield] = await Promise.all([
     env.DB.prepare('SELECT day, total, up, response_sum FROM check_days WHERE website_id = ? AND day >= ? ORDER BY day')
       .bind(site.id, dayKey(from)).all().then((r) => r.results),
-    env.DB.prepare(`SELECT started_at, ended_at, status, message FROM incidents
+    env.DB.prepare(`SELECT started_at, ended_at, status, message, cause, component, hint FROM incidents
       WHERE website_id = ? AND (ended_at IS NULL OR ended_at >= ?) AND started_at <= ? ORDER BY started_at DESC`)
       .bind(site.id, from.toISOString(), now.toISOString()).all().then((r) => r.results),
     readSecurityScan(env, site),
@@ -107,6 +107,7 @@ export async function buildReport(env, userId, site, days, now = new Date()) {
   const uptimePct = total ? round1((up / total) * 100) : null;
   const incidents = incidentRows.map((i) => ({
     startedAt: i.started_at, endedAt: i.ended_at, status: i.status, message: i.message,
+    cause: i.cause || null, component: i.component || null, hint: i.hint || null,
     minutes: Math.round(minutesWithin(i, from, now)),
   }));
   const uptime = {

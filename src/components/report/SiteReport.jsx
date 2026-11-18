@@ -313,7 +313,12 @@ export const FullReport = ({ report }) => {
         {u.incidents.length > 0 ? (
           <div className="mt-6">
             <Table caption={`Incidents (${u.incidentCount}${u.incidentCount > u.incidents.length ? `, latest ${u.incidents.length} shown` : ''})`} head={['Started', 'Ended', 'Duration', 'Cause']}
-              rows={u.incidents.map((i) => [fmtDateTime(i.startedAt), i.endedAt ? fmtDateTime(i.endedAt) : 'Ongoing', fmtMinutes(i.minutes), <span className="text-ink-soft">{i.message || i.status}</span>])} />
+              rows={u.incidents.map((i) => [fmtDateTime(i.startedAt), i.endedAt ? fmtDateTime(i.endedAt) : 'Ongoing', fmtMinutes(i.minutes), (
+                <span className="text-ink-soft">
+                  {i.component && <span className="block text-[10px] font-extrabold uppercase tracking-wider text-bad">{i.component}</span>}
+                  {i.cause ? (i.message || '').split(': ')[0] : (i.message || i.status)}
+                </span>
+              )])} />
           </div>
         ) : <p className="mt-6 text-sm text-ink-soft">No downtime incidents in this period.</p>}
         {u.daily.length > 0 && (

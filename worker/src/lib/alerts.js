@@ -64,7 +64,9 @@ export function alertStatements(db, site, result, at = new Date()) {
   const isDown = DOWN_STATUSES.includes(result.status);
   if (isDown && DOWN_STATUSES.includes(site.status) && !state.down) {
     state.down = true;
-    add('site_down', `${name} is down`, result.error?.message || `The site reported "${result.status}".`);
+    // A diagnosed cause leads, with what to do about it.
+    const why = result.error?.message || `The site reported "${result.status}".`;
+    add('site_down', `${name} is down`, result.error?.hint ? `${why} What to do: ${result.error.hint}` : why);
   } else if (!isDown && state.down) {
     state.down = false;
     add('site_up', `${name} is back up`, result.responseTime != null ? `Answering again in ${Math.round(result.responseTime)} ms.` : 'Answering again.');

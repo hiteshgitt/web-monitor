@@ -57,7 +57,7 @@ const LatencyChart = ({ data, height = 180 }) => {
 };
 
 // ---------- Right column ----------
-const StatusCard = ({ site, availability }) => {
+const StatusCard = ({ site, availability, incident = null }) => {
   const tone = statusTone(site.status);
   const styles = {
     good: { bg: 'from-emerald-300 to-good', shadow: 'shadow-good', Icon: CheckCircle2, title: 'All systems healthy' },
@@ -79,7 +79,13 @@ const StatusCard = ({ site, availability }) => {
         <styles.Icon size={30} strokeWidth={1.75} className="shrink-0" />
         <div>
           <div className="font-bold text-[15px]">{styles.title}</div>
+          {tone === 'bad' && incident?.component && (
+            <div className="inline-block mt-1 px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-extrabold uppercase tracking-wider">{incident.component}</div>
+          )}
           <div className="text-[12px] leading-snug text-white/85 mt-0.5">{detail}</div>
+          {tone === 'bad' && incident?.hint && (
+            <div className="mt-2 rounded-lg bg-white/15 px-2.5 py-1.5 text-[12px] leading-snug"><span className="font-bold">What to do: </span>{incident.hint}</div>
+          )}
         </div>
       </div>
     </div>
@@ -89,7 +95,7 @@ const StatusCard = ({ site, availability }) => {
 const ReviewColumn = ({ site, availability, recommendations, incidents }) => (
   <aside className="lg:pl-6 lg:border-l border-brand-100">
     <SectionTitle>Review</SectionTitle>
-    <StatusCard site={site} availability={availability} />
+    <StatusCard site={site} availability={availability} incident={incidents.find((i) => !i.endedAt) || null} />
     <div className="mt-5">
       <Collapsible title="Fix checklist" count={recommendations.length} defaultOpen>
         {recommendations.length === 0 ? (
@@ -112,7 +118,7 @@ const ReviewColumn = ({ site, availability, recommendations, incidents }) => (
           <div className="space-y-2.5">
             {incidents.slice(0, 5).map((incident) => (
               <div key={incident._id} className="panel p-3 hover:shadow-card-hover transition-shadow">
-                <div className="text-[13px] font-semibold text-ink line-clamp-2">{incident.message || STATUS_LABEL[incident.status]}</div>
+                <div className="text-[13px]"><IncidentCause incident={incident} compact /></div>
                 <div className="flex justify-between mt-2 text-[11px] font-semibold text-ink-muted">
                   <span className={incident.endedAt ? '' : 'text-bad'}>
                     {incident.endedAt ? 'Resolved' : 'Ongoing'} · down for {formatSpan(incident.startedAt, incident.endedAt)}
@@ -412,6 +418,28 @@ const ScoreSection = ({ title, score, rows, items, itemsTitle, emptyText }) => (
   </div>
 );
 
+// Root cause of an incident (from the monitor's diagnosis): the failing component, what happened, what to do.
+const IncidentCause = ({ incident, compact = false }) => {
+  if (!incident.cause) {
+    return <span className={`block font-semibold text-ink ${compact ? 'line-clamp-2' : 'truncate'}`}>{incident.message || STATUS_LABEL[incident.status]}</span>;
+  }
+  const [title, ...rest] = (incident.message || '').split(': ');
+  return (
+    <span className="block min-w-0">
+      {incident.component && (
+        <span className="inline-flex items-center gap-1 mb-1 px-2 py-0.5 rounded-md bg-bad-soft text-bad text-[10px] font-extrabold uppercase tracking-wider">{incident.component}</span>
+      )}
+      <span className="block font-semibold text-ink">{title}</span>
+      {rest.length > 0 && <span className={`block text-[12px] text-ink-soft mt-0.5 ${compact ? 'line-clamp-2' : ''}`}>{rest.join(': ')}</span>}
+      {incident.hint && (
+        <span className="block mt-2 rounded-lg bg-brand-50 px-2.5 py-1.5 text-[12px] text-ink-soft">
+          <span className="font-bold text-brand-700">What to do: </span>{incident.hint}
+        </span>
+      )}
+    </span>
+  );
+};
+
 const HistoryTab = ({ checks, incidents, focusId, highlightCheckId }) => (
   <div className="space-y-7">
     <section>
@@ -421,7 +449,7 @@ const HistoryTab = ({ checks, incidents, focusId, highlightCheckId }) => (
           {incidents.map((incident) => (
             <div key={incident._id} className={`panel px-4 py-3 flex items-center justify-between gap-4 text-[13px] ${incident._id === focusId ? 'ring-2 ring-brand-500' : ''}`}>
               <span className="min-w-0">
-                <span className="block font-semibold text-ink truncate">{incident.message || STATUS_LABEL[incident.status]}</span>
+                <IncidentCause incident={incident} />
                 <span className={`text-[11px] font-semibold ${incident.endedAt ? 'text-ink-muted' : 'text-bad'}`}>
                   Down for {formatSpan(incident.startedAt, incident.endedAt)}{incident.endedAt ? '' : ' so far'}
                 </span>

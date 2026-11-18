@@ -2,10 +2,33 @@
 import { alertStatements } from './alerts.js';
 import { deliverPendingPush } from './push.js';
 import { DOWN_STATUSES, UP_STATUSES, VALID_STATUSES, dayKey, hourKey, newId } from './util.js';
+import { diagnoseNetworkError, diagnoseResponse, errorFor } from './diagnose.js';
 
 const TIMEOUT_MS = 10000;
+const DIAGNOSE_BYTES = 16 * 1024;
 
-// fetch that never throws for HTTP errors, measures the round trip, and parses JSON when present
+// The first bytes of an error page, for diagnose.js. Never stored.
+async function readStart(response, limit = DIAGNOSE_BYTES) {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  try {
+    while (text.length < limit) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
+    }
+  } catch {
+    // A body cut off mid-read still helps.
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  return text.slice(0, limit);
+}
+
+// fetch that never throws for HTTP errors, measures the round trip, and parses JSON when present.
+// Error responses (and unexpected HTML) keep the start of their body so the cause can be diagnosed.
 async function timedFetch(url, apiKey) {
   const start = Date.now();
   const response = await fetch(url, {
@@ -15,13 +38,36 @@ async function timedFetch(url, apiKey) {
   });
   const elapsedMs = Date.now() - start;
   const type = (response.headers.get('content-type') || '').toLowerCase();
+  const headers = { server: response.headers.get('server') };
   let data = null;
-  if (type.includes('json')) {
+  let body = '';
+  if (type.includes('json') && response.ok) {
     data = await response.json().catch(() => null);
+  } else if (!response.ok || type.includes('html')) {
+    body = await readStart(response);
   } else {
     await response.body?.cancel();
   }
-  return { status: response.status, type, data, elapsedMs };
+  return { status: response.status, type, data, body, headers, elapsedMs };
+}
+
+// The public homepage, fetched once when an integration endpoint failed without saying why: the page
+// visitors get usually names the cause (database error, critical error, maintenance...).
+async function homepage(site) {
+  try {
+    const response = await fetch(site.url, { signal: AbortSignal.timeout(TIMEOUT_MS), redirect: 'follow', headers: { Accept: 'text/html' } });
+    return { status: response.status, body: await readStart(response), headers: { server: response.headers.get('server') } };
+  } catch {
+    return null;
+  }
+}
+
+// Root cause of a failed integration response: the response itself, else the homepage.
+async function diagnoseFailure(site, response) {
+  const direct = diagnoseResponse(response);
+  if (direct) return direct;
+  const page = await homepage(site);
+  return page ? diagnoseResponse(page) : null;
 }
 
 // Integrations may report their own status words; anything unknown is treated as a warning
@@ -32,10 +78,10 @@ const normalizeStatus = (status) => {
 
 const networkFailure = (error) => ({
   status: 'offline',
-  error: {
+  error: errorFor(diagnoseNetworkError(error, TIMEOUT_MS / 1000), {
     message: `Site unreachable: ${error.name === 'TimeoutError' ? `no answer within ${TIMEOUT_MS / 1000}s` : error.message}`,
     code: error.name === 'TimeoutError' ? 'TIMEOUT' : 'CONNECTION_FAILED',
-  },
+  }),
 });
 
 const wpUrl = (base, endpoint, restRoute) => (restRoute
@@ -134,7 +180,8 @@ async function checkWordPress(site, withDetails) {
     return { status: 'error', statusCode: health.status, error: { message: 'Invalid API key. Check your WordPress API key.', code: 'INVALID_API_KEY' } };
   }
   if (health.status !== 200 || !health.data) {
-    return { status: 'offline', statusCode: health.status, error: { message: `API returned status ${health.status}`, code: 'API_ERROR' } };
+    const why = await diagnoseFailure(site, health);
+    return { status: 'offline', statusCode: health.status, error: errorFor(why, { message: `API returned status ${health.status}`, code: 'API_ERROR' }) };
   }
 
   const result = {
@@ -180,6 +227,11 @@ async function checkApiIntegration(site, frameworkName, withDetails = false) {
     health = await timedFetch(`${base}/api/webmonitor/health`, site.api_key);
   } catch (error) {
     return networkFailure(error);
+  }
+  // A server error page is the site failing, not a missing integration: diagnose it first.
+  if (health.status >= 500 || health.status === 429) {
+    const why = await diagnoseFailure(site, health);
+    return { status: 'error', statusCode: health.status, error: errorFor(why, { message: `API returned status ${health.status}`, code: 'API_ERROR' }) };
   }
   if (health.status === 404 || health.type.includes('text/html')) {
     return { status: 'error', statusCode: health.status, error: { message: `API endpoint not found. Install the ${frameworkName} integration.`, code: 'API_NOT_FOUND' } };
@@ -230,12 +282,13 @@ async function checkGeneric(site) {
   try {
     const start = Date.now();
     const response = await fetch(site.url, { signal: AbortSignal.timeout(TIMEOUT_MS), redirect: 'follow' });
-    await response.body?.cancel();
+    const failing = response.status >= 500 ? diagnoseResponse({ status: response.status, body: await readStart(response), headers: { server: response.headers.get('server') } }) : null;
+    if (!failing) await response.body?.cancel().catch(() => {});
     return {
-      status: 'error',
+      status: failing ? 'offline' : 'error',
       responseTime: Date.now() - start,
       statusCode: response.status,
-      error: { message: 'No API integration detected. Add the Web Monitor integration to enable monitoring.', code: 'NO_API' },
+      error: errorFor(failing, { message: 'No API integration detected. Add the Web Monitor integration to enable monitoring.', code: 'NO_API' }),
     };
   } catch (error) {
     return networkFailure(error);
@@ -287,14 +340,22 @@ export function recordCheckStatements(db, site, result, at = new Date()) {
       .bind(site.id, dayKey(at), isUp ? 1 : 0, responseTime ?? 0),
   ];
 
+  // An open incident without a cause gets one as soon as a later check can diagnose it (one write).
+  if (result.status === site.status && DOWN_STATUSES.includes(result.status) && result.error?.cause) {
+    statements.push(db.prepare(`UPDATE incidents SET cause = ?, component = ?, hint = ?, message = ?
+      WHERE website_id = ? AND ended_at IS NULL AND cause IS NULL`)
+      .bind(result.error.cause, result.error.component ?? null, result.error.hint ?? null, result.error.message, site.id));
+  }
+
   // Status and incidents are only written when something changes (keeps writes low)
   if (result.status !== site.status) {
     statements.push(db.prepare('UPDATE websites SET status = ?, updated_at = ? WHERE id = ?').bind(result.status, timestamp, site.id));
     const wasDown = DOWN_STATUSES.includes(site.status);
     const isDown = DOWN_STATUSES.includes(result.status);
     if (isDown && !wasDown) {
-      statements.push(db.prepare(`INSERT INTO incidents (id, website_id, started_at, status, message, last_checked)
-        VALUES (?, ?, ?, ?, ?, ?)`).bind(newId(), site.id, timestamp, result.status, result.error?.message || '', timestamp));
+      statements.push(db.prepare(`INSERT INTO incidents (id, website_id, started_at, status, message, last_checked, cause, component, hint)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(newId(), site.id, timestamp, result.status, result.error?.message || '', timestamp,
+        result.error?.cause ?? null, result.error?.component ?? null, result.error?.hint ?? null));
     } else if (!isDown && wasDown) {
       statements.push(db.prepare('UPDATE incidents SET ended_at = ?, last_checked = ? WHERE website_id = ? AND ended_at IS NULL')
         .bind(timestamp, timestamp, site.id));
