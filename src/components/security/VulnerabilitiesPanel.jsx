@@ -17,6 +17,13 @@ export const SeverityChip = ({ severity }) => (
   </span>
 );
 
+// The fixed version for this site's own branch (PHP / WordPress by major.minor, Node.js / Next.js by major).
+const siteTarget = (a) => {
+  const parts = String(a.versionSeen || '').split('.');
+  const branch = a.component === 'php' || a.component === 'wordpress' ? parts.slice(0, 2).join('.') : parts[0];
+  return a.fixed?.[branch] || null;
+};
+
 const VulnerabilitiesPanel = ({ known, inventory, platform, advisories = [] }) => {
   const runtime = known?.runtime || [];
   const live = inventory?.vulnerability_check === 'ok';
@@ -56,7 +63,7 @@ const VulnerabilitiesPanel = ({ known, inventory, platform, advisories = [] }) =
             <div className="font-bold text-ink mt-1.5">{a.title}</div>
             <div className="text-[13px] text-ink-soft mt-1">
               <span className="font-bold text-brand-700">What to do: </span>
-              {a.status === 'released' ? `upgrade to the fixed release (${Object.values(a.fixed).join(', ')}).` : `the fix is due${a.releaseAt ? ` ${new Date(a.releaseAt).toUTCString().slice(5, 22)} UTC` : ' soon'}.`}
+              {a.status === 'released' ? (siteTarget(a) ? `upgrade ${a.componentLabel} to ${siteTarget(a)}.` : 'this branch gets no fix: move to a supported version.') : `the fix is due${a.releaseAt ? ` ${new Date(a.releaseAt).toUTCString().slice(5, 22)} UTC` : ' soon'}.`}
               {a.mitigation && ` ${a.status === 'released' ? 'Until then' : 'Now'}: ${a.mitigation}`}
             </div>
             <a href="/app/radar" className="inline-block mt-1.5 text-[12px] font-bold text-brand-700 hover:underline">Open Release Radar</a>

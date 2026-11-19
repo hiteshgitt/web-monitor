@@ -167,7 +167,7 @@ const ServerPanel = ({ siteId }) => {
                 <div className="text-[11px] font-extrabold uppercase tracking-widest text-ink-muted mb-2">Attack attempts</div>
                 {s.traffic.attacks.length === 0 ? <p className="text-sm text-emerald-700">None in the last minute.</p> : (
                   <table className="w-full text-[13px]"><tbody>{s.traffic.attacks.map((a) => (
-                    <tr key={`${a.ip}-${a.type}`} className="border-t border-brand-50"><td className="py-1.5 font-mono">{a.ip}</td><td className="font-semibold text-rose-700">{ATTACK[a.type] || a.type}</td><td className="text-right">{a.count}×</td><td className="text-ink-muted font-mono text-[11px] truncate max-w-[10rem]">{a.sample}</td></tr>
+                    <tr key={`${a.ip}-${a.type}`} className="border-t border-brand-50"><td className="py-1.5 font-mono">{a.ip}</td><td className="font-semibold text-rose-700">{ATTACK[a.type] || a.type}</td><td className="text-right pr-3">{a.count}×</td><td className="text-ink-muted font-mono text-[11px] truncate max-w-[10rem]">{a.sample}</td></tr>
                   ))}</tbody></table>
                 )}
               </div>
