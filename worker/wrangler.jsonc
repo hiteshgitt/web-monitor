@@ -25,6 +25,8 @@
     }
   ],
 
+  // Ruya Lab accounts (accounts/): token and key calls go through this binding, not the public route.
+  "services": [{ "binding": "ACCOUNTS", "service": "ruyalab-accounts" }],
   // The monitor: one run per minute (the daily cleanup happens inside the 00:05 UTC run).
   // The 15-minute run scans one Pro site with PageSpeed when its saved result is older than a week.
   "triggers": {
