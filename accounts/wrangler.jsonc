@@ -18,7 +18,7 @@
   "vars": {
     "ISSUER": "https://accounts.ruyalab.com",
     "ACCOUNTS_EMAIL_FROM": "Ruya Lab <accounts@ruyalab.com>",
-    "GOOGLE_CLIENT_ID": "",
+    "GOOGLE_CLIENT_ID": "111600729792-oddardro5s3a5mmetlpdel14up6h3cml.apps.googleusercontent.com",
     "CLIENTS": "[{\"id\":\"webmonitor\",\"name\":\"WebMonitor\",\"home\":\"https://webmonitor.ruyalab.com/app\",\"redirect_uris\":[\"https://webmonitor.ruyalab.com/api/auth/ruyalab/callback\"],\"post_logout_redirect_uris\":[\"https://webmonitor.ruyalab.com/\"]},{\"id\":\"ruyashield\",\"name\":\"RuyaShield\",\"home\":\"https://ruyashield.ruyalab.com/\",\"redirect_uris\":[\"https://ruyashield.ruyalab.com/auth/ruyalab/callback\"],\"post_logout_redirect_uris\":[\"https://ruyashield.ruyalab.com/\"]}]"
   }
   // Secrets (wrangler secret put): OIDC_PRIVATE_JWK, CLIENT_SECRET_WEBMONITOR, CLIENT_SECRET_RUYASHIELD,
