@@ -14,6 +14,16 @@ import {
 import { platformIcon } from '../platforms';
 import { colors, toneColor } from '../theme';
 
+function RadarIcon({ color = colors.brand, size = 20 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M19.07 4.93A10 10 0 1 0 22 12" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M16.24 7.76A6 6 0 1 0 18 12" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M12 12l7-7M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 function BellIcon({ color = colors.brand, size = 20 }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -113,7 +123,7 @@ const matches = (site, filter) => {
   return site.status === filter;
 };
 
-export default function SitesScreen({ session, onOpen, onAlerts, onAdd, onSignOut, onDeleted, onExpired, onUser }) {
+export default function SitesScreen({ session, onOpen, onAlerts, onRadar, onAdd, onSignOut, onDeleted, onExpired, onUser }) {
   const [sites, setSites] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -190,6 +200,11 @@ export default function SitesScreen({ session, onOpen, onAlerts, onAdd, onSignOu
           <Image source={require('../../assets/logo-mark.png')} style={styles.logo} resizeMode="contain" />
           <Text style={styles.kicker}>{visible.length} of {sites.length} sites</Text>
         </View>
+        {isPro ? (
+          <Pressable onPress={onRadar} hitSlop={8} style={styles.iconBtn} accessibilityLabel="Release Radar">
+            <RadarIcon />
+          </Pressable>
+        ) : null}
         <Pressable onPress={onAlerts} hitSlop={8} style={styles.iconBtn} accessibilityLabel="Alerts">
           <BellIcon />
           {unread > 0 ? (

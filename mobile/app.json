@@ -3,7 +3,7 @@
     "name": "Web Monitor",
     "slug": "web-monitor",
     "scheme": "webmonitor",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
     "android": {
       "googleServicesFile": "./google-services.json",
       "package": "com.ruyalab.webmonitor",
-      "versionCode": 15,
+      "versionCode": 16,
       "adaptiveIcon": {
         "backgroundColor": "#5868cf",
         "foregroundImage": "./assets/android-icon-foreground.png",

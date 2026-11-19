@@ -10,8 +10,12 @@ import { api, apiText } from '../api';
 import { formatMs, formatPercent, timeAgo } from '../metrics';
 import { colors } from '../theme';
 import { Panel } from '../ui';
+import ErrorsSection from './ErrorsSection';
+import ServerSection from './ServerSection';
+import { SuspiciousFilesCard, VulnerabilitiesCard } from './SecurityCards';
 
 WebBrowser.maybeCompleteAuthSession();
+
 const ZEALOT_ICON = require('../../assets/zealot-icon.png');
 const REPORT_PRESETS = [
   { label: '1 day', days: 1 },
@@ -83,12 +87,12 @@ const REPORT_LABELS = {
 
 export default function AdvancedPanel({
   site, session, onExpired, refreshKey = 0, initialSection = 'Overview',
-  zealotPrompt = '', zealotOpenKey = 0,
+  zealotPrompt = '', zealotOpenKey = 0, onOpenRadar,
 }) {
   const insets = useSafeAreaInsets();
   const inventoryMeta = inventoryOf(null, site.platform);
   const sections = useMemo(
-    () => ['Overview', 'Analytics', 'Performance', 'SEO', 'Security', 'Reports', 'Alerts', 'Logs', inventoryMeta.tab],
+    () => ['Overview', 'Analytics', 'Performance', 'SEO', 'Security', 'Errors', 'Server', 'Reports', 'Alerts', 'Logs', inventoryMeta.tab],
     [inventoryMeta.tab],
   );
   const [section, setSection] = useState(initialSection);
@@ -800,6 +804,8 @@ export default function AdvancedPanel({
 
       {section === 'Security' ? (
         <>
+          <VulnerabilitiesCard data={data} platform={site.platform} onOpenRadar={onOpenRadar} />
+          <SuspiciousFilesCard siteId={site._id} platform={site.platform} session={session} onExpired={onExpired} />
           <Panel title="Public security check">
             {scanLoading && !(malware || ssl || headers) ? (
               <ActivityIndicator color={colors.brand} style={styles.spinner} />
@@ -837,6 +843,9 @@ export default function AdvancedPanel({
           </Panel>
         </>
       ) : null}
+
+      {section === 'Errors' ? <ErrorsSection siteId={site._id} session={session} onExpired={onExpired} /> : null}
+      {section === 'Server' ? <ServerSection siteId={site._id} session={session} onExpired={onExpired} /> : null}
 
       {section === 'Reports' ? (
         <>

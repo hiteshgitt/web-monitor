@@ -6,9 +6,10 @@ import { api } from './src/api';
 import ErrorBoundary from './src/ErrorBoundary';
 import { clearGoogleSession } from './src/google';
 import { listenForAlertTaps, registerForPush, unregisterPush } from './src/push';
-import { loadToken, saveToken } from './src/session';
+import { loadToken, saveToken, userIsPro } from './src/session';
 import AddSiteScreen from './src/screens/AddSiteScreen';
 import AlertsScreen from './src/screens/AlertsScreen';
+import RadarScreen from './src/screens/RadarScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SiteScreen from './src/screens/SiteScreen';
 import SitesScreen from './src/screens/SitesScreen';
@@ -22,6 +23,7 @@ export default function App() {
   const [alertFocus, setAlertFocus] = useState(null);
   const [showAlerts, setShowAlerts] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [showRadar, setShowRadar] = useState(false);
 
   const restore = useCallback(async () => {
     setBooting(true);
@@ -48,6 +50,7 @@ export default function App() {
 
   const openAlert = useCallback((alert) => {
     if (!alert?.websiteId) return;
+    setShowRadar(false);
     setShowAlerts(false);
     setShowAdd(false);
     setAlertFocus(alert);
@@ -77,6 +80,7 @@ export default function App() {
     setAlertFocus(null);
     setShowAlerts(false);
     setShowAdd(false);
+    setShowRadar(false);
   }, []);
 
   const signOut = useCallback(async () => {
@@ -85,6 +89,7 @@ export default function App() {
   }, [session?.token, leave]);
 
   const openSite = useCallback((id) => {
+    setShowRadar(false);
     setShowAlerts(false);
     setShowAdd(false);
     setAlertFocus(null);
@@ -92,6 +97,7 @@ export default function App() {
   }, []);
 
   const handleBack = useEffectEvent(() => {
+    if (showRadar) { setShowRadar(false); return true; }
     if (siteId) { setSiteId(null); setAlertFocus(null); return true; }
     if (showAdd) { setShowAdd(false); return true; }
     if (showAlerts) { setShowAlerts(false); return true; }
@@ -105,6 +111,7 @@ export default function App() {
   }, []);
 
   const resetScreens = () => {
+    setShowRadar(false);
     setSiteId(null);
     setAlertFocus(null);
     setShowAlerts(false);
@@ -128,6 +135,17 @@ export default function App() {
         </Pressable>
       </View>
     );
+  } else if (session && showRadar) {
+    // Above the site screen, so Back returns to the site it was opened from.
+    screen = (
+      <RadarScreen
+        session={session}
+        isPro={userIsPro(session.user)}
+        onBack={() => setShowRadar(false)}
+        onOpenSite={openSite}
+        onExpired={signOut}
+      />
+    );
   } else if (session && siteId) {
     screen = (
       <SiteScreen
@@ -137,6 +155,7 @@ export default function App() {
         onDismissAlert={() => setAlertFocus(null)}
         onBack={() => { setSiteId(null); setAlertFocus(null); }}
         onExpired={signOut}
+        onOpenRadar={() => setShowRadar(true)}
       />
     );
   } else if (session && showAdd) {
@@ -163,6 +182,7 @@ export default function App() {
         session={session}
         onOpen={openSite}
         onAlerts={() => setShowAlerts(true)}
+        onRadar={() => setShowRadar(true)}
         onAdd={() => setShowAdd(true)}
         onSignOut={signOut}
         onDeleted={leave}

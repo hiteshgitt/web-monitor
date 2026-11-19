@@ -11,7 +11,7 @@ import EditSiteScreen from './EditSiteScreen';
 import RuyaShieldPanel from './RuyaShieldPanel';
 import {
   ALERT_KIND, STATUS_LABEL, UP_STATUSES, availability, clock, displayUrl, formatMs, formatPercent, formatRatio,
-  formatWhen, healthScore, latencySeries, platformLabel, runtimeRows, scoreTone, statusTone, tabForAlert, timeAgo,
+  advancedSectionForAlert, formatWhen, healthScore, latencySeries, platformLabel, runtimeRows, scoreTone, statusTone, tabForAlert, timeAgo,
 } from '../metrics';
 import { colors, toneColor } from '../theme';
 import { KeyValue, MetricCard, Panel, ScoreRing, Sparkline } from '../ui';
@@ -26,7 +26,7 @@ const HERO = {
   muted: { bg: '#5868cf', title: 'Waiting for first check' },
 };
 
-export default function SiteScreen({ siteId, session, onBack, onExpired, alertFocus = null, onDismissAlert }) {
+export default function SiteScreen({ siteId, session, onBack, onExpired, alertFocus = null, onDismissAlert, onOpenRadar }) {
   const [site, setSite] = useState(null);
   const [checks, setChecks] = useState([]);
   const [incidents, setIncidents] = useState([]);
@@ -94,9 +94,12 @@ export default function SiteScreen({ siteId, session, onBack, onExpired, alertFo
   useEffect(() => {
     if (!alertFocus?._id || appliedAlert.current === alertFocus._id) return;
     appliedAlert.current = alertFocus._id;
-    setTab(tabForAlert(alertFocus.type));
-    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
-  }, [alertFocus]);
+    const section = isPro ? advancedSectionForAlert(alertFocus.type) : null;
+    requestAnimationFrame(() => {
+      if (section) { setAdvancedSection(section); setTab('Advanced'); } else setTab(tabForAlert(alertFocus.type));
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    });
+  }, [alertFocus, isPro]);
 
   const chooseTab = (name) => {
     setTab(name);
@@ -326,6 +329,7 @@ export default function SiteScreen({ siteId, session, onBack, onExpired, alertFo
             initialSection={advancedSection}
             zealotPrompt={zealotPrompt}
             zealotOpenKey={zealotOpenKey}
+            onOpenRadar={onOpenRadar}
           />
         </View>
       ) : null}

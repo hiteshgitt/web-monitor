@@ -125,6 +125,14 @@ export const clock = (date) => (
   date ? new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'
 );
 
+// Pro alerts about errors, the server agent, files and vulnerabilities open their Advanced section.
+export const advancedSectionForAlert = (type) => {
+  if (/^error_/.test(type)) return 'Errors';
+  if (/^server_/.test(type)) return 'Server';
+  if (/^(suspicious_file|filescan_|vulnerability|advisory)/.test(type)) return 'Security';
+  return null;
+};
+
 export const tabForAlert = (type) => {
   if (['plugins', 'ssl_off', 'ssl_ok', 'security_low', 'ruyashield_critical', 'ruyashield_high', 'ruyashield_ok'].includes(type)) return 'Security';
   if (['site_down', 'site_up', 'slow', 'slow_ok'].includes(type)) return 'History';
