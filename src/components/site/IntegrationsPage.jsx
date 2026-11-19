@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { ArrowLeft, ArrowRight, Check, Copy, Download, KeyRound, Code2 } from 'lucide-react';
+import { LATEST_INTEGRATION, UPDATE_HOW } from '../../config/integrations';
 import Logo from '../Logo';
 import PlatformIcon from '../PlatformIcon';
 
@@ -12,7 +13,7 @@ const INTEGRATIONS = [
     name: 'WordPress',
     platform: 'WordPress',
     download: '/downloads/web-monitor-wordpress.zip',
-    summary: 'A single plugin, version 1.1.5. Upload, activate, copy the API key — done. Download the same zip again when you need to update.',
+    summary: 'A single plugin. Upload, activate, copy the API key — done. Download the same zip again when you need to update.',
     steps: [
       { title: 'Download the plugin', text: 'Download web-monitor-wordpress.zip below. This is the file you install on the site, and the file you upload again later to update it.' },
       { title: 'Upload and activate', text: 'In WordPress admin go to Plugins → Add New → Upload Plugin, choose the zip, then Install and Activate “Web Monitor API (Advanced)”.' },
@@ -204,6 +205,13 @@ const IntegrationsPage = () => {
           <div className="panel p-7 sm:p-9 min-w-0">
             <h2 className="text-2xl font-extrabold text-ink">{integration.name}</h2>
             <p className="mt-2 text-ink-muted">{integration.summary}</p>
+            {LATEST_INTEGRATION[integration.id] && (
+              <div className="mt-5 rounded-2xl bg-brand-50/70 border border-brand-100 px-4 py-3 text-[13px]">
+                <div className="font-bold text-ink">Latest version {LATEST_INTEGRATION[integration.id].version}</div>
+                <p className="text-ink-soft mt-0.5">{LATEST_INTEGRATION[integration.id].whatsNew}</p>
+                <p className="text-ink-muted mt-1"><span className="font-semibold text-ink-soft">Already installed? </span>{UPDATE_HOW[integration.id]}</p>
+              </div>
+            )}
             <ol className="mt-8 space-y-6">
               {integration.steps.map((step, i) => (
                 <li key={step.title} className="flex gap-4">

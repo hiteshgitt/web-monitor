@@ -91,7 +91,10 @@ const VERSION_TEXT = /^v?\d+(\.\d+){0,3}([-.+][\w.]+)?$/;
 export function runtimeFrom(data) {
   const pick = (v) => (typeof v === 'string' && VERSION_TEXT.test(v.trim()) ? v.trim().replace(/^v/, '').slice(0, 40) : null);
   const out = { php: pick(data?.php_version), node: pick(data?.node_version), wordpress: pick(data?.wordpress_version), nextjs: pick(data?.nextjs_version) };
-  return Object.values(out).some(Boolean) ? out : null;
+  if (!Object.values(out).some(Boolean)) return null;
+  // The integration's own version, so the dashboard can say when the plugin or package is behind.
+  const integration = pick(data?.plugin_version || data?.integration_version);
+  return integration ? { ...out, integration } : out;
 }
 
 // Components reported by an integration (shared format, see diagnose/health docs): cleaned and capped.

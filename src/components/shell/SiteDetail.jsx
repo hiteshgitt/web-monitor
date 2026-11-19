@@ -8,6 +8,7 @@ import AdvancedDashboard from '../AdvancedDashboard';
 import LockedAdvanced from '../pro/LockedAdvanced';
 import RuyaShieldPanel from '../ruyashield/RuyaShieldPanel';
 import { Link } from 'react-router';
+import { LATEST_INTEGRATION, UPDATE_HOW, integrationBehind } from '../../config/integrations';
 import UpgradeModal from '../pro/UpgradeModal';
 import { REPORT_UPGRADE } from '../report/reportUpgrade';
 import ApiService from '../../services/api';
@@ -96,10 +97,25 @@ const StatusCard = ({ site, availability, incident = null }) => {
   );
 };
 
+// The site's plugin / package is behind the latest release: say what the update brings and how to install it.
+const IntegrationUpdate = ({ site }) => {
+  if (!integrationBehind(site.platform, site.integrationVersion)) return null;
+  const latest = LATEST_INTEGRATION[site.platform];
+  return (
+    <div className="mt-3 rounded-2xl border border-brand-200 bg-brand-50/60 px-4 py-3 text-[12px] leading-snug">
+      <div className="font-bold text-brand-700">Integration update: {site.integrationVersion} → {latest.version}</div>
+      <p className="text-ink-soft mt-1">{latest.whatsNew}</p>
+      <p className="text-ink-muted mt-1">{UPDATE_HOW[site.platform]}</p>
+      <Link to={`/integrations#${site.platform}`} className="inline-block mt-1.5 font-bold text-brand-700 hover:underline">Setup guide and download</Link>
+    </div>
+  );
+};
+
 const ReviewColumn = ({ site, availability, recommendations, incidents }) => (
   <aside className="lg:pl-6 lg:border-l border-brand-100">
     <SectionTitle>Review</SectionTitle>
     <StatusCard site={site} availability={availability} incident={incidents.find((i) => !i.endedAt) || null} />
+    <IntegrationUpdate site={site} />
     <div className="mt-5">
       <Collapsible title="Fix checklist" count={recommendations.length} defaultOpen>
         {recommendations.length === 0 ? (

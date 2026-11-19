@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import {
   ArrowRight, Zap, BellRing, ShieldCheck, Search, Brain, Puzzle, Plug, KeyRound, Smartphone,
-  CheckCircle2, Activity, Menu, X, Monitor, Sparkles, Download,
+  CheckCircle2, Activity, Menu, X, Monitor, Sparkles, Download, Radar, ShieldAlert, Clock,
 } from 'lucide-react';
 import Logo from '../Logo';
 import PlatformIcon from '../PlatformIcon';
@@ -14,6 +14,7 @@ import useReveal from '../../hooks/useReveal';
 
 const NAV = [
   { href: '#features', label: 'Features' },
+  { href: '#radar', label: 'Release Radar' },
   { href: '#how', label: 'How it works' },
   { href: '#plans', label: 'Plans' },
   { href: '#app', label: 'Mobile app' },
@@ -33,7 +34,17 @@ const FEATURES = [
   { icon: ShieldCheck, title: 'Security health', text: 'SSL status, outdated plugins and security tooling reported straight from your site’s integration.' },
   { icon: Search, title: 'SEO checks', text: 'Missing descriptions, heading structure, alt text and links — turned into a clear fix checklist.' },
   { icon: Brain, title: 'AI insights', text: 'Pro: an AI assistant reads your real site data and explains what to fix first.', pro: true },
-  { icon: Puzzle, title: 'Plugin audits', text: 'Pro: every plugin and package, with outdated and inactive ones flagged.', pro: true },
+  { icon: Puzzle, title: 'Plugin and package audits', text: 'Pro: every plugin and package with its latest release, outdated and inactive ones flagged.', pro: true },
+  { icon: ShieldAlert, title: 'Known vulnerabilities', text: 'Pro: installed npm and Composer packages checked against OSV.dev, plus your PHP, Node.js and WordPress versions. Alerts the moment something new affects a site.', pro: true },
+  { icon: Activity, title: 'Root-cause diagnosis', text: 'When a site goes down we say what broke (database, PHP memory, a fatal error) and what to do, not just “500”.' },
+  { icon: Radar, title: 'Release Radar', text: 'Pro: PHP, Node.js and WordPress security releases matched to your sites, from the announcement to proof each one is patched.', pro: true },
+];
+
+// Release Radar: the three moments of a security release, as a site owner experiences them.
+const RADAR_STEPS = [
+  { icon: BellRing, when: 'Before the release', title: 'Know which sites are affected', text: 'A security release is announced. We match it to the exact PHP, Node.js or WordPress version each site runs and send the mitigation to apply now, plus the release time.' },
+  { icon: ShieldAlert, when: 'Release day', title: 'The exact upgrade, per site', text: 'The moment the fix ships you get the version to install on every affected site. Sites whose settings rule the issue out are marked not exposed, so you fix what matters first.' },
+  { icon: CheckCircle2, when: 'After you upgrade', title: 'Proof it is patched', text: 'Our one-minute checks see the new version live and confirm it: “patched in 3 h 12 min”. Agencies get a fleet view and a PDF patch report for clients.' },
 ];
 
 const RUYASHIELD_URL = 'https://ruyashield.ruyalab.com';
@@ -41,6 +52,7 @@ const RUYASHIELD_POINTS = [
   { icon: ShieldCheck, title: 'Findings on every site', text: 'Pro: open vulnerabilities by severity and the latest assessment, on the Security tab and in the app.' },
   { icon: BellRing, title: 'Alerts on critical issues', text: 'Pro: a notification when RuyaShield finds a new critical or high issue on a site you monitor.' },
   { icon: Search, title: 'Scan in one click', text: 'Ask RuyaShield to scan a site from Web Monitor. Nothing runs until you accept it in RuyaShield.' },
+  { icon: Puzzle, title: 'Vulnerable packages become findings', text: 'Pro: packages Web Monitor finds vulnerable show up in RuyaShield with the CVE, the fixed version and a re-test that confirms the upgrade.' },
 ];
 
 const STEPS = [
@@ -269,6 +281,37 @@ const LandingPage = () => {
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Release Radar */}
+      <section id="radar" className="py-24 lg:py-32 bg-linear-to-b from-white to-brand-50/60">
+        <div className="max-w-7xl mx-auto px-5 lg:px-8">
+          <Reveal className="text-center max-w-3xl mx-auto">
+            <span className="label-caps !text-brand-600 inline-flex items-center gap-1.5"><Radar size={14} /> Release Radar · Pro</span>
+            <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight">Security releases, from announcement to patched</h2>
+            <p className="mt-4 text-ink-muted text-lg">Scanners see your site from outside. Our integration runs inside it, so we know the exact PHP or Node.js version and the settings that decide whether an issue applies. Then we follow every release until each site is fixed.</p>
+          </Reveal>
+          <div className="mt-16 grid md:grid-cols-3 gap-6">
+            {RADAR_STEPS.map(({ icon: Icon, when, title, text }, i) => (
+              <Reveal key={title} delay={i * 100} className="panel p-7 relative">
+                <span className="text-[11px] font-extrabold uppercase tracking-widest text-brand-600 flex items-center gap-1.5"><Clock size={12} /> {when}</span>
+                <span className="mt-4 w-12 h-12 rounded-2xl bg-linear-to-br from-brand-400 to-brand-600 text-white flex items-center justify-center shadow-btn"><Icon size={22} /></span>
+                <h3 className="mt-5 text-lg font-bold">{title}</h3>
+                <p className="mt-2 text-ink-muted leading-relaxed">{text}</p>
+              </Reveal>
+            ))}
+          </div>
+          <Reveal className="mt-10 panel p-6 sm:p-7 max-w-4xl mx-auto">
+            <div className="text-[11px] font-extrabold uppercase tracking-widest text-ink-muted">Example notification</div>
+            <div className="mt-3 flex gap-4">
+              <span className="w-10 h-10 rounded-xl bg-bad-soft text-bad flex items-center justify-center shrink-0"><ShieldAlert size={18} /></span>
+              <div>
+                <div className="font-bold text-ink">Security release ahead: PHP security releases (critical)</div>
+                <p className="text-[14px] text-ink-soft mt-1">Due 19 Nov, 14:00 UTC. Affects shop.example.com (PHP 8.4.27) and blog.example.com (PHP 8.3.36). Do this now: set session.upload_progress.enabled=0 in php.ini and restart PHP.</p>
+              </div>
+            </div>
+          </Reveal>
         </div>
       </section>
 

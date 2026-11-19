@@ -42,6 +42,12 @@ function safeEqual(a, b) {
 
 const round = (value, digits = 2) => (value == null ? null : Number(value.toFixed(digits)));
 
+// Cloudflare Workers (OpenNext) and other edge runtimes emulate process.version: their Node.js version is not a real
+// Node.js install, so Node.js security releases do not apply. Report the real runtime and no Node version there.
+const RUNTIME = globalThis.navigator?.userAgent === 'Cloudflare-Workers' ? 'cloudflare-workers'
+  : typeof globalThis.EdgeRuntime === 'string' ? 'edge' : 'node';
+const NODE_VERSION = RUNTIME === 'node' ? process.version : null;
+
 // Node.js settings that decide whether some vulnerabilities apply (WebMonitor's Release Radar uses them to say
 // "exposed" or "not exposed"). Flags only, never values of environment variables other than NODE_ENV.
 export function securityConfig() {
@@ -169,7 +175,8 @@ function getHealth() {
     message: failing ? `${failing.name}: ${failing.message}` : memory >= 95 ? 'Server memory usage is above 95%' : 'Site is healthy',
     timestamp: new Date().toISOString(),
     response_time: round(performance.now() - start),
-    node_version: process.version,
+    node_version: NODE_VERSION,
+    runtime: RUNTIME,
     nextjs_version: nextVersion(),
     framework: 'Next.js',
     integration_version: VERSION,
@@ -339,7 +346,8 @@ async function getSecurity(ctx) {
     security_plugins: null,
     total_plugins: null,
     outdated_plugins: null,
-    node_version: process.version,
+    node_version: NODE_VERSION,
+    runtime: RUNTIME,
     nextjs_version: nextVersion(),
     recommendations,
   };
@@ -366,7 +374,8 @@ function getLibraries() {
     devDependencies,
     all_libraries: [...dependencies, ...devDependencies],
     outdated_count: null,
-    node_version: process.version,
+    node_version: NODE_VERSION,
+    runtime: RUNTIME,
     nextjs_version: nextVersion(),
   };
 }

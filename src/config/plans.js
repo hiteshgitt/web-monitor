@@ -29,6 +29,8 @@ export const PLAN_COMPARISON = [
   { group: 'Advanced view (Pro)' },
   { feature: 'AI insights & Zealot assistant', basic: false, pro: true },
   { feature: 'Plugin & package audit (outdated, inactive)', basic: false, pro: true },
+  { feature: 'Known vulnerabilities in packages, PHP, Node.js & WordPress, with alerts', basic: false, pro: true },
+  { feature: 'Release Radar: security releases from announcement to patched', basic: false, pro: true },
   { feature: 'Server infrastructure & downtime hours', basic: false, pro: true },
   { feature: 'PageSpeed & Core Web Vitals', basic: false, pro: true },
   { feature: 'Deep security: SSL grade, malware, vulnerabilities', basic: false, pro: true },
