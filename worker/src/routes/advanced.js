@@ -15,6 +15,7 @@ import { withUpdates } from '../lib/packageVersions.js';
 import { withVulnerabilities } from '../lib/vulnerabilities.js';
 import { advisoriesForSite } from '../lib/advisories.js';
 import { listErrorGroups, syncErrorGroups } from '../lib/errorTracking.js';
+import { fileScanView } from '../lib/fileScan.js';
 import { ApiError, daysAgo } from '../lib/util.js';
 
 const advanced = new Hono();
@@ -104,6 +105,17 @@ advanced.get('/errors/:id', async (c) => {
     ? 'This site\'s integration does not report errors yet: update it to the latest version.' : `Could not read the site just now (${payload.error}); showing the last saved errors.`;
   else if (payload) await syncErrorGroups(c.env, site, payload);
   return c.json({ tracked: payload?.tracked ?? null, summary: payload?.summary || null, note, groups: await listErrorGroups(c.env, site.id) });
+});
+
+// Suspicious-file scan results (the scanner itself is advanced by the monitor).
+advanced.get('/filescan/:id', async (c) => c.json(await fileScanView(c.env, c.get('website'))));
+
+// Mark a finding as safe (a false positive): it stays listed as ignored and never alerts again; or undo that.
+advanced.post('/filescan-ignore/:id', async (c) => {
+  const { id, ignore } = await c.req.json().catch(() => ({}));
+  if (!id || typeof id !== 'string') throw new ApiError(400, 'id is required');
+  await c.env.DB.prepare('UPDATE file_findings SET status = ? WHERE website_id = ? AND id = ?').bind(ignore === false ? 'open' : 'ignored', c.get('website').id, id).run();
+  return c.json(await fileScanView(c.env, c.get('website')));
 });
 
 advanced.post('/errors-resolve/:id', async (c) => {

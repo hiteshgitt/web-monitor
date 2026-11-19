@@ -2,11 +2,11 @@
 // package is behind. Keep in step with wordpress-plugin/ (Version header), packages/php-core (VERSION) and
 // packages/nextjs (package.json) when releasing.
 export const LATEST_INTEGRATION = {
-  wordpress: { version: '1.4.0', whatsNew: 'Error tracking: fatal errors with file, line and stack trace, alerts for new errors and error spikes. Also reports PHP version and settings for Release Radar.' },
+  wordpress: { version: '1.5.0', whatsNew: 'Suspicious-file scan (backdoors, web shells, code in uploads, modified WordPress core) with file and line, plus error tracking with stack traces and alerts.' },
   nextjs: { version: '1.3.0', whatsNew: 'Error tracking: server errors grouped with file, line and stack trace (needs instrumentation.ts), alerts for new errors and spikes. Real runtime and Node.js flags for Release Radar.' },
-  laravel: { version: '1.3.0', whatsNew: 'Error tracking: every exception Laravel reports, grouped with file, line and stack trace, plus alerts. PHP settings for Release Radar.' },
-  codeigniter: { version: '1.3.0', whatsNew: 'Error tracking: fatal errors and uncaught exceptions with file, line and stack trace, plus alerts. PHP settings for Release Radar.' },
-  php: { version: '1.3.0', whatsNew: 'Error tracking (add webmonitor-track.php to index.php): fatal errors with file, line and stack, plus alerts. PHP settings for Release Radar.' },
+  laravel: { version: '1.4.0', whatsNew: 'Suspicious-file scan with file and line, plus error tracking for every exception Laravel reports, with alerts.' },
+  codeigniter: { version: '1.4.0', whatsNew: 'Suspicious-file scan with file and line, plus error tracking with stack traces and alerts.' },
+  php: { version: '1.4.0', whatsNew: 'Suspicious-file scan with file and line, plus error tracking (add webmonitor-track.php to index.php) with alerts.' },
 };
 
 export const UPDATE_HOW = {

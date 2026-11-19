@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Web Monitor API (Advanced)
  * Description: Advanced REST API endpoints for the Web Monitor Dashboard. Exposes real, dynamic WordPress health, analytics, performance, SEO and security data (no simulated/random values).
- * Version: 1.4.0
+ * Version: 1.5.0
  * Author: Web Monitor Team
  * Requires at least: 5.6
  * Tested up to: 7.0
@@ -501,6 +501,12 @@ function webmonitor_advanced_register_routes() {
         'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
     
+    register_rest_route('webmonitor-advanced/v1', '/filescan', array(
+        'methods' => 'GET',
+        'callback' => 'webmonitor_filescan_endpoint',
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
+    ));
+
     register_rest_route('webmonitor-advanced/v1', '/errors', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_errors_endpoint',
@@ -691,7 +697,7 @@ function webmonitor_advanced_health_check($request) {
         'site_url' => home_url(),
         'wordpress_version' => get_bloginfo('version'),
         'php_version' => PHP_VERSION,
-        'plugin_version' => '1.4.0',
+        'plugin_version' => '1.5.0',
         'errors' => webmonitor_errors_summary(),
         'components' => $components,
         'security_config' => web_monitor_security_config(),
@@ -1381,6 +1387,72 @@ function webmonitor_errors_endpoint() {
         $g['last_seen'] = gmdate('c', (int) $g['last_seen']);
     }
     return rest_ensure_response(array('tracked' => true, 'summary' => webmonitor_errors_summary(), 'groups' => $groups));
+}
+
+// ---------- Suspicious-file scan (1.5.0) ----------
+// The shared Web Monitor scanner (WebMonitorCore.php, shipped in this plugin's folder) reads the site's files in
+// small batches: PHP in uploads, known backdoor / web-shell code, request input reaching eval or shell functions,
+// obfuscation and injected JavaScript, each with file and line. Read-only: nothing is executed, changed or deleted.
+// On top, WordPress core files are compared with WordPress.org's official checksums for this version.
+
+function webmonitor_filescan_endpoint() {
+    if (!class_exists('\Ruyalab\WebMonitor\FileScanner')) {
+        $core = __DIR__ . '/WebMonitorCore.php';
+        if (!is_file($core)) {
+            return new WP_Error('webmonitor_scanner_missing', 'WebMonitorCore.php is missing from the plugin folder. Reinstall the plugin zip.', array('status' => 500));
+        }
+        require_once $core;
+    }
+    @set_time_limit(30);
+    $scanner = new \Ruyalab\WebMonitor\FileScanner(untrailingslashit(ABSPATH));
+    $result = $scanner->step(400, 3.0);
+    if (!empty($result['progress']['cycle_complete'])) {
+        update_option('webmonitor_core_integrity', webmonitor_core_integrity($scanner), false);
+    }
+    $integrity = get_option('webmonitor_core_integrity', array());
+    $result['findings'] = array_merge($result['findings'], isset($integrity['findings']) ? $integrity['findings'] : array());
+    $result['core_integrity'] = isset($integrity['status']) ? array('status' => $integrity['status'], 'checked_at' => $integrity['checked_at'], 'version' => $integrity['version']) : null;
+    return rest_ensure_response($result);
+}
+
+/** Modified, missing-from-the-release and extra PHP files in wp-admin / wp-includes, against WordPress.org checksums. */
+function webmonitor_core_integrity($scanner) {
+    global $wp_version, $wp_local_package;
+    $locale = isset($wp_local_package) ? $wp_local_package : 'en_US';
+    $url = 'https://api.wordpress.org/core/checksums/1.0/?version=' . rawurlencode($wp_version) . '&locale=' . rawurlencode($locale);
+    $res = wp_remote_get($url, array('timeout' => 10));
+    $body = is_wp_error($res) ? null : json_decode(wp_remote_retrieve_body($res), true);
+    $sums = isset($body['checksums']) && is_array($body['checksums']) ? $body['checksums'] : null;
+    if (!$sums) {
+        return array('status' => 'unavailable', 'checked_at' => gmdate('c'), 'version' => $wp_version, 'findings' => array());
+    }
+    $root = untrailingslashit(ABSPATH);
+    $findings = array();
+    $add = function ($rule, $sev, $title, $rel) use (&$findings, $root) {
+        $abs = $root . '/' . $rel;
+        $findings[] = array('id' => substr(sha1($rel . '|' . $rule), 0, 16), 'path' => $rel, 'line' => 0, 'rule' => $rule, 'severity' => $sev, 'title' => $title,
+            'snippet' => '', 'mtime' => is_file($abs) ? gmdate('c', (int) filemtime($abs)) : null, 'size' => is_file($abs) ? (int) filesize($abs) : 0);
+    };
+    foreach ($sums as $rel => $md5) {
+        if (strpos($rel, 'wp-content/') === 0) continue; // themes and plugins that ship with core may be updated separately
+        $abs = $root . '/' . $rel;
+        if (is_file($abs) && md5_file($abs) !== $md5) {
+            $add('core-modified', 'high', 'WordPress core file differs from the official release', $rel);
+        }
+        if (count($findings) >= 50) break;
+    }
+    foreach (array('wp-admin', 'wp-includes') as $dir) {
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root . '/' . $dir, FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $file) {
+            if (count($findings) >= 80) break 2;
+            if (strtolower($file->getExtension()) !== 'php') continue;
+            $rel = ltrim(substr($file->getPathname(), strlen($root)), '/');
+            if (!isset($sums[$rel])) {
+                $add('core-extra-php', 'critical', 'PHP file in wp-admin / wp-includes that is not part of WordPress (common backdoor hiding place)', $rel);
+            }
+        }
+    }
+    return array('status' => $findings ? 'issues' : 'ok', 'checked_at' => gmdate('c'), 'version' => $wp_version, 'findings' => $findings);
 }
 
 ?>

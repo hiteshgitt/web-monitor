@@ -30,3 +30,18 @@ test('error spike: alerts once when 5-minute errors jump, and again when they se
   assert.deepEqual(titles(alertStatements(db, site({ errorSpike: true }), ok({ tracked: true, groups: 2, last5m: 25, lastHour: 60, latest: null }))), []);
   assert.deepEqual(titles(alertStatements(db, site({ errorSpike: true }), ok({ tracked: true, groups: 2, last5m: 1, lastHour: 60, latest: null }))), ['Errors back to normal on Shop']);
 });
+
+import { filescanDue } from '../src/lib/fileScan.js';
+test('file scan cadence: Pro PHP/WordPress only; 5 minutes during a pass, 6 hours after a complete one', () => {
+  const at = new Date('2026-11-19T12:00:00Z');
+  const site = (o) => ({ platform: 'wordpress', owner_pro: 1, filescan_at: null, filescan_state: null, ...o });
+  assert.equal(filescanDue(site({}), at), true);
+  assert.equal(filescanDue(site({ owner_pro: 0 }), at), false);
+  assert.equal(filescanDue(site({ platform: 'nextjs' }), at), false);
+  const during = JSON.stringify({ cycleComplete: false });
+  assert.equal(filescanDue(site({ filescan_at: '2026-11-19T11:57:00Z', filescan_state: during }), at), false);
+  assert.equal(filescanDue(site({ filescan_at: '2026-11-19T11:54:00Z', filescan_state: during }), at), true);
+  const done = JSON.stringify({ cycleComplete: true });
+  assert.equal(filescanDue(site({ filescan_at: '2026-11-19T07:00:00Z', filescan_state: done }), at), false);
+  assert.equal(filescanDue(site({ filescan_at: '2026-11-19T05:00:00Z', filescan_state: done }), at), true);
+});

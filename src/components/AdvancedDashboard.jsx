@@ -24,6 +24,7 @@ import WebVitalsPanel from './shell/WebVitalsPanel';
 import SecurityScanPanel from './shell/SecurityScanPanel';
 import VulnerabilitiesPanel from './security/VulnerabilitiesPanel';
 import ErrorsPanel from './errors/ErrorsPanel';
+import SuspiciousFilesPanel from './security/SuspiciousFilesPanel';
 import RuyaShieldPanel from './ruyashield/RuyaShieldPanel';
 
 // Used and total gigabytes from a saved performance payload. Null until the site has reported disk bytes.
@@ -1393,6 +1394,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
               platform={selectedWebsite.platform}
               advisories={advancedData?.advisories || []}
             />
+            <SuspiciousFilesPanel siteId={selectedWebsite._id} platform={selectedWebsite.platform} />
             <SecurityScanPanel siteId={selectedWebsite._id} />
             <RuyaShieldPanel siteId={selectedWebsite._id} />
             <div className="bg-white rounded-2xl shadow-card border border-brand-100 overflow-hidden">

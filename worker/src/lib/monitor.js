@@ -1,5 +1,6 @@
 // Health checks of monitored sites (ported from the Express monitoringService) and how results are recorded.
 import { errorsSummaryFrom, hasNewErrors, syncErrorGroups } from './errorTracking.js';
+import { filescanDue, syncFileScan } from './fileScan.js';
 import { fetchIntegration } from '../routes/advanced.js';
 import { alertStatements } from './alerts.js';
 import { deliverPendingPush } from './push.js';
@@ -503,6 +504,7 @@ export async function runMonitoringCycle(env, scheduledTime = Date.now()) {
 
   // Error groups for Pro sites whose health summary showed a newer error, with what is left of the request budget.
   const pending = sites.filter((s) => s.errors_pending && s.owner_pro).slice(0, Math.max(0, Math.min(3, budget)));
+  budget -= pending.length;
   for (const site of pending) {
     try {
       const payload = await fetchIntegration(site, 'errors');
@@ -510,6 +512,21 @@ export async function runMonitoringCycle(env, scheduledTime = Date.now()) {
       else await env.DB.prepare('UPDATE websites SET errors_pending = 0 WHERE id = ?').bind(site.id).run();
     } catch (error) {
       console.error('error sync failed', site.id, error.message);
+    }
+  }
+
+  // Suspicious-file scan (Pro): advance up to two sites' scanners by one batch (every 5 minutes during a pass,
+  // every 6 hours after a complete one). Each call reads at most ~400 files / 3 seconds on the site.
+  const scans = sites.filter((s) => filescanDue(s, at)).sort((a, b) => (a.filescan_at || '').localeCompare(b.filescan_at || ''))
+    .slice(0, Math.max(0, Math.min(2, budget)));
+  for (const site of scans) {
+    try {
+      const payload = await fetchIntegration(site, 'filescan');
+      if (payload && !payload.error) await syncFileScan(env, site, payload, at);
+      // An integration without the scanner (older version) is retried after the long interval, not every 5 minutes.
+      else await env.DB.prepare(`UPDATE websites SET filescan_at = ?, filescan_state = COALESCE(filescan_state, '{"cycleComplete":true,"unsupported":true}') WHERE id = ?`).bind(at.toISOString(), site.id).run();
+    } catch (error) {
+      console.error('file scan failed', site.id, error.message);
     }
   }
 

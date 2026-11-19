@@ -25,6 +25,8 @@ PACKAGES = {
     'web-monitor-wordpress.zip': {
         'files': {
             'web-monitor-api/web-monitor-api-advanced.php': ROOT / 'wordpress-plugin' / 'web-monitor-api-advanced.php',
+            # Shared scanner (suspicious-file scan); the plugin loads it on demand.
+            'web-monitor-api/WebMonitorCore.php': PACKAGES_DIR / 'php-core' / 'WebMonitorCore.php',
         },
         'readme': (
             'Web Monitor - WordPress plugin\n\n'
