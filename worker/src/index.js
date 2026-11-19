@@ -111,8 +111,10 @@ app.onError((error, c) => {
 export default {
   fetch: app.fetch,
   async scheduled(controller, env, ctx) {
-    // Hourly, with its own request budget: known vulnerabilities in packages and runtimes (Pro).
-    if (controller.cron === '7 * * * *') {
+    // Hourly at :15, alone in that run so it has the run's whole request budget: known vulnerabilities (Pro).
+    // (The free plan allows 5 cron triggers per account, so it shares the 15-minute trigger; the other
+    // 15-minute jobs run at :00, :30 and :45.)
+    if (controller.cron === '*/15 * * * *' && new Date(controller.scheduledTime).getUTCMinutes() === 15) {
       ctx.waitUntil(scanVulnerabilities(env, fetchIntegration, new Date(controller.scheduledTime)).then(
         (summary) => console.log('Vulnerabilities', summary),
         (error) => console.error('Vulnerabilities failed:', error),
