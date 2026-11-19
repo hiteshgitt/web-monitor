@@ -3,7 +3,7 @@
 // packages/nextjs (package.json) when releasing.
 export const LATEST_INTEGRATION = {
   wordpress: { version: '1.6.0', whatsNew: 'Inode (file count) monitoring with alerts, the suspicious-file scan (backdoors, web shells, code in uploads, modified WordPress core) and error tracking with stack traces.' },
-  nextjs: { version: '1.4.0', whatsNew: 'Inode (file count) monitoring, error tracking with stack traces (needs instrumentation.ts), and the real runtime and Node.js flags for Release Radar.' },
+  nextjs: { version: '1.5.0', whatsNew: 'Suspicious-file scan (server scripts in public/, request input reaching shell or eval, injected JavaScript in source and the built .next output, cryptominers). Earlier: Inode (file count) monitoring, error tracking with stack traces (needs instrumentation.ts), and the real runtime and Node.js flags for Release Radar.' },
   laravel: { version: '1.5.0', whatsNew: 'Inode monitoring, the suspicious-file scan with file and line, and error tracking for every exception Laravel reports.' },
   codeigniter: { version: '1.5.0', whatsNew: 'Inode monitoring, the suspicious-file scan with file and line, and error tracking with stack traces.' },
   php: { version: '1.5.0', whatsNew: 'Inode monitoring, the suspicious-file scan with file and line, and error tracking (add webmonitor-track.php to index.php).' },

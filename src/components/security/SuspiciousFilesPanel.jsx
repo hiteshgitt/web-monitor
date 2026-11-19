@@ -11,7 +11,9 @@ const SETUP = {
   laravel: 'Update ruyalab/webmonitor-laravel to 1.5.0 or later to turn the file scan on.',
   codeigniter: 'Update ruyalab/webmonitor-codeigniter to 1.5.0 or later to turn the file scan on.',
   php: 'Download the Core PHP integration again (1.5.0 or later) to turn the file scan on.',
+  nextjs: 'Update @ruyalab/webmonitor-nextjs to 1.5.0 or later (npm install @ruyalab/webmonitor-nextjs@latest) and deploy to turn the file scan on.',
 };
+const RUNTIME_NOTE = 'This site runs on a serverless or edge runtime without a file system of its own (for example Cloudflare Workers), so there are no server files to scan. Your code is rebuilt from your repository on every deploy.';
 
 const SuspiciousFilesPanel = ({ siteId, platform }) => {
   const [data, setData] = useState(null);
@@ -61,7 +63,7 @@ const SuspiciousFilesPanel = ({ siteId, platform }) => {
       <div className="p-8 space-y-3">
         {error && <p className="text-sm font-semibold text-bad">{error}</p>}
         {!data && !error && <p className="text-sm text-ink-muted">Loading…</p>}
-        {st?.unsupported && <p className="text-sm text-amber-800 bg-amber-50 rounded-xl px-4 py-3">{SETUP[platform] || 'Update the integration to turn the file scan on.'}</p>}
+        {st?.unsupported && <p className="text-sm text-amber-800 bg-amber-50 rounded-xl px-4 py-3">{st.unsupported === 'runtime' ? RUNTIME_NOTE : SETUP[platform] || 'Update the integration to turn the file scan on.'}</p>}
         {data && !st?.unsupported && findings.length === 0 && (
           <p className="text-sm text-ink-soft">{st?.cycleComplete ? 'Nothing suspicious: no code in uploads, no known backdoors or web shells, no injected code' : 'No findings yet'}{st?.coreIntegrity?.status === 'ok' ? ', and WordPress core matches the official release.' : '.'}</p>
         )}
@@ -86,7 +88,7 @@ const SuspiciousFilesPanel = ({ siteId, platform }) => {
           </div>
         ))}
         {open.length > 0 && <p className="text-[12px] text-ink-soft"><span className="font-bold">If a file is not yours:</span> take a backup, delete or restore the file, change admin, FTP and database passwords, update everything, then check the site again. A full scan confirms it is gone.</p>}
-        <p className="text-[11px] text-ink-muted">Read-only scan inside your site: files are read, never executed, changed or deleted. It looks for code in upload folders, known backdoors and web shells, request input reaching eval or shell functions, obfuscated code and injected JavaScript{platform === 'wordpress' ? ', and compares WordPress core with the official release' : ''}.</p>
+        <p className="text-[11px] text-ink-muted">Read-only scan inside your site: files are read, never executed, changed or deleted. It looks for code in upload folders, known backdoors and web shells, request input reaching eval or shell functions, obfuscated code and injected JavaScript{platform === 'wordpress' ? ', and compares WordPress core with the official release' : platform === 'nextjs' ? ' (in your project and the built .next output; node_modules is skipped)' : ''}.</p>
       </div>
     </div>
   );

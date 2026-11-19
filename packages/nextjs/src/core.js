@@ -8,9 +8,10 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { timingSafeEqual } from 'node:crypto';
 import { errorGroups, errorStore, errorSummary } from './instrumentation.js';
+import { FileScanner } from './filescan.js';
 
-export const VERSION = '1.4.0';
-export const ENDPOINTS = ['health', 'analytics', 'performance', 'seo', 'security', 'libraries', 'logs', 'recommendations', 'errors'];
+export const VERSION = '1.5.0';
+export const ENDPOINTS = ['health', 'analytics', 'performance', 'seo', 'security', 'libraries', 'logs', 'recommendations', 'errors', 'filescan'];
 
 const projectRoot = () => process.cwd();
 
@@ -439,6 +440,10 @@ const HANDLERS = {
   recommendations: getRecommendations,
   // Grouped server errors with file, line and stack (from the onRequestError hook).
   errors: () => ({ tracked: errorSummary().tracked, summary: errorSummary(), groups: errorGroups() }),
+  // Read-only suspicious-file scan, one batch per call (needs a file system: not on Cloudflare Workers / edge).
+  filescan: () => (RUNTIME === 'cloudflare-workers' || typeof fs.readdirSync !== 'function'
+    ? { error: 'The file scan needs a Node.js server with a file system; it is not available on this runtime.', unsupported: 'runtime' }
+    : new FileScanner(projectRoot()).step()),
 };
 
 /**

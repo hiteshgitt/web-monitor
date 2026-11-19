@@ -33,6 +33,8 @@ All values are measured on your server at request time:
 | `security` | HTTPS, supported Node version, production mode, security headers, `X-Powered-By` |
 | `libraries` | dependencies with installed versions |
 | `analytics` | `null` — visitor analytics need an analytics provider |
+| `errors` | grouped server errors with file, line and stack (needs `instrumentation.ts`) |
+| `filescan` | read-only suspicious-file scan, one small batch per call: server scripts in `public/`, request input reaching shell commands or `eval`, injected JavaScript in your source and the built `.next` output, cryptominers. `node_modules` is skipped; files are never changed. Not available on Cloudflare Workers / edge runtimes (no file system) |
 
 Requests must send `Authorization: Bearer <WEBMONITOR_API_KEY>`. Without a key (or with a short key) the
 endpoint refuses to run.

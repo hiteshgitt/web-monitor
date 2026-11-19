@@ -6,7 +6,7 @@ import { notificationStatement } from './alerts.js';
 import { parseJson } from './util.js';
 import { shareFileFindings } from './ruyashield.js';
 
-export const FILESCAN_PLATFORMS = ['wordpress', 'laravel', 'codeigniter', 'php'];
+export const FILESCAN_PLATFORMS = ['wordpress', 'laravel', 'codeigniter', 'php', 'nextjs'];
 const IN_PROGRESS_EVERY_MS = 5 * 60e3;
 const COMPLETE_EVERY_MS = 6 * 3600e3;
 const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };

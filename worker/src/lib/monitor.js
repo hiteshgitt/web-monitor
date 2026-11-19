@@ -530,8 +530,14 @@ export async function runMonitoringCycle(env, scheduledTime = Date.now()) {
     try {
       const payload = await fetchIntegration(site, 'filescan');
       if (payload && !payload.error) await syncFileScan(env, site, payload, at);
-      // An integration without the scanner (older version) is retried after the long interval, not every 5 minutes.
-      else await env.DB.prepare(`UPDATE websites SET filescan_at = ?, filescan_state = COALESCE(filescan_state, '{"cycleComplete":true,"unsupported":true}') WHERE id = ?`).bind(at.toISOString(), site.id).run();
+      // An integration without the scanner (older version), or a runtime without files (Next.js on Cloudflare
+      // Workers), is retried after the long interval, not every 5 minutes.
+      else {
+        const state = JSON.stringify({ cycleComplete: true, unsupported: payload?.unsupported === 'runtime' ? 'runtime' : true });
+        // A real scan state is kept (a passing error must not wipe it); only an empty or unsupported one is replaced.
+        await env.DB.prepare(`UPDATE websites SET filescan_at = ?, filescan_state = CASE WHEN filescan_state IS NULL
+          OR json_extract(filescan_state, '$.unsupported') IS NOT NULL THEN ? ELSE filescan_state END WHERE id = ?`).bind(at.toISOString(), state, site.id).run();
+      }
     } catch (error) {
       console.error('file scan failed', site.id, error.message);
     }
