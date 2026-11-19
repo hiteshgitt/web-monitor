@@ -67,6 +67,9 @@ async function startSession(c, user, amr) {
 
 /** Form posts must come from this site (SameSite=Lax cookies plus an Origin check). */
 function sameOrigin(c) {
+  // Modern browsers say where a request came from in Sec-Fetch-Site; trust that first.
+  const site = c.req.header('sec-fetch-site');
+  if (site) return site === 'same-origin';
   const origin = c.req.header('origin');
   if (!origin) return true; // very old browsers; the cookie is SameSite=Lax anyway
   return origin === new URL(c.env.ISSUER).origin;
@@ -170,18 +173,27 @@ app.get('/authorize', async (c) => {
 
 const tokenError = (c, error, status = 400, desc) => c.json({ error, ...(desc ? { error_description: desc } : {}) }, status, { 'cache-control': 'no-store' });
 
-app.post('/token', async (c) => {
-  const body = await c.req.parseBody().catch(() => ({}));
+/** Client credentials from HTTP Basic (or the form body). Returns the client, or null when they do not match. */
+function authenticateClient(c, body = {}) {
   let id = body.client_id; let secret = body.client_secret;
   const auth = c.req.header('authorization') || '';
   if (auth.startsWith('Basic ')) {
     try {
       const [u, s] = atob(auth.slice(6)).split(':');
       id = decodeURIComponent(u); secret = decodeURIComponent(s ?? '');
-    } catch { return tokenError(c, 'invalid_client', 401); }
+    } catch { return null; }
   }
   const client = clients(c.env).get(String(id || ''));
-  if (!client || !client.secret || !secret || !safeEqual(secret, client.secret)) return tokenError(c, 'invalid_client', 401);
+  if (!client || !client.secret || !secret || !safeEqual(String(secret), client.secret)) return null;
+  return client;
+}
+
+const planOf = (user) => (user && !user.disabled_at && user.plan === 'pro' ? 'pro' : 'free');
+
+app.post('/token', async (c) => {
+  const body = await c.req.parseBody().catch(() => ({}));
+  const client = authenticateClient(c, body);
+  if (!client) return tokenError(c, 'invalid_client', 401);
   if (body.grant_type !== 'authorization_code') return tokenError(c, 'unsupported_grant_type');
 
   const hash = await sha256(String(body.code || ''));
@@ -200,6 +212,7 @@ app.post('/token', async (c) => {
     sub: user.id, auth_time: row.auth_time, amr: JSON.parse(row.amr), ...(row.nonce ? { nonce: row.nonce } : {}),
     ...(scope.includes('email') ? { email: user.email, email_verified: Boolean(user.email_verified) } : {}),
     ...(scope.includes('profile') ? { name: user.name || undefined, picture: user.picture || undefined } : {}),
+    ruyalab_plan: planOf(user),
   };
   const idToken = await signJwt(c.env, claims, { audience: client.id, expiresIn: `${TOKEN_TTL_S}s` });
   const accessToken = await signJwt(c.env, { sub: user.id, scope: row.scope, client_id: client.id }, { audience: `${c.env.ISSUER}/userinfo`, expiresIn: `${TOKEN_TTL_S}s` });
@@ -223,6 +236,25 @@ async function userinfo(c) {
 }
 app.get('/userinfo', userinfo);
 app.post('/userinfo', userinfo);
+
+// ---------- entitlements (server to server) ----------
+
+// POST /api/entitlements { subs: [...] } with the product's client credentials (HTTP Basic) ->
+// { plans: { <sub>: "pro" | "free" } }. Unknown subjects are left out; disabled accounts count as free.
+const MAX_SUBS = 200;
+app.post('/api/entitlements', async (c) => {
+  const client = authenticateClient(c);
+  if (!client) return c.json({ error: 'invalid_client' }, 401, { 'www-authenticate': 'Basic realm="ruyalab"' });
+  const body = await c.req.json().catch(() => null);
+  const subs = Array.isArray(body?.subs) ? [...new Set(body.subs.map(String))].filter((s) => /^[0-9a-f-]{36}$/.test(s)) : null;
+  if (!subs || subs.length > MAX_SUBS) return c.json({ error: 'invalid_request', error_description: `Send subs: up to ${MAX_SUBS} account ids.` }, 400);
+  const plans = {};
+  if (subs.length) {
+    const { results } = await c.env.DB.prepare(`SELECT id, plan, disabled_at FROM users WHERE id IN (${subs.map(() => '?').join(',')})`).bind(...subs).all();
+    for (const u of results) plans[u.id] = planOf(u);
+  }
+  return c.json({ plans }, 200, { 'cache-control': 'no-store' });
+});
 
 // ---------- sign in / sign up ----------
 

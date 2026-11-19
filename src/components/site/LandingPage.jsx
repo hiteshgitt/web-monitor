@@ -325,7 +325,7 @@ const LandingPage = () => {
                   >
                     {isPro ? 'Request Pro' : 'Start free'} <ArrowRight size={16} />
                   </Link>
-                  {isPro && <p className="mt-3 text-center text-[12px] text-white/70">Sign up, then request Pro from your dashboard. Online payment turns on later; until then our team activates it.</p>}
+                  {isPro && <p className="mt-3 text-center text-[12px] text-white/70">Every new account starts with 14 days of Pro, no card needed. After that, request Pro from your dashboard and our team activates it.</p>}
                 </Reveal>
               );
             })}

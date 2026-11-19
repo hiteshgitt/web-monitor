@@ -44,7 +44,7 @@ export function page(title, body, { status = 200 } = {}) {
       'cache-control': 'no-store',
       'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'",
       'x-content-type-options': 'nosniff',
-      'referrer-policy': 'no-referrer',
+      'referrer-policy': 'same-origin',
     },
   });
 }
@@ -100,7 +100,8 @@ export function accountPage({ user, info, error, apps }) {
   return page('Your account', `
 <h1>Your Ruya Lab account</h1>${notice(error)}${notice(info, 'ok')}
 <dl><dt>Name</dt><dd>${esc(user.name || '—')}</dd><dt>Email</dt><dd>${esc(user.email)}</dd>
-<dt>Sign-in</dt><dd>${[user.password_hash ? 'Password' : null, user.google_sub ? 'Google' : null].filter(Boolean).join(' and ') || '—'}</dd></dl>
+<dt>Sign-in</dt><dd>${[user.password_hash ? 'Password' : null, user.google_sub ? 'Google' : null].filter(Boolean).join(' and ') || '—'}</dd>
+<dt>Plan</dt><dd>${user.plan === 'pro' ? 'Ruya Lab Pro: Pro in every Ruya Lab product' : 'Free'}</dd></dl>
 <div class="row">${apps.map((a) => `<a class="btn alt" href="${esc(a.url)}">Open ${esc(a.name)}</a>`).join('')}</div>
 <h2>Name</h2><form method="post" action="/account/name" class="row"><input type="text" name="name" maxlength="80" value="${esc(user.name)}" aria-label="Name" style="margin:0"><button class="btn alt" type="submit" style="flex:0 0 auto;width:auto">Save</button></form>
 <h2>${user.password_hash ? 'Change password' : 'Add a password'}</h2>

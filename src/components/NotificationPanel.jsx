@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import {
-  Bell, X, AlertTriangle, CheckCircle2, Gauge, Puzzle, Lock, ShieldAlert, ShieldCheck, Sparkles, UserPlus, Settings, ChevronRight, Info,
+  Bell, X, AlertTriangle, CheckCircle2, Gauge, Puzzle, Lock, ShieldAlert, ShieldCheck, Sparkles, UserPlus, Settings, ChevronRight, Info, Clock,
 } from 'lucide-react';
 import { timeAgo } from '../utils/siteMetrics';
 
@@ -21,6 +21,10 @@ const LOOK = {
   component_ok: { icon: CheckCircle2, tone: 'bg-good-soft text-good' },
   pro_approved: { icon: Sparkles, tone: 'bg-brand-50 text-brand-600' },
   pro_declined: { icon: Info, tone: 'bg-canvas text-ink-muted' },
+  pro_ended: { icon: Info, tone: 'bg-canvas text-ink-muted' },
+  trial_started: { icon: Sparkles, tone: 'bg-brand-50 text-brand-600' },
+  trial_ending: { icon: Clock, tone: 'bg-warn-soft text-warn' },
+  trial_ended: { icon: Info, tone: 'bg-canvas text-ink-muted' },
   pro_request: { icon: Sparkles, tone: 'bg-brand-50 text-brand-600' },
   signup: { icon: UserPlus, tone: 'bg-brand-50 text-brand-600' },
   account_deleted: { icon: Info, tone: 'bg-canvas text-ink-muted' },

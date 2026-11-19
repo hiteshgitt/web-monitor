@@ -10,6 +10,7 @@ import { runMonitoringCycle } from './lib/monitor.js';
 import { scanDueSecurity } from './lib/securityScan.js';
 import { scanDueVitals } from './lib/webVitals.js';
 import { refreshRuyaShieldAlerts } from './lib/ruyashield.js';
+import { sweepTrials, syncRuyaLabPlans } from './lib/plans.js';
 import { ApiError } from './lib/util.js';
 import adminRoutes from './routes/admin.js';
 import adminAuthRoutes from './routes/adminAuth.js';
@@ -115,6 +116,12 @@ export default {
         (summary) => console.log('Report emails', summary),
         (error) => console.error('Report emails failed:', error),
       ));
+      ctx.waitUntil((async () => {
+        const at = new Date(controller.scheduledTime);
+        // Ruya Lab Pro first, so an account that just got it is not reminded that its trial is ending.
+        console.log('Ruya Lab plans', await syncRuyaLabPlans(env, at).catch((error) => ({ error: error.message })));
+        console.log('Trials', await sweepTrials(env, at).catch((error) => ({ error: error.message })));
+      })());
       ctx.waitUntil(refreshRuyaShieldAlerts(env).then(
         (summary) => console.log('RuyaShield alerts', summary),
         (error) => console.error('RuyaShield alerts failed:', error),

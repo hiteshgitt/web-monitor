@@ -53,7 +53,7 @@ const UserMenu = ({ onUpgrade, onAlertSettings, onRuyaShield, placement = 'right
             <div className="font-bold text-ink truncate">{user?.name || 'Your account'}</div>
             <div className="text-[12px] text-ink-muted truncate">{user?.email}</div>
             <span className={`inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider ${isPro ? 'bg-brand-50 text-brand-700' : 'bg-canvas text-ink-muted'}`}>
-              {isPro && <Sparkles size={11} />} {isPro ? 'Pro plan' : 'Free plan'}
+              {isPro && <Sparkles size={11} />} {user?.planSource === 'trial' ? `Pro trial · ${user.trialDaysLeft} d left` : user?.planSource === 'ruyalab' ? 'Ruya Lab Pro' : isPro ? 'Pro plan' : 'Free plan'}
             </span>
           </div>
           <div className="h-px bg-brand-100 my-1" />

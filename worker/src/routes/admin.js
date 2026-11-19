@@ -87,7 +87,8 @@ admin.patch('/users/:id', async (c) => {
   if (body.plan !== undefined) {
     if (!['free', 'pro'].includes(body.plan)) throw new ApiError(400, 'plan must be "free" or "pro"');
     // Approving Pro also clears the pending request
-    statements.push(db.prepare(`UPDATE users SET plan = ?1,
+    // An admin's choice is manual: it is never ended by the trial sweep or the Ruya Lab sync.
+    statements.push(db.prepare(`UPDATE users SET plan = ?1, plan_source = CASE WHEN ?1 = 'pro' THEN 'manual' ELSE NULL END,
         upgrade_requested_at = CASE WHEN ?1 = 'pro' THEN NULL ELSE upgrade_requested_at END, updated_at = ?2
       WHERE id = ?3`).bind(body.plan, now, user.id));
     audit(body.plan === 'pro' ? (user.upgrade_requested_at ? 'pro_approved' : 'plan_pro') : 'plan_free');

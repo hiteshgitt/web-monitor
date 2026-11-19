@@ -43,5 +43,6 @@ export async function finishLogin(env, origin, { code, state, iss }, cookie) {
   const keys = await (await call(env, '/jwks.json', {})).json();
   const { payload } = await jwtVerify(tok.id_token, createLocalJWKSet(keys), { issuer: env.RUYALAB_ISSUER, audience: env.RUYALAB_CLIENT_ID, algorithms: ['RS256'] });
   if (payload.nonce !== saved.nonce) throw new Error('nonce');
-  return { sub: String(payload.sub), email: String(payload.email || '').toLowerCase(), emailVerified: payload.email_verified === true, name: payload.name || '', picture: payload.picture || null };
+  return { sub: String(payload.sub), email: String(payload.email || '').toLowerCase(), emailVerified: payload.email_verified === true, name: payload.name || '', picture: payload.picture || null,
+    plan: payload.ruyalab_plan === 'pro' || payload.ruyalab_plan === 'free' ? payload.ruyalab_plan : null };
 }

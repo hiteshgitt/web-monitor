@@ -1,6 +1,7 @@
 // Database rows -> API JSON, in the same shape the dashboard used with the Express/MongoDB backend
 import { notifyPrefs } from './alerts.js';
 import { parseJson } from './util.js';
+import { canStartTrial, trialDaysLeft } from './plans.js';
 
 export const serializeUser = (row, extra = {}) => ({
   _id: row.id,
@@ -10,6 +11,10 @@ export const serializeUser = (row, extra = {}) => ({
   plan: row.plan,
   role: row.role,
   isPro: row.plan === 'pro' || row.role === 'admin',
+  planSource: row.role === 'admin' ? 'manual' : row.plan_source || null,
+  trialEndsAt: row.trial_ends_at || null,
+  trialDaysLeft: trialDaysLeft(row),
+  canStartTrial: canStartTrial(row),
   hasPassword: Boolean(row.password_hash),
   upgradeRequestedAt: row.upgrade_requested_at || undefined,
   upgradeDeclinedAt: row.upgrade_declined_at || undefined,

@@ -326,19 +326,21 @@ const AppShell = ({
             />
           </div>
           {/* Free plan: keep the Pro upgrade visible but out of the way */}
-          {!isPro && (
+          {(!isPro || user?.planSource === 'trial') && (
             <div className="p-4 border-t border-brand-100">
               <button
                 type="button"
-                onClick={() => (selectedWebsite ? onDetailTabChange('Advanced') : setShowUpgrade(true))}
+                onClick={() => (selectedWebsite && !isPro ? onDetailTabChange('Advanced') : setShowUpgrade(true))}
                 className="group w-full text-left relative overflow-hidden rounded-2xl bg-linear-to-br from-brand-500 to-brand-700 text-white p-4 shadow-btn hover:-translate-y-0.5 transition-transform"
               >
                 <span className="absolute -top-8 -right-6 w-24 h-24 rounded-full bg-white/10 group-hover:scale-125 transition-transform duration-500" />
                 <span className="relative flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-white/80">
-                  {user?.upgradeRequestedAt ? <><Clock size={12} /> Pro request pending</> : <><Sparkles size={12} /> Basic plan</>}
+                  {user?.planSource === 'trial'
+                    ? <><Sparkles size={12} /> Pro trial · {user.trialDaysLeft === 1 ? '1 day' : `${user.trialDaysLeft} days`} left</>
+                    : user?.upgradeRequestedAt ? <><Clock size={12} /> Pro request pending</> : <><Sparkles size={12} /> Basic plan</>}
                 </span>
                 <span className="relative mt-1 flex items-center justify-between font-bold">
-                  {user?.upgradeRequestedAt ? 'We’ll activate Pro soon' : 'Unlock the Advanced view'}
+                  {user?.upgradeRequestedAt ? 'We’ll activate Pro soon' : user?.planSource === 'trial' ? 'Keep Pro after your trial' : user?.canStartTrial ? 'Try Pro free for 14 days' : 'Unlock the Advanced view'}
                   <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
                 </span>
               </button>

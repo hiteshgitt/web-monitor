@@ -5,6 +5,7 @@ import { deleteCustomerStatements } from '../lib/accounts.js';
 import { notifyAdmins } from '../lib/alerts.js';
 import { assertActive, checkPassword, hashPassword, needsRehash, requireAuth, signToken } from '../lib/auth.js';
 import { serializeUser } from '../lib/serialize.js';
+import { newAccountPlan, ruyaLabPlanStatements } from '../lib/plans.js';
 import { finishLogin, ruyaLabConfigured, startLogin } from '../lib/ruyalab.js';
 import { ApiError, newId, nowIso } from '../lib/util.js';
 
@@ -42,12 +43,12 @@ auth.post('/register', async (c) => {
   const now = nowIso();
   const user = {
     id: newId(), email: normalizedEmail, name: String(name || '').trim(), avatar_url: null,
-    password_hash: await hashPassword(String(password)), google_id: null, plan: 'free', role: 'user',
+    password_hash: await hashPassword(String(password)), google_id: null, role: 'user', ...newAccountPlan(),
     upgrade_requested_at: null, last_login_at: null, created_at: now, updated_at: now,
   };
-  await c.env.DB.prepare(`INSERT INTO users (id, email, name, password_hash, plan, role, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(user.id, user.email, user.name, user.password_hash, user.plan, user.role, now, now).run();
+  await c.env.DB.prepare(`INSERT INTO users (id, email, name, password_hash, plan, plan_source, trial_ends_at, role, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(user.id, user.email, user.name, user.password_hash, user.plan, user.plan_source, user.trial_ends_at, user.role, now, now).run();
   const result = await finishSignIn(c, user);
   await announceSignup(c, user);
   return c.json(result, 201);
@@ -91,12 +92,12 @@ auth.post('/google', async (c) => {
   if (!user) {
     user = {
       id: newId(), email, name: payload.name || '', avatar_url: payload.picture || null, password_hash: null,
-      google_id: payload.sub, plan: 'free', role: 'user', upgrade_requested_at: null, last_login_at: null,
+      google_id: payload.sub, role: 'user', ...newAccountPlan(), upgrade_requested_at: null, last_login_at: null,
       created_at: now, updated_at: now,
     };
-    await c.env.DB.prepare(`INSERT INTO users (id, email, name, avatar_url, google_id, plan, role, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(user.id, email, user.name, user.avatar_url, user.google_id, 'free', 'user', now, now).run();
+    await c.env.DB.prepare(`INSERT INTO users (id, email, name, avatar_url, google_id, plan, plan_source, trial_ends_at, role, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(user.id, email, user.name, user.avatar_url, user.google_id, user.plan, user.plan_source, user.trial_ends_at, 'user', now, now).run();
   } else {
     user = { ...user, google_id: payload.sub, avatar_url: payload.picture || user.avatar_url, name: user.name || payload.name || '' };
     await c.env.DB.prepare('UPDATE users SET google_id = ?, avatar_url = ?, name = ? WHERE id = ?')
@@ -144,10 +145,18 @@ auth.get('/ruyalab/callback', async (c) => {
       .bind(id.sub, id.name, id.picture, user.id).run();
     user = { ...user, ruyalab_sub: id.sub, name: user.name || id.name, avatar_url: user.avatar_url || id.picture };
   } else {
-    user = { id: newId(), email: id.email, name: id.name, avatar_url: id.picture, password_hash: null, google_id: null, plan: 'free', role: 'user',
+    user = { id: newId(), email: id.email, name: id.name, avatar_url: id.picture, password_hash: null, google_id: null, role: 'user', ...newAccountPlan(),
       upgrade_requested_at: null, last_login_at: null, created_at: now, updated_at: now, ruyalab_sub: id.sub };
-    await c.env.DB.prepare(`INSERT INTO users (id, email, name, avatar_url, plan, role, ruyalab_sub, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'free', 'user', ?, ?, ?)`).bind(user.id, user.email, user.name, user.avatar_url, id.sub, now, now).run();
+    await c.env.DB.prepare(`INSERT INTO users (id, email, name, avatar_url, plan, plan_source, trial_ends_at, role, ruyalab_sub, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'user', ?, ?, ?)`).bind(user.id, user.email, user.name, user.avatar_url, user.plan, user.plan_source, user.trial_ends_at, id.sub, now, now).run();
+  }
+  // Ruya Lab Pro (the ruyalab_plan claim) applies right away; the 15-minute sync catches later changes.
+  if (id.plan && user.role !== 'admin') {
+    const statements = ruyaLabPlanStatements(c.env.DB, user, id.plan);
+    if (statements.length) {
+      await c.env.DB.batch(statements);
+      user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(user.id).first();
+    }
   }
   let result;
   try { result = await finishSignIn(c, user); } catch { return fail('suspended'); }
@@ -173,7 +182,8 @@ auth.get('/status-page', requireAuth, async (c) => {
 // Manual Pro for now: the customer asks, an admin switches the plan
 auth.post('/upgrade-request', requireAuth, async (c) => {
   const user = c.get('user');
-  const isPro = user.plan === 'pro' || user.role === 'admin';
+  // A trial counts as Free here: asking now keeps Pro after the trial ends.
+  const isPro = (user.plan === 'pro' && user.plan_source !== 'trial') || user.role === 'admin';
   if (!isPro && !user.upgrade_requested_at) {
     const now = nowIso();
     await c.env.DB.prepare('UPDATE users SET upgrade_requested_at = ?, updated_at = ? WHERE id = ?').bind(now, now, user.id).run();
