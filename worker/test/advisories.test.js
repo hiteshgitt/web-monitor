@@ -42,3 +42,30 @@ test('validation', () => {
   assert.throws(() => validateAdvisory({ component: 'php', title: 'x', severity: 'high', status: 'released' }), /fixed version/);
   assert.throws(() => validateAdvisory({ component: 'php', title: 'x', severity: 'high', url: 'javascript:alert(1)' }), /https/);
 });
+
+import { nodeSecurityDays, phpReleaseFor } from '../src/lib/advisories.js';
+
+test('an announced PHP advisory is released once every supported branch has shipped on or after the day', () => {
+  const adv = { component: 'php', status: 'announced', release_at: '2026-11-19T14:00:00.000Z', branches: '["*"]' };
+  const before = [
+    { cycle: '8.5', eol: '2029-12-31', latest: '8.5.12', latestReleaseDate: '2026-10-21' },
+    { cycle: '8.4', eol: '2028-12-31', latest: '8.4.27', latestReleaseDate: '2026-10-21' },
+    { cycle: '8.1', eol: '2025-12-31', latest: '8.1.34', latestReleaseDate: '2025-11-20' },
+  ];
+  const today = new Date('2026-11-19T15:00:00Z');
+  assert.equal(phpReleaseFor(adv, before, today), null);
+  const half = [{ ...before[0], latest: '8.5.13', latestReleaseDate: '2026-11-19' }, before[1], before[2]];
+  assert.equal(phpReleaseFor(adv, half, today), null); // 8.4 not out yet
+  const done = [half[0], { ...before[1], latest: '8.4.28', latestReleaseDate: '2026-11-19' }, before[2]];
+  assert.deepEqual(phpReleaseFor(adv, done, today), { 8.5: '8.5.13', 8.4: '8.4.28' }); // end-of-life 8.1 gets no fix
+});
+
+test('Node.js security release days become one advisory each, newest version per major, known days skipped', () => {
+  const releases = [
+    { version: 'v24.22.1', date: '2026-11-10', security: true }, { version: 'v22.23.5', date: '2026-11-10', security: true },
+    { version: 'v24.22.0', date: '2026-11-01', security: false }, { version: 'v20.0.0', date: '2025-01-01', security: true },
+  ];
+  const days = nodeSecurityDays(releases, new Set(), '2026-10-20');
+  assert.deepEqual(days, [{ sourceRef: 'node-security-2026-11-10', date: '2026-11-10', fixed: { 24: '24.22.1', 22: '22.23.5' } }]);
+  assert.deepEqual(nodeSecurityDays(releases, new Set(['node-security-2026-11-10']), '2026-10-20'), []);
+});

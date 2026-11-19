@@ -275,3 +275,73 @@ export async function listAdvisories(env) {
   return results.map((r) => ({ ...publicAdvisory(r), exposure: asObject(r.exposure), source: r.source, counts: { affected: r.affected, patched: r.patched, notExposed: r.not_exposed } }));
 }
 
+
+// ---------- automatic release detection ----------
+
+const NODE_RELEASES_URL = 'https://nodejs.org/dist/index.json';
+const PHP_RELEASES_URL = 'https://endoflife.date/api/php.json';
+
+/**
+ * An announced PHP advisory becomes "released" by itself once every supported branch has a newer patch release
+ * dated on or after the announced release day: the fixed version per branch is that release. Pure.
+ * `phpCycles`: endoflife.date rows { cycle, latest, latestReleaseDate, eol }.
+ */
+export function phpReleaseFor(advisory, phpCycles, today = new Date()) {
+  if (advisory.component !== 'php' || advisory.status !== 'announced' || !advisory.release_at || !Array.isArray(phpCycles)) return null;
+  const day = advisory.release_at.slice(0, 10);
+  const todayDay = today.toISOString().slice(0, 10);
+  const branches = asList(advisory.branches, ['*']);
+  const supported = phpCycles.filter((c) => c.eol > todayDay && (branches.includes('*') || branches.includes(c.cycle)));
+  if (!supported.length) return null;
+  const released = supported.filter((c) => c.latestReleaseDate && c.latestReleaseDate >= day);
+  if (released.length !== supported.length) return null; // wait until every supported branch has shipped
+  return Object.fromEntries(released.map((c) => [c.cycle, c.latest]));
+}
+
+/**
+ * Node.js marks security releases in its release index. Each release day with security releases becomes one
+ * advisory (released, fixed version per major line). Pure: returns [{ sourceRef, date, fixed }] for days not yet known.
+ */
+export function nodeSecurityDays(releases, knownRefs, since) {
+  const days = new Map();
+  for (const r of releases || []) {
+    if (!r.security || /-/.test(r.version) || !r.date || r.date < since) continue;
+    const ref = `node-security-${r.date}`;
+    if (knownRefs.has(ref)) continue;
+    const major = branchOf('node', r.version);
+    const d = days.get(ref) || days.set(ref, { sourceRef: ref, date: r.date, fixed: {} }).get(ref);
+    if (!d.fixed[major] || compareVersions(r.version.replace(/^v/, ''), d.fixed[major]) > 0) d.fixed[major] = r.version.replace(/^v/, '');
+  }
+  return [...days.values()];
+}
+
+/** Hourly: release announced PHP advisories when the fixes ship, and add new Node.js security releases. */
+export async function detectReleases(env, cachedReference, at = new Date()) {
+  const out = { phpReleased: 0, nodeAdded: 0 };
+  const { results: announced } = await env.DB.prepare(`SELECT * FROM advisories WHERE status = 'announced' AND component = 'php'`).all();
+  if (announced.length) {
+    const cycles = await cachedReference(env, 'eol:php', PHP_RELEASES_URL, undefined, 3600e3);
+    for (const adv of announced) {
+      const fixed = phpReleaseFor(adv, cycles, at);
+      if (!fixed) continue;
+      await saveAdvisory(env, { status: 'released', fixed }, adv.id, at);
+      out.phpReleased += 1;
+    }
+  }
+  const releases = await cachedReference(env, 'node:releases:raw', NODE_RELEASES_URL, undefined, 3600e3);
+  if (Array.isArray(releases)) {
+    const { results: refs } = await env.DB.prepare(`SELECT source_ref FROM advisories WHERE source_ref LIKE 'node-security-%'`).all();
+    // Only security releases from the last 30 days: older ones are covered by the runtime check already.
+    const since = new Date(at.getTime() - 30 * 86400e3).toISOString().slice(0, 10);
+    for (const day of nodeSecurityDays(releases, new Set(refs.map((r) => r.source_ref)), since)) {
+      await saveAdvisory(env, {
+        component: 'node', severity: 'high', status: 'released', source: 'feed:nodejs', sourceRef: day.sourceRef,
+        title: `Node.js security releases (${day.date})`,
+        summary: `Node.js shipped security releases on ${day.date} for the ${Object.keys(day.fixed).map((m) => `${m}.x`).join(', ')} line(s). Versions before these releases have known vulnerabilities.`,
+        branches: Object.keys(day.fixed), fixed: day.fixed, url: 'https://nodejs.org/en/blog/vulnerability',
+      }, null, at);
+      out.nodeAdded += 1;
+    }
+  }
+  return out;
+}

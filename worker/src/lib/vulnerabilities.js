@@ -7,7 +7,7 @@
 // New problems raise a 'vulnerability' notification; problems already known do not alert again.
 import { notificationStatement } from './alerts.js';
 import { shareVulnerablePackages } from './ruyashield.js';
-import { syncAdvisories } from './advisories.js';
+import { detectReleases, syncAdvisories } from './advisories.js';
 import { nowIso, parseJson } from './util.js';
 
 const OSV = 'https://api.osv.dev/v1';
@@ -48,7 +48,7 @@ export function advisorySeverity(advisory) {
 
 // ---------- caches ----------
 
-async function cachedReference(env, key, url, parse = (t) => JSON.parse(t), ttlMs = REFERENCE_TTL_MS) {
+export async function cachedReference(env, key, url, parse = (t) => JSON.parse(t), ttlMs = REFERENCE_TTL_MS) {
   const row = await env.DB.prepare('SELECT body, fetched_at FROM reference_cache WHERE key = ?').bind(key).first();
   if (row && Date.now() - Date.parse(row.fetched_at) < ttlMs) return parse(row.body);
   try {
@@ -294,8 +294,10 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
     }
   }
   if (statements.length) await env.DB.batch(statements);
-  // Release Radar: new matches, upgrade targets and "patched" (the health check keeps runtime versions current).
-  const radar = await syncAdvisories(env, at).catch((error) => ({ error: error.message }));
+  // Release Radar: fixes that just shipped, then new matches, upgrade targets and "patched" (the health check keeps
+  // runtime versions current).
+  const released = await detectReleases(env, cachedReference, at).catch((error) => ({ error: error.message }));
+  const radar = { released, ...(await syncAdvisories(env, at).catch((error) => ({ error: error.message }))) };
   return { sites: sites.length, packagesChecked: checked, alerts, failed, radar };
 }
 

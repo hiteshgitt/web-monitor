@@ -70,6 +70,21 @@ async function diagnoseFailure(site, response) {
   return page ? diagnoseResponse(page) : null;
 }
 
+// Security-relevant settings from a health response (PHP ini values today), for Release Radar exposure rules.
+// Only known keys with boolean or short plain-text values are kept.
+const CONFIG_KEYS = ['session.upload_progress.enabled', 'session.serialize_handler', 'expose_php', 'display_errors', 'allow_url_include'];
+export function securityConfigFrom(data) {
+  const raw = data?.security_config;
+  if (!raw || typeof raw !== 'object') return null;
+  const out = {};
+  for (const k of CONFIG_KEYS) {
+    const v = raw[k];
+    if (typeof v === 'boolean') out[k] = v;
+    else if (typeof v === 'string' && /^[\w.-]{0,40}$/.test(v)) out[k] = v;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // Runtime versions from a health response (for the vulnerability checks): plain version strings only.
 const VERSION_TEXT = /^v?\d+(\.\d+){0,3}([-.+][\w.]+)?$/;
 export function runtimeFrom(data) {
@@ -212,6 +227,7 @@ async function checkWordPress(site, withDetails) {
     serverProcessingTime: health.data.response_time ?? null,
     components: normalizeComponents(health.data.components),
     runtime: runtimeFrom(health.data),
+    securityConfig: securityConfigFrom(health.data),
   };
   if (withDetails) {
     const parts = await Promise.all(['analytics', 'performance', 'seo', 'security'].map((ep) => (
@@ -272,6 +288,7 @@ async function checkApiIntegration(site, frameworkName, withDetails = false) {
     serverProcessingTime: health.data.response_time ?? null,
     components: normalizeComponents(health.data.components),
     runtime: runtimeFrom(health.data),
+    securityConfig: securityConfigFrom(health.data),
   };
   if (withDetails) {
     const parts = await Promise.all(['analytics', 'performance', 'seo', 'security'].map((ep) => (
@@ -366,6 +383,10 @@ export function recordCheckStatements(db, site, result, at = new Date()) {
   ];
 
   // Component health: written only when it changes.
+  if (result.securityConfig) {
+    const json = JSON.stringify(result.securityConfig);
+    if (json !== (site.security_config || null)) statements.push(db.prepare('UPDATE websites SET security_config = ? WHERE id = ?').bind(json, site.id));
+  }
   // Runtime versions: written only when they change (an upgrade), like components.
   if (result.runtime) {
     const json = JSON.stringify(result.runtime);

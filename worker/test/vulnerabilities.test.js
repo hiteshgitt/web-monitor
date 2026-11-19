@@ -67,3 +67,10 @@ test('runtime versions are read from health responses, junk ignored', () => {
   assert.deepEqual(runtimeFrom({ node_version: 'v24.22.1', nextjs_version: '16.4.6' }), { php: null, node: '24.22.1', wordpress: null, nextjs: '16.4.6' });
   assert.equal(runtimeFrom({ php_version: '<script>' }), null);
 });
+
+import { securityConfigFrom } from '../src/lib/monitor.js';
+test('security config keeps known keys with plain values only', () => {
+  assert.deepEqual(securityConfigFrom({ security_config: { 'session.upload_progress.enabled': true, 'session.serialize_handler': 'php', evil: 'x', expose_php: '<b>' } }),
+    { 'session.upload_progress.enabled': true, 'session.serialize_handler': 'php' });
+  assert.equal(securityConfigFrom({}), null);
+});

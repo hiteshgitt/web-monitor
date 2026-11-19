@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Web Monitor API (Advanced)
  * Description: Advanced REST API endpoints for the Web Monitor Dashboard. Exposes real, dynamic WordPress health, analytics, performance, SEO and security data (no simulated/random values).
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: Web Monitor Team
  * Requires at least: 5.6
  * Tested up to: 7.0
@@ -681,8 +681,9 @@ function webmonitor_advanced_health_check($request) {
         'site_url' => home_url(),
         'wordpress_version' => get_bloginfo('version'),
         'php_version' => PHP_VERSION,
-        'plugin_version' => '1.2.0',
+        'plugin_version' => '1.3.0',
         'components' => $components,
+        'security_config' => web_monitor_security_config(),
         'checks' => array(
             'database' => $db_status,
             'memory' => ($memory_percentage === null || $memory_percentage < 80) ? 'normal' : 'high',
@@ -1251,4 +1252,22 @@ function webmonitor_advanced_alerts($request) {
         'alerts' => $alerts
     );
 }
+
+/**
+ * PHP settings that decide whether some vulnerabilities apply (WebMonitor's Release Radar uses them to say
+ * "exposed" or "not exposed"). Values only, never paths or secrets.
+ */
+function web_monitor_security_config() {
+    $on = function ($v) {
+        return in_array(strtolower(trim((string) $v)), array('1', 'on', 'true', 'yes'), true);
+    };
+    return array(
+        'session.upload_progress.enabled' => $on(ini_get('session.upload_progress.enabled')),
+        'session.serialize_handler' => substr((string) ini_get('session.serialize_handler'), 0, 40),
+        'expose_php' => $on(ini_get('expose_php')),
+        'display_errors' => $on(ini_get('display_errors')),
+        'allow_url_include' => $on(ini_get('allow_url_include')),
+    );
+}
+
 ?>
