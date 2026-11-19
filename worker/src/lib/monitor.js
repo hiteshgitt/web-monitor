@@ -462,5 +462,6 @@ export async function purgeOldHistory(env, at = new Date()) {
     env.DB.prepare('DELETE FROM check_days WHERE day < ?').bind(dayKey(cutoff)),
     env.DB.prepare('DELETE FROM incidents WHERE ended_at IS NOT NULL AND ended_at < ?').bind(cutoff.toISOString()),
     env.DB.prepare('DELETE FROM notifications WHERE created_at < ?').bind(cutoff.toISOString()),
+    env.DB.prepare('DELETE FROM ai_usage WHERE day < ?').bind(dayKey(new Date(at.getTime() - 7 * 86400e3))),
   ]);
 }

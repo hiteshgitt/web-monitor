@@ -27,6 +27,8 @@
 
   // Ruya Lab accounts (accounts/): token and key calls go through this binding, not the public route.
   "services": [{ "binding": "ACCOUNTS", "service": "ruyalab-accounts" }],
+  // Workers AI for Zealot, first choice. Capped per day in src/lib/ai.js to stay inside the free 10,000 Neurons.
+  "ai": { "binding": "AI" },
   // The monitor: one run per minute (the daily cleanup happens inside the 00:05 UTC run).
   // The 15-minute run scans one Pro site with PageSpeed when its saved result is older than a week.
   "triggers": {
