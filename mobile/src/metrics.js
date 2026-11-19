@@ -145,6 +145,7 @@ export const ALERT_KIND = {
   ruyashield_ok: 'RuyaShield: all clear',
   component_failed: 'Component failing',
   component_ok: 'Component recovered',
+  change_suspect: 'Possible cause found',
 };
 
 export const formatWhen = (iso) => (iso ? new Date(iso).toLocaleString() : '—');

@@ -89,6 +89,7 @@ const StatusCard = ({ site, availability, incident = null }) => {
           {tone === 'bad' && incident?.hint && (
             <div className="mt-2 rounded-lg bg-white/15 px-2.5 py-1.5 text-[12px] leading-snug"><span className="font-bold">What to do: </span>{incident.hint}</div>
           )}
+          {tone === 'bad' && incident?.relatedChange && <RelatedChange change={incident.relatedChange} startedAt={incident.startedAt} onDark />}
         </div>
       </div>
     </div>
@@ -154,6 +155,7 @@ const ALERT_KIND = {
   ruyashield_ok: 'RuyaShield: all clear',
   component_failed: 'Component failing',
   component_ok: 'Component recovered',
+  change_suspect: 'Possible cause found',
 };
 
 const AlertContext = ({ focus, incidents, incidentsLoaded, checks, checksLoaded, threshold, onDismiss }) => {
@@ -467,10 +469,36 @@ const ScoreSection = ({ title, score, rows, items, itemsTitle, emptyText }) => (
   </div>
 );
 
+// A RuyaShield change shortly before the site went down (matched by the worker): a possible cause, with a link.
+const CHANGE_LINK_LABEL = { edge_applied: 'Undo in RuyaShield', edge_undone: 'Open in RuyaShield', code_merged: 'Open the pull request' };
+const minutesBetween = (from, to) => Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 60000));
+const changeLead = (change, startedAt) => {
+  const m = minutesBetween(change.at, startedAt);
+  return m < 1 ? 'just before' : m < 120 ? `${m} min before` : `${Math.round(m / 60)} h before`;
+};
+
+const RelatedChange = ({ change, startedAt, onDark = false }) => (
+  <span className={`block mt-2 rounded-lg px-2.5 py-1.5 text-[12px] leading-snug ${onDark ? 'bg-white/15 text-white' : 'bg-warn-soft text-ink-soft'}`}>
+    <span className={`font-bold ${onDark ? '' : 'text-warn'}`}>Possible cause: </span>
+    {change.title}, {changeLead(change, startedAt)} the site went down.
+    {change.link && (
+      <a href={change.link} target="_blank" rel="noreferrer" className={`ml-1 font-bold underline underline-offset-2 ${onDark ? '' : 'text-brand-700'}`}>
+        {CHANGE_LINK_LABEL[change.kind] || 'Open in RuyaShield'}
+      </a>
+    )}
+  </span>
+);
+
 // Root cause of an incident (from the monitor's diagnosis): the failing component, what happened, what to do.
 const IncidentCause = ({ incident, compact = false }) => {
+  const related = incident.relatedChange ? <RelatedChange change={incident.relatedChange} startedAt={incident.startedAt} /> : null;
   if (!incident.cause) {
-    return <span className={`block font-semibold text-ink ${compact ? 'line-clamp-2' : 'truncate'}`}>{incident.message || STATUS_LABEL[incident.status]}</span>;
+    return (
+      <span className="block min-w-0">
+        <span className={`block font-semibold text-ink ${compact ? 'line-clamp-2' : 'truncate'}`}>{incident.message || STATUS_LABEL[incident.status]}</span>
+        {related}
+      </span>
+    );
   }
   const [title, ...rest] = (incident.message || '').split(': ');
   return (
@@ -485,6 +513,7 @@ const IncidentCause = ({ incident, compact = false }) => {
           <span className="font-bold text-brand-700">What to do: </span>{incident.hint}
         </span>
       )}
+      {related}
     </span>
   );
 };

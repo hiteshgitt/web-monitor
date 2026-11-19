@@ -20,7 +20,7 @@ export const ADMIN_ALERT_TYPES = [
 
 // notification.type -> preference key
 const CATEGORY = {
-  site_down: 'downtime', site_up: 'downtime', slow: 'slow', slow_ok: 'slow', plugins: 'plugins',
+  site_down: 'downtime', site_up: 'downtime', change_suspect: 'downtime', slow: 'slow', slow_ok: 'slow', plugins: 'plugins',
   ssl_off: 'ssl', ssl_ok: 'ssl', security_low: 'security', pro_approved: 'account', pro_declined: 'account',
   ruyashield_critical: 'ruyashield', ruyashield_high: 'ruyashield', ruyashield_ok: 'ruyashield',
   component_failed: 'components', component_ok: 'components',

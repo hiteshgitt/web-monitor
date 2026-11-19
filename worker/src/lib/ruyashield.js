@@ -53,6 +53,76 @@ async function fetchPosture(env, token, hosts) {
   };
 }
 
+// ---------- Possible cause: a RuyaShield change shortly before downtime ----------
+// RuyaShield's posture lists recent changes per host (Cloudflare header fixes applied or undone by RuyaShield,
+// RuyaShield fix pull requests seen merged). A change in the window before an incident started is shown as a
+// possible cause, with a link to undo it. Merged code reaches the site only on the next deploy, so it gets a longer window.
+const CHANGE_LOOKBACK_MS = { edge_applied: 2 * 3600e3, edge_undone: 2 * 3600e3, code_merged: 24 * 3600e3 };
+// RuyaShield records a change when the call finishes; the first failed check can land a moment earlier.
+const CHANGE_GRACE_MS = 5 * 60e3;
+// Incidents that started this long ago or less are still matched (and prioritised by the 15-minute job).
+export const CORRELATE_HOURS = 24;
+const URGENT_HOURS = 2;
+
+// Pure: for each incident without a related change, the newest RuyaShield change on the site's host(s) in its window.
+export function matchChanges(sites, incidents, posture) {
+  const byHost = new Map((posture?.hosts || []).filter((h) => h.tracked).map((h) => [h.host, h.changes || []]));
+  const out = [];
+  for (const incident of incidents) {
+    if (incident.related_change) continue;
+    const site = sites.find((s) => s.id === incident.website_id);
+    if (!site) continue;
+    const started = Date.parse(incident.started_at);
+    const changes = hostsForUrl(site.url).flatMap((h) => byHost.get(h) || []);
+    const hit = changes
+      .map((c) => ({ ...c, t: Date.parse(c.at) }))
+      .filter((c) => CHANGE_LOOKBACK_MS[c.kind] && c.t <= started + CHANGE_GRACE_MS && c.t >= started - CHANGE_LOOKBACK_MS[c.kind])
+      .sort((a, b) => b.t - a.t)[0];
+    if (!hit) continue;
+    out.push({
+      incident, site,
+      change: { kind: hit.kind, at: new Date(hit.t).toISOString(), title: String(hit.title || '').slice(0, 200), link: safeLink(hit.link) },
+    });
+  }
+  return out;
+}
+
+// Only http(s) links are kept; anything else from the other side is dropped.
+function safeLink(link) {
+  try {
+    const u = new URL(String(link));
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+const minutesBefore = (change, incident) => Math.max(0, Math.round((Date.parse(incident.started_at) - Date.parse(change.at)) / 60000));
+
+function suspectAlert(userId, { incident, site, change }) {
+  const when = minutesBefore(change, incident);
+  const ago = when < 1 ? 'just before' : when < 120 ? `${when} min before` : `${Math.round(when / 60)} h before`;
+  const undo = change.kind === 'edge_applied' ? ' If the site broke because of it, undo it in RuyaShield with one click.' : '';
+  return {
+    userId, websiteId: site.id, type: 'change_suspect',
+    title: `Possible cause for ${site.name} going down`,
+    body: `${change.title}, ${ago} the site went down.${undo}`,
+  };
+}
+
+// D1 statements that store matches on incidents (once) and alert the customer.
+async function correlationStatements(env, userId, sites, posture) {
+  if (!sites.length) return [];
+  const since = new Date(Date.now() - CORRELATE_HOURS * 3600e3).toISOString();
+  const { results: incidents } = await env.DB.prepare(`SELECT i.id, i.website_id, i.started_at, i.related_change FROM incidents i
+    JOIN websites w ON w.id = i.website_id WHERE w.owner_id = ? AND i.started_at >= ? AND i.related_change IS NULL`)
+    .bind(userId, since).all();
+  return matchChanges(sites, incidents, posture).flatMap((m) => [
+    env.DB.prepare('UPDATE incidents SET related_change = ? WHERE id = ? AND related_change IS NULL').bind(JSON.stringify(m.change), m.incident.id),
+    notificationStatement(env.DB, suspectAlert(userId, m)),
+  ]);
+}
+
 const readConnection = (env, userId) => env.DB
   .prepare('SELECT * FROM ruyashield_connections WHERE user_id = ?').bind(userId).first();
 
@@ -125,10 +195,15 @@ async function postureForUser(env, userId, row, { refresh = false, needHosts = [
   }
   // Alerts are raised here, on every fresh answer (panel view or the 15-minute job), against alert_state.
   const { alerts, state } = ruyashieldAlerts(results, parseJson(row.alert_state), res.data);
+  const suspects = await correlationStatements(env, userId, results, res.data).catch((error) => {
+    console.error('RuyaShield change correlation failed', error.message);
+    return [];
+  });
   await env.DB.batch([
     env.DB.prepare('UPDATE ruyashield_connections SET posture = ?, posture_at = ?, last_error = NULL, org_name = ?, alert_state = ? WHERE user_id = ?')
       .bind(JSON.stringify(res.data), now, String(res.data.org?.name || row.org_name).slice(0, 120), JSON.stringify(state), userId),
     ...alerts.map((alert) => notificationStatement(env.DB, alert)),
+    ...suspects,
   ]);
   return { data: res.data, fetchedAt: now };
 }
@@ -158,9 +233,14 @@ const REFRESH_PER_RUN = 10;
 export async function refreshRuyaShieldAlerts(env) {
   if (!ruyashieldConfigured(env)) return { skipped: 'not-configured' };
   const cutoff = new Date(Date.now() - CACHE_MINUTES * 60 * 1000).toISOString();
-  const { results } = await env.DB.prepare(`SELECT c.* FROM ruyashield_connections c JOIN users u ON u.id = c.user_id
-    WHERE (u.plan = 'pro' OR u.role = 'admin') AND (c.posture_at IS NULL OR c.posture_at < ?)
-    ORDER BY c.posture_at LIMIT ?`).bind(cutoff, REFRESH_PER_RUN).all();
+  // Customers with downtime in the last two hours and no possible cause yet come first, even with a fresh answer:
+  // the change that broke the site may be newer than what is cached.
+  const urgentSince = new Date(Date.now() - URGENT_HOURS * 3600e3).toISOString();
+  const { results } = await env.DB.prepare(`SELECT c.*, EXISTS (SELECT 1 FROM incidents i JOIN websites w ON w.id = i.website_id
+      WHERE w.owner_id = c.user_id AND i.started_at >= ?1 AND i.related_change IS NULL) AS urgent
+    FROM ruyashield_connections c JOIN users u ON u.id = c.user_id
+    WHERE (u.plan = 'pro' OR u.role = 'admin') AND (c.posture_at IS NULL OR c.posture_at < ?2 OR urgent)
+    ORDER BY urgent DESC, c.posture_at LIMIT ?3`).bind(urgentSince, cutoff, REFRESH_PER_RUN).all();
   let failed = 0;
   for (const row of results) {
     const r = await postureForUser(env, row.user_id, row, { refresh: true }).catch(() => ({ error: 'exception' }));

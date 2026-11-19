@@ -79,5 +79,6 @@ export const serializeIncident = (row) => ({
   cause: row.cause || null,
   component: row.component || null,
   hint: row.hint || null,
+  relatedChange: parseJson(row.related_change),
   lastChecked: row.last_checked,
 });
