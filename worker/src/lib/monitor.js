@@ -166,6 +166,8 @@ function integrationDetails([analytics, performance, seo, security]) {
       memoryPeak: performance.memory_peak ?? null,
       diskFreeBytes: performance.disk_free_bytes ?? null,
       diskTotalBytes: performance.disk_total_bytes ?? null,
+      inodesUsedPercent: performance.inodes_used_percent ?? null,
+      inodesTotal: performance.inodes_total ?? null,
       bandwidthTxBytes: performance.bandwidth_tx_bytes ?? null,
       bandwidthRxBytes: performance.bandwidth_rx_bytes ?? null,
       cpuUsage: performance.cpu_usage ?? null,

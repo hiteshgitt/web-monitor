@@ -900,6 +900,11 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                             : 'Not connected';
                         })()}
                       </div>
+                      {selectedWebsite?.performance?.inodesUsedPercent != null && (
+                        <div className={`text-[11px] font-bold mt-0.5 ${selectedWebsite.performance.inodesUsedPercent >= 85 ? 'text-rose-600' : 'text-ink-muted'}`}>
+                          Inodes {selectedWebsite.performance.inodesUsedPercent}% used
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="bg-brand-50/50 rounded-2xl p-5 border border-brand-100 flex items-center gap-4">

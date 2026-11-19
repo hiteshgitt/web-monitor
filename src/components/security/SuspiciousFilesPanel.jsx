@@ -7,10 +7,10 @@ import { SeverityChip } from './VulnerabilitiesPanel';
 
 // Suspicious-file scan (Pro): what the integration's read-only scanner found, with file, line and a snippet.
 const SETUP = {
-  wordpress: 'Update the Web Monitor plugin to 1.5.0 or later to turn the file scan on.',
-  laravel: 'Update ruyalab/webmonitor-laravel to 1.4.0 or later to turn the file scan on.',
-  codeigniter: 'Update ruyalab/webmonitor-codeigniter to 1.4.0 or later to turn the file scan on.',
-  php: 'Download the Core PHP integration again (1.4.0 or later) to turn the file scan on.',
+  wordpress: 'Update the Web Monitor plugin to 1.6.0 or later to turn the file scan on.',
+  laravel: 'Update ruyalab/webmonitor-laravel to 1.5.0 or later to turn the file scan on.',
+  codeigniter: 'Update ruyalab/webmonitor-codeigniter to 1.5.0 or later to turn the file scan on.',
+  php: 'Download the Core PHP integration again (1.5.0 or later) to turn the file scan on.',
 };
 
 const SuspiciousFilesPanel = ({ siteId, platform }) => {

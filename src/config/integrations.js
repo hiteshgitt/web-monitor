@@ -2,11 +2,11 @@
 // package is behind. Keep in step with wordpress-plugin/ (Version header), packages/php-core (VERSION) and
 // packages/nextjs (package.json) when releasing.
 export const LATEST_INTEGRATION = {
-  wordpress: { version: '1.5.0', whatsNew: 'Suspicious-file scan (backdoors, web shells, code in uploads, modified WordPress core) with file and line, plus error tracking with stack traces and alerts.' },
-  nextjs: { version: '1.3.0', whatsNew: 'Error tracking: server errors grouped with file, line and stack trace (needs instrumentation.ts), alerts for new errors and spikes. Real runtime and Node.js flags for Release Radar.' },
-  laravel: { version: '1.4.0', whatsNew: 'Suspicious-file scan with file and line, plus error tracking for every exception Laravel reports, with alerts.' },
-  codeigniter: { version: '1.4.0', whatsNew: 'Suspicious-file scan with file and line, plus error tracking with stack traces and alerts.' },
-  php: { version: '1.4.0', whatsNew: 'Suspicious-file scan with file and line, plus error tracking (add webmonitor-track.php to index.php) with alerts.' },
+  wordpress: { version: '1.6.0', whatsNew: 'Inode (file count) monitoring with alerts, the suspicious-file scan (backdoors, web shells, code in uploads, modified WordPress core) and error tracking with stack traces.' },
+  nextjs: { version: '1.4.0', whatsNew: 'Inode (file count) monitoring, error tracking with stack traces (needs instrumentation.ts), and the real runtime and Node.js flags for Release Radar.' },
+  laravel: { version: '1.5.0', whatsNew: 'Inode monitoring, the suspicious-file scan with file and line, and error tracking for every exception Laravel reports.' },
+  codeigniter: { version: '1.5.0', whatsNew: 'Inode monitoring, the suspicious-file scan with file and line, and error tracking with stack traces.' },
+  php: { version: '1.5.0', whatsNew: 'Inode monitoring, the suspicious-file scan with file and line, and error tracking (add webmonitor-track.php to index.php).' },
 };
 
 export const UPDATE_HOW = {

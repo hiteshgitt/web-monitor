@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 import { timingSafeEqual } from 'node:crypto';
 import { errorGroups, errorStore, errorSummary } from './instrumentation.js';
 
-export const VERSION = '1.3.0';
+export const VERSION = '1.4.0';
 export const ENDPOINTS = ['health', 'analytics', 'performance', 'seo', 'security', 'libraries', 'logs', 'recommendations', 'errors'];
 
 const projectRoot = () => process.cwd();
@@ -106,6 +106,10 @@ function diskStats() {
       freeBytes: free,
       totalBytes: total,
       freePercent: round((stats.bavail / stats.blocks) * 100, 1),
+      // Inodes: the filesystem's file count. When they run out no file can be created, even with free space.
+      inodesTotal: stats.files || null,
+      inodesFree: stats.files ? stats.ffree : null,
+      inodesUsedPercent: stats.files ? round(((stats.files - stats.ffree) / stats.files) * 100, 1) : null,
     };
   } catch {
     return { freeBytes: null, totalBytes: null, freePercent: null };
@@ -159,7 +163,7 @@ function diskComponent() {
 }
 
 export function getComponents() {
-  return [errorsComponent(), heapComponent(), diskComponent()].filter(Boolean);
+  return [errorsComponent(), heapComponent(), diskComponent(), inodesComponent()].filter(Boolean);
 }
 
 // ---- endpoints ------------------------------------------------------------------------------
@@ -205,6 +209,15 @@ function getAnalytics() {
   };
 }
 
+function inodesComponent() {
+  const d = diskStats();
+  if (d.inodesUsedPercent == null) return null;
+  const used = d.inodesUsedPercent;
+  return component('inodes', 'Inodes (file count)', used >= 95 ? 'error' : used >= 85 ? 'warning' : 'ok',
+    `${used}% of inodes used (${(d.inodesTotal - d.inodesFree).toLocaleString('en-US')} of ${d.inodesTotal.toLocaleString('en-US')}).`,
+    used >= 85 ? 'Too many small files: clear cache and session folders, old builds (.next/cache) and node_modules copies.' : null);
+}
+
 function getPerformance() {
   const start = performance.now();
   const memory = systemMemoryPercent();
@@ -232,6 +245,9 @@ function getPerformance() {
     disk_free_percent: disk.freePercent,
     disk_free_bytes: disk.freeBytes,
     disk_total_bytes: disk.totalBytes,
+    inodes_used_percent: disk.inodesUsedPercent ?? null,
+    inodes_total: disk.inodesTotal ?? null,
+    inodes_free: disk.inodesFree ?? null,
     bandwidth_tx_bytes: traffic.txBytes,
     bandwidth_rx_bytes: traffic.rxBytes,
     performance_score: Math.max(0, score),

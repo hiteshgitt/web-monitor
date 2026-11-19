@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Web Monitor API (Advanced)
  * Description: Advanced REST API endpoints for the Web Monitor Dashboard. Exposes real, dynamic WordPress health, analytics, performance, SEO and security data (no simulated/random values).
- * Version: 1.5.0
+ * Version: 1.6.0
  * Author: Web Monitor Team
  * Requires at least: 5.6
  * Tested up to: 7.0
@@ -76,6 +76,20 @@ function webmonitor_disk_stats() {
         'total_bytes' => (int) $total,
         'free_percent' => round($free / $total * 100, 1),
     );
+}
+
+/** Inode use where the host allows `df` (PHP has no native call); nothing is reported otherwise. */
+function webmonitor_inode_stats() {
+    $none = array('used_percent' => null, 'used' => null, 'total' => null);
+    $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
+    if (!function_exists('shell_exec') || in_array('shell_exec', $disabled, true)) {
+        return $none;
+    }
+    $out = @shell_exec('df -Pi ' . escapeshellarg(ABSPATH) . ' 2>/dev/null');
+    if (!is_string($out) || !preg_match('/\n\S+\s+(\d+)\s+(\d+)\s+(\d+)\s+\d+%/', $out, $m) || (int) $m[1] === 0) {
+        return $none;
+    }
+    return array('used_percent' => round(((int) $m[2]) / ((int) $m[1]) * 100, 1), 'used' => (int) $m[2], 'total' => (int) $m[1]);
 }
 
 // ---------- Components: what is healthy inside WordPress (shared format of every Web Monitor integration) ----------
@@ -201,6 +215,13 @@ function webmonitor_components($db_status, $memory_percentage) {
         $out[] = webmonitor_component('disk', 'Disk space', $free < 5 ? 'error' : ($free < 15 ? 'warning' : 'ok'),
             "{$free}% free (" . round($disk['free_bytes'] / 1073741824, 1) . ' GB).',
             $free < 15 ? 'Free space: old backups (e.g. in wp-content/uploads or backup plugin folders), logs and cache.' : null);
+    }
+    $inodes = webmonitor_inode_stats();
+    if ($inodes['used_percent'] !== null) {
+        $used = $inodes['used_percent'];
+        $out[] = webmonitor_component('inodes', 'Inodes (file count)', $used >= 95 ? 'error' : ($used >= 85 ? 'warning' : 'ok'),
+            "{$used}% of inodes used (" . number_format($inodes['used']) . ' of ' . number_format($inodes['total']) . ').',
+            $used >= 85 ? 'Too many small files: clear cache plugin folders, old backups, sessions and image thumbnails you no longer use.' : null);
     }
     foreach (array('webmonitor_cron_component', 'webmonitor_action_scheduler_component', 'webmonitor_php_errors_component') as $fn) {
         try {
@@ -697,7 +718,7 @@ function webmonitor_advanced_health_check($request) {
         'site_url' => home_url(),
         'wordpress_version' => get_bloginfo('version'),
         'php_version' => PHP_VERSION,
-        'plugin_version' => '1.5.0',
+        'plugin_version' => '1.6.0',
         'errors' => webmonitor_errors_summary(),
         'components' => $components,
         'security_config' => web_monitor_security_config(),
