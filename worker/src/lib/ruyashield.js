@@ -330,9 +330,14 @@ export async function shareVulnerablePackages(env, site, ecosystem, packages) {
   // Same rules RuyaShield validates with: one odd entry must not get the whole report refused.
   const valid = packages.map(REPORT_FIELDS).filter((p) => /^[@a-z0-9][\w./@-]{0,213}$/i.test(p.name) && /^[\w.+-]{1,64}$/.test(p.version)
     && p.ids.length && p.ids.every((id) => /^[A-Za-z0-9._:-]{3,64}$/.test(id)) && (!p.fixed || /^[\w.+-]{1,64}$/.test(p.fixed)));
-  const body = JSON.stringify({ host, ecosystem, observedAt: nowIso(), packages: valid.slice(0, 200) });
+  await postSigned(env, 'packages', { host, ecosystem, observedAt: nowIso(), packages: valid.slice(0, 200) });
+  return { sent: packages.length };
+}
+
+async function postSigned(env, path, payload) {
+  const body = JSON.stringify(payload);
   const timestamp = String(Math.floor(Date.now() / 1000));
-  const res = await fetch(`${baseUrl(env)}/v1/integrations/webmonitor/packages`, {
+  const res = await fetch(`${baseUrl(env)}/v1/integrations/webmonitor/${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -344,5 +349,25 @@ export async function shareVulnerablePackages(env, site, ecosystem, packages) {
   });
   await res.body?.cancel();
   if (res.status !== 202) throw new Error(`RuyaShield answered ${res.status}`);
-  return { sent: packages.length };
+}
+
+// ---------- suspicious files → RuyaShield ----------
+// The open findings of the read-only file scan (files the owner marked safe stay out), so the webmonitor.files
+// check can raise them as findings for an organization that verified this host. `complete` says the list comes
+// from a finished pass; only then may RuyaShield treat a missing file as fixed.
+
+export async function shareFileFindings(env, site, complete) {
+  if (!handoffConfigured(env)) return { skipped: 'not-configured' };
+  const connected = await env.DB.prepare('SELECT 1 FROM ruyashield_connections WHERE user_id = ?').bind(site.owner_id).first();
+  if (!connected) return { skipped: 'not-connected' };
+  const host = hostsForUrl(site.url)[0];
+  if (!host) return { skipped: 'no-host' };
+  const { results } = await env.DB.prepare(`SELECT id, path, line, rule, severity, title, snippet FROM file_findings
+    WHERE website_id = ? AND status = 'open' ORDER BY last_seen DESC LIMIT 300`).bind(site.id).all();
+  const findings = results.map((f) => ({
+    id: String(f.id).slice(0, 40), path: String(f.path).slice(0, 300), line: Math.max(0, Number(f.line) || 0), rule: String(f.rule),
+    severity: f.severity, title: String(f.title || f.rule).slice(0, 200), snippet: String(f.snippet || '').slice(0, 200),
+  })).filter((f) => /^[\w-]{4,40}$/.test(f.id) && /^[a-z0-9-]{2,40}$/.test(f.rule) && ['critical', 'high', 'medium', 'low'].includes(f.severity));
+  await postSigned(env, 'files', { host, observedAt: nowIso(), complete: Boolean(complete), findings });
+  return { sent: findings.length };
 }

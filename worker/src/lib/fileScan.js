@@ -4,6 +4,7 @@
 // New findings alert at once (critical); a finding is "cleared" only when a complete pass no longer reports it.
 import { notificationStatement } from './alerts.js';
 import { parseJson } from './util.js';
+import { shareFileFindings } from './ruyashield.js';
 
 export const FILESCAN_PLATFORMS = ['wordpress', 'laravel', 'codeigniter', 'php'];
 const IN_PROGRESS_EVERY_MS = 5 * 60e3;
@@ -71,6 +72,7 @@ export async function syncFileScan(env, site, payload, at = new Date()) {
   state.firstPassNotified = Boolean(before.firstPassNotified || state.cycleComplete);
   statements.push(env.DB.prepare('UPDATE websites SET filescan_state = ?, filescan_at = ? WHERE id = ?').bind(JSON.stringify(state), now, site.id));
   await env.DB.batch(statements);
+  await shareFileFindings(env, site, state.cycleComplete).catch((e) => console.error('RuyaShield file report failed', e.message));
   return { findings: findings.length, fresh: open.length, cleared: cleared.length };
 }
 
