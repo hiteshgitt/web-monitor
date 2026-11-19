@@ -74,3 +74,7 @@ test('security config keeps known keys with plain values only', () => {
     { 'session.upload_progress.enabled': true, 'session.serialize_handler': 'php' });
   assert.equal(securityConfigFrom({}), null);
 });
+test('Node.js flags are kept as security config', () => {
+  assert.deepEqual(securityConfigFrom({ security_config: { 'node.permission_model': true, 'node.env': 'production', 'node.secret': 'x' } }),
+    { 'node.permission_model': true, 'node.env': 'production' });
+});

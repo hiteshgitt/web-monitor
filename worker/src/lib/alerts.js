@@ -15,6 +15,7 @@ export const ALERT_TYPES = [
 ];
 export const ADMIN_ALERT_TYPES = [
   { key: 'admin_requests', label: 'Customer requests', description: 'When a customer asks for Pro or reports a Zealot answer.' },
+  { key: 'admin_radar', label: 'Release Radar drafts', description: 'When php.net or nodejs.org posts a security item, drafted as an advisory for review.' },
   { key: 'admin_signups', label: 'Sign-ups and deletions', description: 'When someone creates or deletes an account.' },
 ];
 
@@ -25,7 +26,7 @@ const CATEGORY = {
   pro_ended: 'account', trial_started: 'account', trial_ending: 'account', trial_ended: 'account',
   ruyashield_critical: 'ruyashield', ruyashield_high: 'ruyashield', ruyashield_ok: 'ruyashield',
   component_failed: 'components', component_ok: 'components',
-  pro_request: 'admin_requests', ai_report: 'admin_requests', signup: 'admin_signups', account_deleted: 'admin_signups',
+  radar_draft: 'admin_radar', pro_request: 'admin_requests', ai_report: 'admin_requests', signup: 'admin_signups', account_deleted: 'admin_signups',
 };
 export const categoryOf = (type) => CATEGORY[type] || type;
 

@@ -70,9 +70,10 @@ async function diagnoseFailure(site, response) {
   return page ? diagnoseResponse(page) : null;
 }
 
-// Security-relevant settings from a health response (PHP ini values today), for Release Radar exposure rules.
+// Security-relevant settings from a health response (PHP ini values, Node.js flags), for Release Radar exposure rules.
 // Only known keys with boolean or short plain-text values are kept.
-const CONFIG_KEYS = ['session.upload_progress.enabled', 'session.serialize_handler', 'expose_php', 'display_errors', 'allow_url_include'];
+const CONFIG_KEYS = ['session.upload_progress.enabled', 'session.serialize_handler', 'expose_php', 'display_errors', 'allow_url_include',
+  'node.permission_model', 'node.inspector', 'node.experimental_flags', 'node.env'];
 export function securityConfigFrom(data) {
   const raw = data?.security_config;
   if (!raw || typeof raw !== 'object') return null;

@@ -68,9 +68,14 @@ const fieldMetrics = (f) => (f ? {
 } : null);
 
 // "What to fix first": the problems this report found, most serious first. Only real findings, no filler.
-function actionPlan({ uptime, security, publicChecks, speed, siteHealth, seo }) {
+function actionPlan({ uptime, security, publicChecks, speed, siteHealth, seo, patching }) {
   const items = [];
   const add = (priority, area, text) => items.push({ priority, area, text });
+  for (const a of patching?.advisories || []) {
+    if (a.state === 'affected') add(a.severity === 'critical' ? 'critical' : 'high', 'Security releases', a.target ? `Upgrade ${a.component} ${a.version} to ${a.target} (${a.title}).` : `${a.title}: ${a.status === 'announced' ? 'apply the mitigation now; the fix is due soon' : 'move to a supported branch'}.`);
+  }
+  for (const r of patching?.runtime || []) add(r.severity === 'high' ? 'high' : 'medium', 'Security releases', `${r.title}. ${r.fix}`);
+  if (patching?.packages?.length) add(patching.packages.some((p) => ['critical', 'high'].includes(p.severity)) ? 'high' : 'medium', 'Vulnerable packages', `Update ${patching.packages.length} package${patching.packages.length === 1 ? '' : 's'} with known vulnerabilities, starting with ${patching.packages[0].name} ${patching.packages[0].version}${patching.packages[0].fixed ? ` → ${patching.packages[0].fixed}` : ''}.`);
   if (security.open?.critical) add('critical', 'Security', `Fix ${security.open.critical} critical RuyaShield finding${security.open.critical === 1 ? '' : 's'}.`);
   if (security.open?.high) add('high', 'Security', `Fix ${security.open.high} high-severity RuyaShield finding${security.open.high === 1 ? '' : 's'}.`);
   if (publicChecks?.malware === 'flagged') add('critical', 'Security', 'Google Safe Browsing lists this site. Clean it and request a review.');
@@ -87,9 +92,45 @@ function actionPlan({ uptime, security, publicChecks, speed, siteHealth, seo }) 
   return items.sort((a, b) => order[a.priority] - order[b.priority]);
 }
 
+// Security releases and patching in the period (Release Radar), plus what is still vulnerable now.
+const COMPONENT_LABEL = { php: 'PHP', node: 'Node.js', wordpress: 'WordPress', nextjs: 'Next.js' };
+async function patchingFor(env, site, from, now) {
+  const { results } = await env.DB.prepare(`SELECT a.title, a.component, a.severity, a.cves, a.status, a.fixed, a.released_at,
+      s.state, s.version_seen, s.first_seen_at, s.patched_at, s.patched_version
+    FROM advisory_sites s JOIN advisories a ON a.id = s.advisory_id
+    WHERE s.website_id = ? AND a.status IN ('announced', 'released') AND s.first_seen_at <= ? AND (s.patched_at IS NULL OR s.patched_at >= ?)
+    ORDER BY s.first_seen_at DESC LIMIT 20`).bind(site.id, now.toISOString(), from.toISOString()).all();
+  const runtime = (() => { try { return JSON.parse(site.runtime || 'null'); } catch { return null; } })();
+  const known = (() => { try { return JSON.parse(site.vulnerabilities || 'null'); } catch { return null; } })();
+  const advisories = results.map((r) => {
+    const version = runtime?.[r.component] || r.version_seen;
+    const fixed = (() => { try { return JSON.parse(r.fixed || '{}'); } catch { return {}; } })();
+    const parts = String(version || '').split('.');
+    const branch = r.component === 'php' || r.component === 'wordpress' ? parts.slice(0, 2).join('.') : parts[0];
+    const start = Math.max(Date.parse(r.first_seen_at), r.released_at ? Date.parse(r.released_at) : 0);
+    return {
+      title: r.title, component: COMPONENT_LABEL[r.component], severity: r.severity, status: r.status, state: r.state,
+      cves: (() => { try { return JSON.parse(r.cves || '[]'); } catch { return []; } })(),
+      version: r.state === 'patched' ? r.patched_version : version, target: fixed[branch] || null,
+      flaggedAt: r.first_seen_at, patchedAt: r.patched_at,
+      hoursToPatch: r.patched_at ? Math.round((Date.parse(r.patched_at) - start) / 360000) / 10 : null,
+    };
+  });
+  const patched = advisories.filter((a) => a.hoursToPatch != null);
+  return {
+    advisories,
+    patchedCount: patched.length,
+    openCount: advisories.filter((a) => a.state === 'affected').length,
+    medianHoursToPatch: patched.length ? patched.map((a) => a.hoursToPatch).sort((x, y) => x - y)[Math.floor((patched.length - 1) / 2)] : null,
+    runtime: known?.runtime || [],
+    packages: (known?.packages || []).slice(0, 10).map((p) => ({ name: p.name, version: p.version, severity: p.severity, fixed: p.fixed, cve: p.aliases?.[0] || p.ids?.[0] || null })),
+    packagesCheckedAt: known?.checkedAt || null,
+  };
+}
+
 export async function buildReport(env, userId, site, days, now = new Date()) {
   const from = daysAgo(days, now);
-  const [dayRows, incidentRows, scan, vitals, ruyashield] = await Promise.all([
+  const [dayRows, incidentRows, scan, vitals, ruyashield, patching] = await Promise.all([
     env.DB.prepare('SELECT day, total, up, response_sum FROM check_days WHERE website_id = ? AND day >= ? ORDER BY day')
       .bind(site.id, dayKey(from)).all().then((r) => r.results),
     env.DB.prepare(`SELECT started_at, ended_at, status, message, cause, component, hint FROM incidents
@@ -98,6 +139,7 @@ export async function buildReport(env, userId, site, days, now = new Date()) {
     readSecurityScan(env, site),
     readVitals(env, site),
     ruyashieldForSite(env, userId, site).catch(() => null),
+    patchingFor(env, site, from, now).catch(() => null),
   ]);
 
   // ----- uptime and response time -----
@@ -227,6 +269,7 @@ export async function buildReport(env, userId, site, days, now = new Date()) {
     siteHealth,
     seo,
     recommendations,
-    actionPlan: actionPlan({ uptime, security, publicChecks, speed, siteHealth, seo }),
+    patching,
+    actionPlan: actionPlan({ uptime, security, publicChecks, speed, siteHealth, seo, patching }),
   };
 }

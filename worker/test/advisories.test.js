@@ -69,3 +69,17 @@ test('Node.js security release days become one advisory each, newest version per
   assert.deepEqual(days, [{ sourceRef: 'node-security-2026-11-10', date: '2026-11-10', fixed: { 24: '24.22.1', 22: '22.23.5' } }]);
   assert.deepEqual(nodeSecurityDays(releases, new Set(['node-security-2026-11-10']), '2026-10-20'), []);
 });
+
+import { parseSecurityFeed } from '../src/lib/advisories.js';
+test('feeds: php.net security posts (not RCs or plain releases), every Node.js vulnerability post', () => {
+  const atom = `<feed><entry xmlns="http://www.w3.org/2005/Atom"><title>Informational advisory: Session upload progress</title><id>https://www.php.net/archive/2026.php#2026-10-23-1</id><published>2026-10-23T10:12:28+00:00</published><content type="xhtml"><div>CVE-2026-115560 is a remote code execution vector</div></content></entry>
+<entry><title>PHP 8.6.0 RC4 available for testing</title><id>https://www.php.net/archive/2026.php#x</id><published>2026-10-21T15:41:41+00:00</published><content>Please report security issues</content></entry>
+<entry><title>PHP 8.6.0 released</title><id>https://www.php.net/archive/2026.php#y</id><published>2026-11-20T10:00:00+00:00</published><content>Features</content></entry></feed>`;
+  const php = parseSecurityFeed(atom, 'php');
+  assert.deepEqual(php.map((i) => i.title), ['Informational advisory: Session upload progress']);
+  assert.deepEqual(php[0].cves, ['CVE-2026-115560']);
+  const rss = '<rss><channel><item><title></title><link>https://nodejs.org/en/blog/vulnerability/november-2026-security-releases</link><pubDate>Wed, 11 Nov 2026 00:00:00 GMT</pubDate><description>Wednesday, November 11, 2026 Security Releases</description></item></channel></rss>';
+  const node = parseSecurityFeed(rss, 'node');
+  assert.equal(node.length, 1);
+  assert.equal(node[0].title, 'Wednesday, November 11, 2026 Security Releases');
+});

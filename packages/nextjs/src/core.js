@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 import { timingSafeEqual } from 'node:crypto';
 import { errorStore } from './instrumentation.js';
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.2.0';
 export const ENDPOINTS = ['health', 'analytics', 'performance', 'seo', 'security', 'libraries', 'logs', 'recommendations'];
 
 const projectRoot = () => process.cwd();
@@ -41,6 +41,19 @@ function safeEqual(a, b) {
 }
 
 const round = (value, digits = 2) => (value == null ? null : Number(value.toFixed(digits)));
+
+// Node.js settings that decide whether some vulnerabilities apply (WebMonitor's Release Radar uses them to say
+// "exposed" or "not exposed"). Flags only, never values of environment variables other than NODE_ENV.
+export function securityConfig() {
+  const args = [...process.execArgv, ...String(process.env.NODE_OPTIONS || '').split(/\s+/)];
+  const env = String(process.env.NODE_ENV || '');
+  return {
+    'node.permission_model': Boolean(process.permission) || args.some((a) => /^--(experimental-)?permission$/.test(a)),
+    'node.inspector': args.some((a) => /^--inspect(-brk|-wait)?(=|$)/.test(a)),
+    'node.experimental_flags': args.some((a) => /^--experimental-/.test(a)),
+    'node.env': /^[\w.-]{1,20}$/.test(env) ? env : '',
+  };
+}
 
 function systemMemoryPercent() {
   return round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100);
@@ -160,6 +173,7 @@ function getHealth() {
     nextjs_version: nextVersion(),
     framework: 'Next.js',
     integration_version: VERSION,
+    security_config: securityConfig(),
     uptime_seconds: Math.round(os.uptime()),
     checks: {
       memory_usage: `${memory}%`,

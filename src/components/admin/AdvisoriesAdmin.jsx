@@ -95,7 +95,7 @@ const AdvisoriesAdmin = () => {
           <Field label="Mitigation before upgrading" hint="Sent to owners with the announcement."><textarea rows={3} value={form.mitigation} onChange={set('mitigation')} className={input} /></Field>
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Advisory link"><input value={form.url} onChange={set('url')} className={input} placeholder="https://www.php.net/..." /></Field>
-            <Field label="Exposure rule (optional JSON)" hint='Sites whose integration reports a different value are marked "not exposed".'>
+            <Field label="Exposure rule (optional JSON)" hint='Sites reporting a different value are "not exposed". PHP: session.upload_progress.enabled, session.serialize_handler, expose_php, display_errors, allow_url_include. Node.js: node.permission_model, node.inspector, node.experimental_flags, node.env.'>
               <input value={form.exposure} onChange={set('exposure')} className={input} placeholder='{"session.upload_progress.enabled": true}' />
             </Field>
           </div>

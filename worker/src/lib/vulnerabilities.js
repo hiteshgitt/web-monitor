@@ -5,9 +5,9 @@
 // - runtime: the PHP, Node.js and WordPress versions from the health response, against end-of-life dates
 //   (endoflife.date), Node.js security releases (nodejs.org) and WordPress.org's stable-check.
 // New problems raise a 'vulnerability' notification; problems already known do not alert again.
-import { notificationStatement } from './alerts.js';
 import { shareVulnerablePackages } from './ruyashield.js';
-import { detectReleases, syncAdvisories } from './advisories.js';
+import { detectReleases, draftFromFeeds, syncAdvisories } from './advisories.js';
+import { notificationStatement, notifyAdmins } from './alerts.js';
 import { nowIso, parseJson } from './util.js';
 
 const OSV = 'https://api.osv.dev/v1';
@@ -297,7 +297,8 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
   // Release Radar: fixes that just shipped, then new matches, upgrade targets and "patched" (the health check keeps
   // runtime versions current).
   const released = await detectReleases(env, cachedReference, at).catch((error) => ({ error: error.message }));
-  const radar = { released, ...(await syncAdvisories(env, at).catch((error) => ({ error: error.message }))) };
+  const drafts = await draftFromFeeds(env, cachedReference, notifyAdmins, at).catch((error) => ({ error: error.message }));
+  const radar = { released, drafts, ...(await syncAdvisories(env, at).catch((error) => ({ error: error.message }))) };
   return { sites: sites.length, packagesChecked: checked, alerts, failed, radar };
 }
 

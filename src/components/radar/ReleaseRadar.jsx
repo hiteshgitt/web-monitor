@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { ArrowLeft, Radar, ShieldCheck, ShieldAlert, Clock, ExternalLink, Sparkles } from 'lucide-react';
+import { ArrowLeft, Radar, ShieldCheck, ShieldAlert, Clock, ExternalLink, Sparkles, Download } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 import { apiFetch } from '../../services/session';
 import { useAuth } from '../../contexts/AuthContext';
@@ -43,16 +43,26 @@ const ReleaseRadar = () => {
     <div className="min-h-screen bg-canvas">
       <header className="bg-linear-to-r from-brand-600 to-brand-800 text-white px-4 sm:px-6 lg:px-10 py-6">
         <div className="flex items-center gap-3">
-          <Link to="/app" className="w-10 h-10 rounded-xl hover:bg-white/15 flex items-center justify-center" aria-label="Back to dashboard"><ArrowLeft size={18} /></Link>
+          <Link to="/app" className="print:hidden w-10 h-10 rounded-xl hover:bg-white/15 flex items-center justify-center" aria-label="Back to dashboard"><ArrowLeft size={18} /></Link>
           <Logo variant="white" className="h-7" />
+          {data && all.length > 0 && (
+            <button type="button" onClick={() => window.print()} className="print:hidden ml-auto h-10 px-4 rounded-xl bg-white/15 hover:bg-white/25 text-[13px] font-bold flex items-center gap-2">
+              <Download size={16} /> Download PDF
+            </button>
+          )}
         </div>
         <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-3"><Radar size={28} /> Release Radar</h1>
             <p className="text-white/80 mt-1 max-w-2xl text-[14px]">Security releases for PHP, Node.js, WordPress and Next.js, matched to the exact versions your sites run: what to do before the fix, the upgrade when it ships, and proof each site is patched.</p>
+            <p className="hidden print:block text-white/80 mt-1 text-[12px]">Patch report generated {new Date().toUTCString().slice(5, 22)} UTC</p>
           </div>
           {data && (
             <div className="flex gap-3">
+              {(() => {
+                const hrs = all.flatMap((a) => a.sites.map((s) => s.hoursToPatch)).filter((h) => h != null).sort((x, y) => x - y);
+                return hrs.length ? <div className="rounded-2xl bg-white/15 px-4 py-3 text-center"><div className="text-2xl font-extrabold">{hrs[Math.floor((hrs.length - 1) / 2)]} h</div><div className="text-[11px] uppercase tracking-wider text-white/75">median to patch</div></div> : null;
+              })()}
               <div className="rounded-2xl bg-white/15 px-4 py-3 text-center"><div className="text-2xl font-extrabold">{totals.affected}</div><div className="text-[11px] uppercase tracking-wider text-white/75">need action</div></div>
               <div className="rounded-2xl bg-white/15 px-4 py-3 text-center"><div className="text-2xl font-extrabold">{totals.patched}</div><div className="text-[11px] uppercase tracking-wider text-white/75">patched</div></div>
             </div>
@@ -78,7 +88,7 @@ const ReleaseRadar = () => {
         )}
 
         {all.map((a) => (
-          <section key={a.id} className="panel overflow-hidden">
+          <section key={a.id} className="panel overflow-hidden break-inside-avoid">
             <div className="p-5 border-b border-brand-100">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider ${SEV[a.severity]}`}>{a.severity}</span>

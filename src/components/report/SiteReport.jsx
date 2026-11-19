@@ -125,6 +125,45 @@ const ResponseBars = ({ daily }) => {
   );
 };
 
+// Release Radar for this site: security releases in the period with their status and time to patch, and what is
+// still vulnerable now (runtime and packages). Shown only when there is something to say.
+const STATE_LABEL = { affected: 'Action needed', patched: 'Patched', not_exposed: 'Not exposed' };
+const STATE_STYLE = { affected: 'bg-rose-50 text-rose-700', patched: 'bg-emerald-50 text-emerald-700', not_exposed: 'bg-brand-50 text-brand-700' };
+const PatchingSection = ({ patching }) => {
+  if (!patching || (!patching.advisories.length && !patching.runtime.length && !patching.packages.length)) return null;
+  return (
+    <Section title="Security releases and patching" aside={patching.medianHoursToPatch != null ? `Median time to patch: ${patching.medianHoursToPatch} h` : null}>
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="Patched in period" value={patching.patchedCount} />
+        <Stat label="Still open" value={patching.openCount + patching.runtime.length} />
+        <Stat label="Vulnerable packages" value={patching.packages.length} sub={patching.packagesCheckedAt ? `checked ${fmtDate(patching.packagesCheckedAt)}` : null} />
+      </div>
+      {patching.advisories.length > 0 && (
+        <ul className="mt-4 divide-y divide-brand-100 rounded-xl border border-brand-100">
+          {patching.advisories.map((a, i) => (
+            <li key={`${a.title}-${i}`} className="px-4 py-2.5 text-sm flex flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0">
+                <span className="font-semibold text-ink">{a.title}</span>
+                <span className="block text-[12px] text-ink-muted">{a.component} {a.version}{a.state === 'affected' && a.target ? ` → ${a.target}` : ''}{a.cves.length ? ` · ${a.cves.join(', ')}` : ''} · flagged {fmtDate(a.flaggedAt)}</span>
+              </span>
+              <span className="flex items-center gap-2 text-[12px]">
+                {a.hoursToPatch != null && <span className="text-ink-muted">patched in {a.hoursToPatch} h</span>}
+                <span className={`px-2 py-0.5 rounded-md font-bold ${STATE_STYLE[a.state] || ''}`}>{STATE_LABEL[a.state] || a.state}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(patching.runtime.length > 0 || patching.packages.length > 0) && (
+        <ul className="mt-4 space-y-1.5 text-sm">
+          {patching.runtime.map((r) => <li key={r.key} className="text-ink"><span className="font-semibold">{r.component} {r.version}:</span> {r.title}. {r.fix}</li>)}
+          {patching.packages.map((p) => <li key={`${p.name}@${p.version}`} className="text-ink"><span className="font-semibold">{p.name} {p.version}</span> ({p.severity}{p.cve ? `, ${p.cve}` : ''}){p.fixed ? ` → update to ${p.fixed}` : ''}</li>)}
+        </ul>
+      )}
+    </Section>
+  );
+};
+
 const SecuritySection = ({ security, shared }) => {
   // A client never sees a prompt to connect the owner's account.
   if (!security.connected && shared) return null;
@@ -363,6 +402,8 @@ export const FullReport = ({ report }) => {
       </Section>
 
       <SecuritySection security={sec} shared={report.shared} />
+
+      <PatchingSection patching={report.patching} />
 
       <Section page title="Site health" aside={sh?.checkedAt ? `Reported by the site, ${fmtDateTime(sh.checkedAt)}` : null}>
         {sh ? (

@@ -345,3 +345,59 @@ export async function detectReleases(env, cachedReference, at = new Date()) {
   }
   return out;
 }
+
+// ---------- feeds: security posts become drafts for review ----------
+// php.net news and the Node.js vulnerability blog announce security releases (often days ahead). A new security
+// post becomes a DRAFT advisory and an admin alert: a person checks it and announces it with one click, so a
+// misread feed item can never alarm customers. (Node.js releases themselves are detected automatically above.)
+
+const PHP_FEED = 'https://www.php.net/feed.atom';
+const NODE_FEED = 'https://nodejs.org/en/feed/vulnerability.xml';
+const SECURITY_WORDS = /\b(security|vulnerab|advisory|CVE-\d{4}-\d+)/i;
+const FEED_WINDOW_DAYS = 14;
+
+const unescape = (s) => String(s || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+const tag = (xml, name) => unescape((xml.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, 'i')) || [])[1] || '').trim();
+const plain = (html) => unescape(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Security items from php.net's Atom feed and the Node.js vulnerability RSS. Pure. */
+export function parseSecurityFeed(xml, source) {
+  const items = [];
+  const blocks = String(xml || '').match(source === 'php' ? /<entry[\s>][\s\S]*?<\/entry>/gi : /<item[\s>][\s\S]*?<\/item>/gi) || [];
+  for (const b of blocks) {
+    const link = source === 'php' ? tag(b, 'id') : tag(b, 'link');
+    const body = plain(tag(b, source === 'php' ? 'content' : 'description')).slice(0, 1500);
+    const title = plain(tag(b, 'title')) || body.slice(0, 120) || (link.split('/').pop() || '').replace(/-/g, ' ');
+    const date = source === 'php' ? tag(b, 'published') || tag(b, 'updated') : tag(b, 'pubDate');
+    const at = Date.parse(date);
+    if (!link || Number.isNaN(at) || !/^https:\/\//.test(link)) continue;
+    // php.net mixes releases and RCs in; only security posts count. Every Node.js vulnerability post is one.
+    if (source === 'php' && (!SECURITY_WORDS.test(`${title} ${body}`) || /\b(RC\s?\d*|alpha\s?\d*|beta\s?\d*)\b/i.test(title))) continue;
+    items.push({ source, link, title: title.slice(0, 200), body, publishedAt: new Date(at).toISOString(), cves: [...new Set((`${title} ${body}`.match(/CVE-\d{4}-\d{3,9}/g) || []))].slice(0, 10) });
+  }
+  return items;
+}
+
+/** Hourly: drafts for new security posts from the last two weeks, and one admin alert per new draft. */
+export async function draftFromFeeds(env, cachedReference, notifyAdmins, at = new Date()) {
+  const since = at.getTime() - FEED_WINDOW_DAYS * 86400e3;
+  let drafted = 0;
+  for (const [source, url, component] of [['php', PHP_FEED, 'php'], ['node', NODE_FEED, 'node']]) {
+    const xml = await cachedReference(env, `feed:${source}`, url, (t) => t, 3600e3);
+    for (const item of parseSecurityFeed(xml, source).filter((i) => Date.parse(i.publishedAt) >= since)) {
+      const ref = `feed:${item.link}`.slice(0, 300);
+      const exists = await env.DB.prepare('SELECT 1 FROM advisories WHERE source_ref = ?').bind(ref).first();
+      if (exists) continue;
+      const a = await saveAdvisory(env, {
+        component, status: 'draft', severity: item.cves.length ? 'high' : 'moderate', source: `feed:${source === 'php' ? 'php.net' : 'nodejs.org'}`, sourceRef: ref,
+        title: item.title || `${LABEL[component]} security post`, summary: item.body.slice(0, 2000), url: item.link, cves: item.cves,
+      }, null, at);
+      await notifyAdmins(env.DB, {
+        type: 'radar_draft', title: `Release Radar draft: ${a.title}`,
+        body: `${LABEL[component]} posted a security item on ${item.publishedAt.slice(0, 10)}. Review it in Release Radar: set the affected branches, release time and mitigation, then announce.`,
+      }).catch(() => {});
+      drafted += 1;
+    }
+  }
+  return { drafted };
+}
