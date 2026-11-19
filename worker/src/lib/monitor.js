@@ -70,6 +70,14 @@ async function diagnoseFailure(site, response) {
   return page ? diagnoseResponse(page) : null;
 }
 
+// Runtime versions from a health response (for the vulnerability checks): plain version strings only.
+const VERSION_TEXT = /^v?\d+(\.\d+){0,3}([-.+][\w.]+)?$/;
+export function runtimeFrom(data) {
+  const pick = (v) => (typeof v === 'string' && VERSION_TEXT.test(v.trim()) ? v.trim().replace(/^v/, '').slice(0, 40) : null);
+  const out = { php: pick(data?.php_version), node: pick(data?.node_version), wordpress: pick(data?.wordpress_version), nextjs: pick(data?.nextjs_version) };
+  return Object.values(out).some(Boolean) ? out : null;
+}
+
 // Components reported by an integration (shared format, see diagnose/health docs): cleaned and capped.
 const COMPONENT_STATUSES = ['ok', 'warning', 'error', 'unknown'];
 export function normalizeComponents(list) {
@@ -203,6 +211,7 @@ async function checkWordPress(site, withDetails) {
     statusCode: health.status,
     serverProcessingTime: health.data.response_time ?? null,
     components: normalizeComponents(health.data.components),
+    runtime: runtimeFrom(health.data),
   };
   if (withDetails) {
     const parts = await Promise.all(['analytics', 'performance', 'seo', 'security'].map((ep) => (
@@ -262,6 +271,7 @@ async function checkApiIntegration(site, frameworkName, withDetails = false) {
     statusCode: health.status,
     serverProcessingTime: health.data.response_time ?? null,
     components: normalizeComponents(health.data.components),
+    runtime: runtimeFrom(health.data),
   };
   if (withDetails) {
     const parts = await Promise.all(['analytics', 'performance', 'seo', 'security'].map((ep) => (
@@ -356,6 +366,12 @@ export function recordCheckStatements(db, site, result, at = new Date()) {
   ];
 
   // Component health: written only when it changes.
+  // Runtime versions: written only when they change (an upgrade), like components.
+  if (result.runtime) {
+    const json = JSON.stringify(result.runtime);
+    if (json !== (site.runtime || null)) statements.push(db.prepare('UPDATE websites SET runtime = ? WHERE id = ?').bind(json, site.id));
+  }
+
   if (result.components) {
     const json = JSON.stringify(result.components);
     if (json !== (site.components || null)) {

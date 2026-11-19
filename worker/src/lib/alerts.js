@@ -9,7 +9,7 @@ export const ALERT_TYPES = [
   { key: 'components', label: 'Site components', description: 'When the database, queue worker, scheduler, cron, disk or another part of a site fails, and when it recovers.' },
   { key: 'plugins', label: 'Plugin updates', description: 'When plugins or packages have updates waiting.' },
   { key: 'ssl', label: 'SSL problems', description: 'When HTTPS stops working on a site.' },
-  { key: 'security', label: 'Security score', description: 'When a site’s security score drops below 70.' },
+  { key: 'security', label: 'Security', description: 'When a site’s security score drops below 70, or a known vulnerability is found in its PHP, Node.js, WordPress or packages (Pro).' },
   { key: 'ruyashield', label: 'RuyaShield findings', description: 'When RuyaShield finds a new critical or high issue on a site, and when they are all fixed.' },
   { key: 'account', label: 'Account and plan', description: 'Pro plan approved or declined.' },
 ];
@@ -21,7 +21,7 @@ export const ADMIN_ALERT_TYPES = [
 // notification.type -> preference key
 const CATEGORY = {
   site_down: 'downtime', site_up: 'downtime', change_suspect: 'downtime', slow: 'slow', slow_ok: 'slow', plugins: 'plugins',
-  ssl_off: 'ssl', ssl_ok: 'ssl', security_low: 'security', pro_approved: 'account', pro_declined: 'account',
+  ssl_off: 'ssl', ssl_ok: 'ssl', security_low: 'security', vulnerability: 'security', pro_approved: 'account', pro_declined: 'account',
   pro_ended: 'account', trial_started: 'account', trial_ending: 'account', trial_ended: 'account',
   ruyashield_critical: 'ruyashield', ruyashield_high: 'ruyashield', ruyashield_ok: 'ruyashield',
   component_failed: 'components', component_ok: 'components',

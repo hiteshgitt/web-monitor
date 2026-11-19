@@ -32,7 +32,7 @@
   // The monitor: one run per minute (the daily cleanup happens inside the 00:05 UTC run).
   // The 15-minute run scans one Pro site with PageSpeed when its saved result is older than a week.
   "triggers": {
-    "crons": ["* * * * *", "*/15 * * * *"]
+    "crons": ["* * * * *", "*/15 * * * *", "7 * * * *"]
   },
 
   // Slows down password guessing on the sign-in endpoints (per visitor IP)

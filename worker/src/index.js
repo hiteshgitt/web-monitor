@@ -11,10 +11,11 @@ import { scanDueSecurity } from './lib/securityScan.js';
 import { scanDueVitals } from './lib/webVitals.js';
 import { refreshRuyaShieldAlerts } from './lib/ruyashield.js';
 import { sweepTrials, syncRuyaLabPlans } from './lib/plans.js';
+import { scanVulnerabilities } from './lib/vulnerabilities.js';
 import { ApiError } from './lib/util.js';
 import adminRoutes from './routes/admin.js';
 import adminAuthRoutes from './routes/adminAuth.js';
-import advancedRoutes from './routes/advanced.js';
+import advancedRoutes, { fetchIntegration } from './routes/advanced.js';
 import authRoutes from './routes/auth.js';
 import { adminNotifications, customerNotifications, pushPull } from './routes/notifications.js';
 import billingRoutes, { razorpayWebhook } from './routes/billing.js';
@@ -110,6 +111,14 @@ app.onError((error, c) => {
 export default {
   fetch: app.fetch,
   async scheduled(controller, env, ctx) {
+    // Hourly, with its own request budget: known vulnerabilities in packages and runtimes (Pro).
+    if (controller.cron === '7 * * * *') {
+      ctx.waitUntil(scanVulnerabilities(env, fetchIntegration, new Date(controller.scheduledTime)).then(
+        (summary) => console.log('Vulnerabilities', summary),
+        (error) => console.error('Vulnerabilities failed:', error),
+      ));
+      return;
+    }
     // PageSpeed is its own run so it does not use the health-check request budget.
     if (controller.cron === '*/15 * * * *') {
       ctx.waitUntil(sendDueReportEmails(env, new Date(controller.scheduledTime)).then(

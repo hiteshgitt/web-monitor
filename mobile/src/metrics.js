@@ -146,6 +146,7 @@ export const ALERT_KIND = {
   component_failed: 'Component failing',
   component_ok: 'Component recovered',
   change_suspect: 'Possible cause found',
+  vulnerability: 'Known vulnerability',
 };
 
 export const formatWhen = (iso) => (iso ? new Date(iso).toLocaleString() : '—');

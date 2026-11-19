@@ -12,6 +12,7 @@ import { queueSecurityScan, readSecurityScan } from '../lib/securityScan.js';
 import { requestScan, ruyashieldForSite } from '../lib/ruyashield.js';
 import { readVitals, refreshVitals } from '../lib/webVitals.js';
 import { withUpdates } from '../lib/packageVersions.js';
+import { withVulnerabilities } from '../lib/vulnerabilities.js';
 import { ApiError, daysAgo } from '../lib/util.js';
 
 const advanced = new Hono();
@@ -22,7 +23,7 @@ const PHP_PLATFORMS = ['laravel', 'codeigniter', 'php'];
 const REPORT_TEXT_LIMIT = 500;
 
 // GET <integration>/<endpoint> with the site's API key; returns parsed JSON or { error }
-async function fetchIntegration(site, endpoint) {
+export async function fetchIntegration(site, endpoint) {
   try {
     if (site.platform === 'wordpress') {
       const res = await fetchWordPressEndpoint(site, endpoint);
@@ -60,7 +61,7 @@ advanced.get('/comprehensive/:id', async (c) => {
   // so mobile/web show the last score immediately instead of waiting on a second request.
   const [live, plugins, logs, recommendations, analytics, searchConsole, vitals, securityScan] = await Promise.all([
     liveStatsFor(c.env.DB, [site.id]).then((m) => m.get(site.id)),
-    endpoint ? fetchIntegration(site, endpoint).then((d) => (site.platform === 'wordpress' ? d : withUpdates(c.env, site.platform, d))) : Promise.resolve(null),
+    endpoint ? fetchIntegration(site, endpoint).then(async (d) => (site.platform === 'wordpress' ? d : withVulnerabilities(c.env, await withUpdates(c.env, site.platform, d)))) : Promise.resolve(null),
     fetchIntegration(site, 'logs'),
     fetchIntegration(site, 'recommendations'),
     analyticsForSite(c.env, site),
@@ -82,6 +83,8 @@ advanced.get('/comprehensive/:id', async (c) => {
     recommendations: recommendations?.error ? { recommendations: [], count: 0 } : recommendations,
     vitals,
     securityScan,
+    // Saved by the hourly check: runtime (PHP / Node.js / WordPress) problems and the last package check.
+    knownVulnerabilities: (() => { try { return site.vulnerabilities ? JSON.parse(site.vulnerabilities) : null; } catch { return null; } })(),
     serverInfo: await serverInfo(c.env.DB, site, live),
     timestamp: new Date().toISOString(),
     website: { id: site.id, name: site.name, url: site.url, platform: site.platform },

@@ -156,6 +156,7 @@ const ALERT_KIND = {
   component_failed: 'Component failing',
   component_ok: 'Component recovered',
   change_suspect: 'Possible cause found',
+  vulnerability: 'Known vulnerability',
 };
 
 const AlertContext = ({ focus, incidents, incidentsLoaded, checks, checksLoaded, threshold, onDismiss }) => {

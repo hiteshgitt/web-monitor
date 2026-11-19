@@ -22,6 +22,7 @@ import GoogleAnalyticsPanel from './shell/GoogleAnalyticsPanel';
 import SearchConsolePanel from './shell/SearchConsolePanel';
 import WebVitalsPanel from './shell/WebVitalsPanel';
 import SecurityScanPanel from './shell/SecurityScanPanel';
+import VulnerabilitiesPanel from './security/VulnerabilitiesPanel';
 import RuyaShieldPanel from './ruyashield/RuyaShieldPanel';
 
 // Used and total gigabytes from a saved performance payload. Null until the site has reported disk bytes.
@@ -1384,6 +1385,11 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
         {/* Security Tab */}
         {activeTab === 'security' && (
           <div className="space-y-6">
+            <VulnerabilitiesPanel
+              known={advancedData?.knownVulnerabilities}
+              inventory={advancedData?.libraries || advancedData?.packages}
+              platform={selectedWebsite.platform}
+            />
             <SecurityScanPanel siteId={selectedWebsite._id} />
             <RuyaShieldPanel siteId={selectedWebsite._id} />
             <div className="bg-white rounded-2xl shadow-card border border-brand-100 overflow-hidden">
@@ -1937,7 +1943,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
 
           // Choose filter labels based on tab type
           const filterLabels = isDeps
-            ? ['All', 'Dependencies', 'Dev Dependencies', 'Updates Available']
+            ? ['All', 'Dependencies', 'Dev Dependencies', 'Updates Available', 'Vulnerable']
             : ['Installed', 'Active', 'Inactive', 'Updates Available'];
 
           const getFilteredList = (view) => {
@@ -1945,6 +1951,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
               if (view === 'Dependencies') return tabData.dependencies || allItems.filter((i) => !i.isDev);
               if (view === 'Dev Dependencies') return tabData.devDependencies || allItems.filter((i) => i.isDev);
               if (view === 'Updates Available') return outdatedItems;
+              if (view === 'Vulnerable') return allItems.filter((i) => i.vulnerabilities);
               return allItems;
             } else {
               if (view === 'Active') return tabData.active_plugins || [];
@@ -1975,7 +1982,9 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                       { label: 'Dependencies', value: tabData.dependencies_count ?? 0, color: 'text-emerald-600' },
                       { label: 'Dev dependencies', value: tabData.devDependencies_count ?? 0, color: 'text-brand-600' },
                       { label: 'Updates available', value: outdatedCount == null ? '—' : outdatedCount, color: outdatedCount ? 'text-amber-600' : 'text-emerald-600' },
-                      { label: 'Total', value: totalCount, color: 'text-brand-600' },
+                      tabData.vulnerability_check === 'ok'
+                        ? { label: 'Vulnerable', value: tabData.vulnerable_count ?? 0, color: tabData.vulnerable_count ? 'text-rose-600' : 'text-emerald-600' }
+                        : { label: 'Total', value: totalCount, color: 'text-brand-600' },
                     ] : [
                       { label: 'Active', value: activeCount, color: 'text-emerald-600' },
                       { label: 'Outdated', value: outdatedCount, color: 'text-amber-600' },
@@ -2065,6 +2074,13 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                                 <div className="px-3 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-widest bg-brand-50 text-brand-600">
                                   {item.type === 'dev' || item.isDev ? 'Dev' : 'Prod'}
                                 </div>
+                              )}
+                              {item.vulnerabilities && (
+                                <a href={item.vulnerabilities.url} target="_blank" rel="noreferrer"
+                                  title={`${item.vulnerabilities.summary || 'Known vulnerability'}${item.vulnerabilities.fixed ? ` (fixed in ${item.vulnerabilities.fixed})` : ''}`}
+                                  className="px-3 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-widest bg-rose-600 text-white hover:bg-rose-700">
+                                  Vulnerable · {item.vulnerabilities.severity}{item.vulnerabilities.fixed ? ` · fix ${item.vulnerabilities.fixed}` : ''}
+                                </a>
                               )}
                               {isOutdated && (
                                 <div className={`px-3 py-1 rounded-full text-[9px] font-extrabold uppercase tracking-widest border ${updateStyle}`}>
