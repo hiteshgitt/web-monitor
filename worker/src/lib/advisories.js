@@ -332,16 +332,29 @@ export function phpReleaseFor(advisory, phpCycles, today = new Date()) {
  * advisory (released, fixed version per major line). Pure: returns [{ sourceRef, date, fixed }] for days not yet known.
  */
 export function nodeSecurityDays(releases, knownRefs, since) {
-  const days = new Map();
-  for (const r of releases || []) {
-    if (!r.security || /-/.test(r.version) || !r.date || r.date < since) continue;
-    const ref = `node-security-${r.date}`;
-    if (knownRefs.has(ref)) continue;
-    const major = branchOf('node', r.version);
-    const d = days.get(ref) || days.set(ref, { sourceRef: ref, date: r.date, fixed: {} }).get(ref);
-    if (!d.fixed[major] || compareVersions(r.version.replace(/^v/, ''), d.fixed[major]) > 0) d.fixed[major] = r.version.replace(/^v/, '');
+  // Node.js ships one batch of security releases across its lines, sometimes over two days (time zones, one line
+  // a day late). Release days within two days of each other are one batch, named after its first day.
+  const sec = (releases || []).filter((r) => r.security && !/-/.test(r.version) && r.date && r.date >= since)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const batches = [];
+  for (const r of sec) {
+    const last = batches[batches.length - 1];
+    if (last && (Date.parse(r.date) - Date.parse(last.lastDate)) / 86400e3 <= 2) last.items.push(r), (last.lastDate = r.date);
+    else batches.push({ date: r.date, lastDate: r.date, items: [r] });
   }
-  return [...days.values()];
+  const out = [];
+  for (const b of batches) {
+    const refs = [...new Set(b.items.map((r) => `node-security-${r.date}`))];
+    if (refs.some((ref) => knownRefs.has(ref))) continue; // already known under one of its days
+    const fixed = {};
+    for (const r of b.items) {
+      const major = branchOf('node', r.version);
+      const v = r.version.replace(/^v/, '');
+      if (!fixed[major] || compareVersions(v, fixed[major]) > 0) fixed[major] = v;
+    }
+    out.push({ sourceRef: `node-security-${b.date}`, date: b.date, fixed });
+  }
+  return out;
 }
 
 /** Hourly: release announced PHP advisories when the fixes ship, and add new Node.js security releases. */

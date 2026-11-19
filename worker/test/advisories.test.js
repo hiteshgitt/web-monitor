@@ -83,3 +83,13 @@ test('feeds: php.net security posts (not RCs or plain releases), every Node.js v
   assert.equal(node.length, 1);
   assert.equal(node[0].title, 'Wednesday, November 11, 2026 Security Releases');
 });
+
+test('Node.js security releases over consecutive days are one advisory; a batch known under either day is skipped', () => {
+  const releases = [
+    { version: 'v24.22.1', date: '2026-11-10', security: true }, { version: 'v22.23.5', date: '2026-11-11', security: true },
+    { version: 'v20.19.9', date: '2026-10-20', security: true },
+  ];
+  const all = nodeSecurityDays(releases, new Set(), '2026-10-01');
+  assert.deepEqual(all.map((b) => [b.sourceRef, b.fixed]), [['node-security-2026-10-20', { 20: '20.19.9' }], ['node-security-2026-11-10', { 24: '24.22.1', 22: '22.23.5' }]]);
+  assert.equal(nodeSecurityDays(releases, new Set(['node-security-2026-11-11']), '2026-10-01').length, 1);
+});
