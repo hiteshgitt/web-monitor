@@ -40,6 +40,7 @@ PACKAGES = {
         'files': {
             'api/webmonitor.php': PACKAGES_DIR / 'php' / 'webmonitor.php',
             'api/WebMonitorCore.php': PACKAGES_DIR / 'php-core' / 'WebMonitorCore.php',
+            'api/webmonitor-track.php': PACKAGES_DIR / 'php' / 'webmonitor-track.php',
         },
         'extra': {
             'api/webmonitor-config.php': (
@@ -66,6 +67,9 @@ PACKAGES = {
             '         rewrite ^/api/webmonitor/(.*)$ /api/webmonitor.php?endpoint=$1 last;\n'
             '     }\n\n'
             + API_KEY_TIP +
+            '\nOptional - error tracking (errors with file, line and stack trace, and alerts):\n'
+            '   add  require_once __DIR__ . \'/api/webmonitor-track.php\';  as the first line of index.php,\n'
+            '   or set  auto_prepend_file = /full/path/to/api/webmonitor-track.php  in php.ini / .user.ini.\n'
             '\nIn the dashboard: Add site -> platform Core PHP.\n'
         ),
     },

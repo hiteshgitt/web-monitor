@@ -13,7 +13,7 @@ import {
   BarChart3, Gauge, Lock, Users, Mail, Share2, Download, Upload, Filter, Calendar,
   Target, Award, Star, Heart, ThumbsUp, ThumbsDown, Info, HelpCircle, Lightbulb,
   AlertCircle, CheckSquare, Clock, DollarSign, ShoppingCart, CreditCard, PieChart as PieChartIcon,
-  ChevronDown, ChevronUp, FileCode, Image, Server, HardDrive, Wifi, GripVertical, LogOut, ArrowRight
+  ChevronDown, ChevronUp, FileCode, Image, Server, HardDrive, Wifi, GripVertical, LogOut, ArrowRight, Bug
 } from 'lucide-react';
 import { getApiUrl, API_BASE_URL } from '../config/api';
 import { apiFetch } from '../services/session';
@@ -23,6 +23,7 @@ import SearchConsolePanel from './shell/SearchConsolePanel';
 import WebVitalsPanel from './shell/WebVitalsPanel';
 import SecurityScanPanel from './shell/SecurityScanPanel';
 import VulnerabilitiesPanel from './security/VulnerabilitiesPanel';
+import ErrorsPanel from './errors/ErrorsPanel';
 import RuyaShieldPanel from './ruyashield/RuyaShieldPanel';
 
 // Used and total gigabytes from a saved performance payload. Null until the site has reported disk bytes.
@@ -294,7 +295,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
   
   const advancedTabs = [
     'overview', 'analytics', 'performance', 'seo', 'security', 
-    'reports', 'alerts', 'logs', getPluginsTabName()
+    'reports', 'alerts', 'errors', 'logs', getPluginsTabName()
   ];
   const [incidents, setIncidents] = useState([]);
   const [incidentsLoading, setIncidentsLoading] = useState(false);
@@ -782,6 +783,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                     {tab === 'reports' && <Download size={14} />}
                     {tab === 'alerts' && <Bell size={14} />}
                     {tab === 'logs' && <FileCode size={14} />}
+                    {tab === 'errors' && <Bug size={14} />}
                     {(tab === 'plugins' || tab === 'libraries' || tab === 'packages') && <Settings size={14} />}
                     <span>{tab === 'libraries' ? 'Libraries' : tab === 'packages' ? 'Packages' : tab}</span>
                   </button>
@@ -1841,6 +1843,8 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
         )}
 
         {/* Logs Tab - Cyberpunk Terminal Style */}
+        {activeTab === 'errors' && <ErrorsPanel siteId={selectedWebsite._id} platform={selectedWebsite.platform} />}
+
         {activeTab === 'logs' && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl shadow-card border border-brand-100 overflow-hidden">

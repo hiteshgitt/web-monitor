@@ -2,11 +2,11 @@
 // package is behind. Keep in step with wordpress-plugin/ (Version header), packages/php-core (VERSION) and
 // packages/nextjs (package.json) when releasing.
 export const LATEST_INTEGRATION = {
-  wordpress: { version: '1.3.0', whatsNew: 'Reports the PHP version and PHP security settings, so Release Radar can say whether a PHP security release affects the site and whether it is exposed.' },
-  nextjs: { version: '1.2.1', whatsNew: 'Reports Node.js security flags and the real runtime (Cloudflare Workers and edge runtimes are no longer mistaken for Node.js), for Release Radar.' },
-  laravel: { version: '1.2.0', whatsNew: 'Reports PHP security settings for Release Radar.' },
-  codeigniter: { version: '1.2.0', whatsNew: 'Reports PHP security settings for Release Radar.' },
-  php: { version: '1.2.0', whatsNew: 'Reports PHP security settings for Release Radar.' },
+  wordpress: { version: '1.4.0', whatsNew: 'Error tracking: fatal errors with file, line and stack trace, alerts for new errors and error spikes. Also reports PHP version and settings for Release Radar.' },
+  nextjs: { version: '1.3.0', whatsNew: 'Error tracking: server errors grouped with file, line and stack trace (needs instrumentation.ts), alerts for new errors and spikes. Real runtime and Node.js flags for Release Radar.' },
+  laravel: { version: '1.3.0', whatsNew: 'Error tracking: every exception Laravel reports, grouped with file, line and stack trace, plus alerts. PHP settings for Release Radar.' },
+  codeigniter: { version: '1.3.0', whatsNew: 'Error tracking: fatal errors and uncaught exceptions with file, line and stack trace, plus alerts. PHP settings for Release Radar.' },
+  php: { version: '1.3.0', whatsNew: 'Error tracking (add webmonitor-track.php to index.php): fatal errors with file, line and stack, plus alerts. PHP settings for Release Radar.' },
 };
 
 export const UPDATE_HOW = {

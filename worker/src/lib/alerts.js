@@ -22,7 +22,7 @@ export const ADMIN_ALERT_TYPES = [
 // notification.type -> preference key
 const CATEGORY = {
   site_down: 'downtime', site_up: 'downtime', change_suspect: 'downtime', slow: 'slow', slow_ok: 'slow', plugins: 'plugins',
-  ssl_off: 'ssl', ssl_ok: 'ssl', security_low: 'security', vulnerability: 'security', advisory: 'security', advisory_patched: 'security', advisory_ok: 'security', vulnerability_ok: 'security', pro_approved: 'account', pro_declined: 'account',
+  ssl_off: 'ssl', ssl_ok: 'ssl', security_low: 'security', vulnerability: 'security', advisory: 'security', advisory_patched: 'security', advisory_ok: 'security', vulnerability_ok: 'security', error_spike: 'downtime', error_spike_ok: 'downtime', error_new: 'components', error_back: 'components', pro_approved: 'account', pro_declined: 'account',
   pro_ended: 'account', trial_started: 'account', trial_ending: 'account', trial_ended: 'account',
   ruyashield_critical: 'ruyashield', ruyashield_high: 'ruyashield', ruyashield_ok: 'ruyashield',
   component_failed: 'components', component_ok: 'components',
@@ -84,6 +84,20 @@ export function alertStatements(db, site, result, at = new Date()) {
     } else if (state.slow && result.responseTime < threshold * SLOW_RECOVERY_FACTOR) {
       state.slow = false;
       add('slow_ok', `${name} is fast again`, `Responded in ${Math.round(result.responseTime)} ms.`);
+    }
+  }
+
+  // Error spike (every plan): many more errors in the last 5 minutes than the hour before, while the site still
+  // answers, so visitors are likely seeing error pages. Alerts once, and again when it settles.
+  const es = result.errorsSummary;
+  if (es && es.tracked) {
+    const baseline = Math.max(0, es.lastHour - es.last5m) / 11; // errors per 5 minutes in the previous 55 minutes
+    if (!state.errorSpike && es.last5m >= 10 && es.last5m >= 3 * Math.max(baseline, 1)) {
+      state.errorSpike = true;
+      add('error_spike', `Error spike on ${name}`, `${es.last5m} errors in the last 5 minutes (about ${Math.round(baseline)} per 5 minutes before). The site is answering, so visitors are probably seeing errors. Open Advanced → Errors to see which.`);
+    } else if (state.errorSpike && es.last5m <= Math.max(2, baseline * 1.5)) {
+      state.errorSpike = false;
+      add('error_spike_ok', `Errors back to normal on ${name}`, `${es.last5m} errors in the last 5 minutes.`);
     }
   }
 

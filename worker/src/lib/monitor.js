@@ -1,7 +1,9 @@
 // Health checks of monitored sites (ported from the Express monitoringService) and how results are recorded.
+import { errorsSummaryFrom, hasNewErrors, syncErrorGroups } from './errorTracking.js';
+import { fetchIntegration } from '../routes/advanced.js';
 import { alertStatements } from './alerts.js';
 import { deliverPendingPush } from './push.js';
-import { DOWN_STATUSES, UP_STATUSES, VALID_STATUSES, dayKey, hourKey, newId } from './util.js';
+import { DOWN_STATUSES, UP_STATUSES, VALID_STATUSES, dayKey, hourKey, newId, parseJson } from './util.js';
 import { diagnoseNetworkError, diagnoseResponse, errorFor } from './diagnose.js';
 
 const TIMEOUT_MS = 10000;
@@ -232,6 +234,7 @@ async function checkWordPress(site, withDetails) {
     components: normalizeComponents(health.data.components),
     runtime: runtimeFrom(health.data),
     securityConfig: securityConfigFrom(health.data),
+    errorsSummary: errorsSummaryFrom(health.data),
   };
   if (withDetails) {
     const parts = await Promise.all(['analytics', 'performance', 'seo', 'security'].map((ep) => (
@@ -293,6 +296,7 @@ async function checkApiIntegration(site, frameworkName, withDetails = false) {
     components: normalizeComponents(health.data.components),
     runtime: runtimeFrom(health.data),
     securityConfig: securityConfigFrom(health.data),
+    errorsSummary: errorsSummaryFrom(health.data),
   };
   if (withDetails) {
     const parts = await Promise.all(['analytics', 'performance', 'seo', 'security'].map((ep) => (
@@ -387,6 +391,16 @@ export function recordCheckStatements(db, site, result, at = new Date()) {
   ];
 
   // Component health: written only when it changes.
+  // Error summary: stored when the set of errors changes (not on every count change, to keep writes low); a newer
+  // error flags the site so the next run fetches its error groups (Pro).
+  if (result.errorsSummary) {
+    const stored = parseJson(site.errors_summary);
+    const next = { tracked: result.errorsSummary.tracked, groups: result.errorsSummary.groups, latest: result.errorsSummary.latest };
+    if (JSON.stringify(next) !== JSON.stringify(stored ? { tracked: stored.tracked, groups: stored.groups, latest: stored.latest } : null)) {
+      statements.push(db.prepare(`UPDATE websites SET errors_summary = ?${hasNewErrors(stored, result.errorsSummary) ? ', errors_pending = 1' : ''} WHERE id = ?`)
+        .bind(JSON.stringify(next), site.id));
+    }
+  }
   if (result.securityConfig) {
     const json = JSON.stringify(result.securityConfig);
     if (json !== (site.security_config || null)) statements.push(db.prepare('UPDATE websites SET security_config = ? WHERE id = ?').bind(json, site.id));
@@ -461,7 +475,7 @@ const PUSH_REQUESTS = 6;
 export async function runMonitoringCycle(env, scheduledTime = Date.now()) {
   const at = new Date(scheduledTime);
   // Suspended customers' sites are not checked
-  const { results: sites } = await env.DB.prepare(`SELECT w.* FROM websites w JOIN users u ON u.id = w.owner_id
+  const { results: sites } = await env.DB.prepare(`SELECT w.*, (u.plan = 'pro' OR u.role = 'admin') AS owner_pro FROM websites w JOIN users u ON u.id = w.owner_id
     WHERE w.monitoring_enabled = 1 AND u.status = 'active'`).all();
   if (sites.length === 0) return { checked: 0, ...(await deliverPendingPush(env, PUSH_REQUESTS, at).catch(() => ({}))) };
 
@@ -486,6 +500,18 @@ export async function runMonitoringCycle(env, scheduledTime = Date.now()) {
   const results = await Promise.all(due.map((site) => performHealthCheck(site, { withDetails: detailIds.has(site.id) })));
   const statements = due.flatMap((site, i) => recordCheckStatements(env.DB, site, results[i], at));
   await env.DB.batch(statements);
+
+  // Error groups for Pro sites whose health summary showed a newer error, with what is left of the request budget.
+  const pending = sites.filter((s) => s.errors_pending && s.owner_pro).slice(0, Math.max(0, Math.min(3, budget)));
+  for (const site of pending) {
+    try {
+      const payload = await fetchIntegration(site, 'errors');
+      if (payload && !payload.error) await syncErrorGroups(env, site, payload, at);
+      else await env.DB.prepare('UPDATE websites SET errors_pending = 0 WHERE id = ?').bind(site.id).run();
+    } catch (error) {
+      console.error('error sync failed', site.id, error.message);
+    }
+  }
 
   // Once a day: drop history past the retention period
   if (at.getUTCHours() === 0 && at.getUTCMinutes() === 5) {

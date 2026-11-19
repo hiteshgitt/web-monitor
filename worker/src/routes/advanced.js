@@ -14,6 +14,7 @@ import { readVitals, refreshVitals } from '../lib/webVitals.js';
 import { withUpdates } from '../lib/packageVersions.js';
 import { withVulnerabilities } from '../lib/vulnerabilities.js';
 import { advisoriesForSite } from '../lib/advisories.js';
+import { listErrorGroups, syncErrorGroups } from '../lib/errorTracking.js';
 import { ApiError, daysAgo } from '../lib/util.js';
 
 const advanced = new Hono();
@@ -91,6 +92,26 @@ advanced.get('/comprehensive/:id', async (c) => {
     timestamp: new Date().toISOString(),
     website: { id: site.id, name: site.name, url: site.url, platform: site.platform },
   });
+});
+
+// Error tracking: grouped errors with file, line and stack. Opening the tab reads the site's integration first so
+// the list is current; if the site cannot answer, the stored groups are shown with a note.
+advanced.get('/errors/:id', async (c) => {
+  const site = c.get('website');
+  const payload = await fetchIntegration(site, 'errors');
+  let note = null;
+  if (payload?.error) note = /404|Unknown endpoint|not found/i.test(String(payload.error) + (payload.status || ''))
+    ? 'This site\'s integration does not report errors yet: update it to the latest version.' : `Could not read the site just now (${payload.error}); showing the last saved errors.`;
+  else if (payload) await syncErrorGroups(c.env, site, payload);
+  return c.json({ tracked: payload?.tracked ?? null, summary: payload?.summary || null, note, groups: await listErrorGroups(c.env, site.id) });
+});
+
+advanced.post('/errors-resolve/:id', async (c) => {
+  const { fp, reopen } = await c.req.json().catch(() => ({}));
+  if (!fp || typeof fp !== 'string') throw new ApiError(400, 'fp is required');
+  await c.env.DB.prepare(`UPDATE error_groups SET status = ?, resolved_at = ? WHERE website_id = ? AND fp = ?`)
+    .bind(reopen ? 'open' : 'resolved', reopen ? null : new Date().toISOString(), c.get('website').id, fp).run();
+  return c.json({ groups: await listErrorGroups(c.env, c.get('website').id) });
 });
 
 // Saved PageSpeed lab run and Chrome field data. A separate schedule refreshes each Pro site once a week.

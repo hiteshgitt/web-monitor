@@ -177,6 +177,10 @@ const ALERT_KIND = {
   advisory_patched: 'Patched',
   advisory_ok: 'Checked: all OK',
   vulnerability_ok: 'No known vulnerabilities',
+  error_new: 'New error',
+  error_back: 'Error came back',
+  error_spike: 'Error spike',
+  error_spike_ok: 'Errors back to normal',
 };
 
 const AlertContext = ({ focus, incidents, incidentsLoaded, checks, checksLoaded, threshold, onDismiss }) => {

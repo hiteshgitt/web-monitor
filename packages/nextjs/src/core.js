@@ -7,10 +7,10 @@ import v8 from 'node:v8';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { timingSafeEqual } from 'node:crypto';
-import { errorStore } from './instrumentation.js';
+import { errorGroups, errorStore, errorSummary } from './instrumentation.js';
 
-export const VERSION = '1.2.1';
-export const ENDPOINTS = ['health', 'analytics', 'performance', 'seo', 'security', 'libraries', 'logs', 'recommendations'];
+export const VERSION = '1.3.0';
+export const ENDPOINTS = ['health', 'analytics', 'performance', 'seo', 'security', 'libraries', 'logs', 'recommendations', 'errors'];
 
 const projectRoot = () => process.cwd();
 
@@ -181,6 +181,7 @@ function getHealth() {
     framework: 'Next.js',
     integration_version: VERSION,
     security_config: securityConfig(),
+    errors: errorSummary(),
     uptime_seconds: Math.round(os.uptime()),
     checks: {
       memory_usage: `${memory}%`,
@@ -420,6 +421,8 @@ const HANDLERS = {
   plugins: getLibraries,
   logs: getLogs,
   recommendations: getRecommendations,
+  // Grouped server errors with file, line and stack (from the onRequestError hook).
+  errors: () => ({ tracked: errorSummary().tracked, summary: errorSummary(), groups: errorGroups() }),
 };
 
 /**

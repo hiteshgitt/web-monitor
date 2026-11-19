@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Web Monitor API (Advanced)
  * Description: Advanced REST API endpoints for the Web Monitor Dashboard. Exposes real, dynamic WordPress health, analytics, performance, SEO and security data (no simulated/random values).
- * Version: 1.3.0
+ * Version: 1.4.0
  * Author: Web Monitor Team
  * Requires at least: 5.6
  * Tested up to: 7.0
@@ -22,6 +22,10 @@ add_action('admin_init', 'webmonitor_advanced_settings_init');
 
 // Register REST API routes
 add_action('rest_api_init', 'webmonitor_advanced_register_routes');
+
+// Error tracking: record fatal errors and uncaught exceptions (with file, line and stack) for Web Monitor.
+// Only a shutdown function is added, so WordPress's own error handling and "critical error" page are unchanged.
+register_shutdown_function('webmonitor_errors_on_shutdown');
 
 // Auto-generate API key on plugin activation
 register_activation_hook(__FILE__, 'webmonitor_advanced_activate');
@@ -497,6 +501,12 @@ function webmonitor_advanced_register_routes() {
         'permission_callback' => 'webmonitor_advanced_verify_api_key'
     ));
     
+    register_rest_route('webmonitor-advanced/v1', '/errors', array(
+        'methods' => 'GET',
+        'callback' => 'webmonitor_errors_endpoint',
+        'permission_callback' => 'webmonitor_advanced_verify_api_key'
+    ));
+
     register_rest_route('webmonitor-advanced/v1', '/recommendations', array(
         'methods' => 'GET',
         'callback' => 'webmonitor_advanced_recommendations',
@@ -681,7 +691,8 @@ function webmonitor_advanced_health_check($request) {
         'site_url' => home_url(),
         'wordpress_version' => get_bloginfo('version'),
         'php_version' => PHP_VERSION,
-        'plugin_version' => '1.3.0',
+        'plugin_version' => '1.4.0',
+        'errors' => webmonitor_errors_summary(),
         'components' => $components,
         'security_config' => web_monitor_security_config(),
         'checks' => array(
@@ -1268,6 +1279,108 @@ function web_monitor_security_config() {
         'display_errors' => $on(ini_get('display_errors')),
         'allow_url_include' => $on(ini_get('allow_url_include')),
     );
+}
+
+// ---------- Error tracking (1.4.0) ----------
+// Groups are stored in one option (not autoloaded), at most 100, newest kept. Messages are cleaned of emails,
+// tokens and passwords; paths are made relative to the WordPress root.
+
+function webmonitor_errors_clean($s) {
+    $s = preg_replace('/[\w.+-]+@[\w-]+\.[\w.-]+/', '[email]', (string) $s);
+    $s = preg_replace('/(pass(word)?|pwd|secret|token|api[_-]?key|authorization)(["\']?\s*[:=]\s*)[^\s,;&"\']+/i', '$1$3[redacted]', $s);
+    return preg_replace('/\b[A-Za-z0-9_\-]{32,}\b/', '[token]', $s);
+}
+
+function webmonitor_errors_rel($file) {
+    $root = defined('ABSPATH') ? rtrim(ABSPATH, '/\\') : '';
+    $file = (string) $file;
+    if ($root !== '' && strpos($file, $root) === 0) {
+        $file = ltrim(substr($file, strlen($root)), '/\\');
+    }
+    return substr($file, -200);
+}
+
+function webmonitor_errors_on_shutdown() {
+    $e = error_get_last();
+    $fatal = E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR | E_RECOVERABLE_ERROR;
+    if (!$e || !($e['type'] & $fatal)) {
+        return;
+    }
+    $parts = preg_split('/\nStack trace:\n/', (string) $e['message'], 2);
+    $frames = array();
+    if (isset($parts[1])) {
+        foreach (array_slice(explode("\n", $parts[1]), 0, 11) as $line) {
+            if (strpos(trim($line), 'thrown') === 0) continue;
+            $frames[] = webmonitor_errors_rel(preg_replace('/^#\d+\s+/', '', trim($line)));
+        }
+    }
+    $message = preg_replace('/ in [^\n]+:\d+$/', '', trim($parts[0]));
+    $type = preg_match('/^(?:PHP )?Uncaught ([\w\\\\]+)/', $message, $m) ? $m[1] : ($e['type'] === E_PARSE ? 'Parse error' : 'Fatal error');
+    $message = preg_replace('/^(?:PHP )?Uncaught [\w\\\\]+: /', '', $message);
+    webmonitor_errors_record($type, $message, (string) $e['file'], (int) $e['line'], $frames);
+}
+
+function webmonitor_errors_record($type, $message, $file, $line, $frames) {
+    try {
+        if (!function_exists('get_option')) {
+            return; // WordPress is not loaded far enough to store anything.
+        }
+        $data = get_option('webmonitor_error_groups', array());
+        $groups = isset($data['groups']) && is_array($data['groups']) ? $data['groups'] : array();
+        $minutes = isset($data['minutes']) && is_array($data['minutes']) ? $data['minutes'] : array();
+        $now = time();
+        $clean = webmonitor_errors_clean($message);
+        $rel = webmonitor_errors_rel($file);
+        $shape = preg_replace(array('/\d+/', "/'[^']*'|\"[^\"]*\"/"), array('N', 'S'), $clean);
+        $fp = substr(sha1($type . '|' . $rel . '|' . $line . '|' . $shape), 0, 16);
+        $uri = isset($_SERVER['REQUEST_URI']) ? strtok((string) $_SERVER['REQUEST_URI'], '?') : '';
+        $where = substr((string) $uri, 0, 120);
+        if (!isset($groups[$fp])) {
+            $groups[$fp] = array('fp' => $fp, 'type' => substr($type, 0, 80), 'message' => substr($clean, 0, 300), 'file' => $rel, 'line' => $line,
+                'where' => $where, 'stack' => array_map('webmonitor_errors_clean', array_slice($frames, 0, 10)), 'count' => 0, 'first_seen' => $now);
+        }
+        $groups[$fp]['count']++;
+        $groups[$fp]['last_seen'] = $now;
+        if ($where !== '') $groups[$fp]['where'] = $where;
+        if (count($groups) > 100) {
+            uasort($groups, function ($a, $b) { return $b['last_seen'] - $a['last_seen']; });
+            $groups = array_slice($groups, 0, 100, true);
+        }
+        $minute = (string) intdiv($now, 60);
+        $minutes[$minute] = (isset($minutes[$minute]) ? $minutes[$minute] : 0) + 1;
+        foreach (array_keys($minutes) as $k) {
+            if ((int) $k <= intdiv($now, 60) - 60) unset($minutes[$k]);
+        }
+        update_option('webmonitor_error_groups', array('groups' => $groups, 'minutes' => $minutes), false);
+    } catch (\Throwable $ignored) {
+        // Error tracking must never break the site.
+    }
+}
+
+function webmonitor_errors_summary() {
+    $data = get_option('webmonitor_error_groups', array());
+    $now = intdiv(time(), 60);
+    $last5 = 0;
+    $hour = 0;
+    foreach ((isset($data['minutes']) ? $data['minutes'] : array()) as $m => $n) {
+        if ((int) $m > $now - 60) $hour += $n;
+        if ((int) $m > $now - 5) $last5 += $n;
+    }
+    $latest = 0;
+    $groups = isset($data['groups']) ? $data['groups'] : array();
+    foreach ($groups as $g) $latest = max($latest, (int) $g['last_seen']);
+    return array('tracked' => true, 'groups' => count($groups), 'last_5m' => $last5, 'last_hour' => $hour, 'latest' => $latest ? gmdate('c', $latest) : null);
+}
+
+function webmonitor_errors_endpoint() {
+    $data = get_option('webmonitor_error_groups', array());
+    $groups = array_values(isset($data['groups']) ? $data['groups'] : array());
+    usort($groups, function ($a, $b) { return $b['last_seen'] - $a['last_seen']; });
+    foreach ($groups as &$g) {
+        $g['first_seen'] = gmdate('c', (int) $g['first_seen']);
+        $g['last_seen'] = gmdate('c', (int) $g['last_seen']);
+    }
+    return rest_ensure_response(array('tracked' => true, 'summary' => webmonitor_errors_summary(), 'groups' => $groups));
 }
 
 ?>
