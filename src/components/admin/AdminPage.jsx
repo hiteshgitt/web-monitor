@@ -11,12 +11,15 @@ import {
   STATUS_LABEL, TONE, displayUrl, formatMs, formatPercent, platformLabel, statusTone, timeAgo,
 } from '../../utils/siteMetrics';
 
-const isWaiting = (u) => Boolean(u.upgradeRequestedAt) && u.plan !== 'pro';
+// A trial counts as Free here: a request during the trial is still waiting for an answer.
+const isWaiting = (u) => Boolean(u.upgradeRequestedAt) && (u.plan !== 'pro' || u.planSource === 'trial');
+const SOURCE_LABEL = { trial: 'Trial', ruyalab: 'Ruya Lab Pro', manual: 'Set by an admin' };
 
 const FILTERS = [
   { id: 'all', label: 'All', match: () => true },
   { id: 'requests', label: 'Pro requests', match: isWaiting },
   { id: 'pro', label: 'Pro', match: (u) => u.plan === 'pro' },
+  { id: 'trial', label: 'On trial', match: (u) => u.planSource === 'trial' },
   { id: 'free', label: 'Free', match: (u) => u.plan !== 'pro' },
   { id: 'suspended', label: 'Suspended', match: (u) => u.status === 'suspended' },
 ];
@@ -36,6 +39,14 @@ const StatCard = ({ icon: Icon, label, value, sub, tone = 'bg-brand-50 text-bran
 
 const PlanChip = ({ user }) => {
   if (user.status === 'suspended') return <span className="chip !text-[12px] bg-bad-soft text-bad"><Ban size={12} /> Suspended</span>;
+  if (user.planSource === 'trial') {
+    return (
+      <span className="chip !text-[12px] bg-brand-50 text-brand-700" title={`Trial ends ${new Date(user.trialEndsAt).toLocaleString()}`}>
+        <Clock size={12} /> Trial · {user.trialDaysLeft === 1 ? '1 day' : `${user.trialDaysLeft} days`} left{user.upgradeRequestedAt ? ' · requested' : ''}
+      </span>
+    );
+  }
+  if (user.planSource === 'ruyalab') return <span className="chip !text-[12px] bg-brand-50 text-brand-700"><Sparkles size={12} /> Ruya Lab Pro</span>;
   if (user.plan === 'pro') return <span className="chip !text-[12px] bg-brand-50 text-brand-700"><Sparkles size={12} /> Pro</span>;
   if (isWaiting(user)) return <span className="chip !text-[12px] bg-warn-soft text-warn"><Clock size={12} /> Requested {timeAgo(user.upgradeRequestedAt)}</span>;
   return <span className="chip !text-[12px] bg-canvas text-ink-muted">Free</span>;
@@ -138,6 +149,18 @@ const CustomerPanel = ({ userId, onClose, onChanged }) => {
                       </button>
                     </div>
                   </div>
+                )}
+                {user.plan === 'pro' && (
+                  <p className="text-[12px] text-ink-muted mb-2">
+                    Pro source: <span className="font-bold text-ink">{SOURCE_LABEL[user.planSource] || 'Set by an admin'}</span>
+                    {user.planSource === 'trial' && ` · ends ${new Date(user.trialEndsAt).toLocaleDateString()} (${user.trialDaysLeft} d left), then back to Free.`}
+                    {user.planSource === 'ruyalab' && ' · follows their Ruya Lab account; it ends when Ruya Lab Pro is switched off there.'}
+                  </p>
+                )}
+                {!isWaiting(user) && (user.planSource === 'trial' || user.planSource === 'ruyalab') && (
+                  <button type="button" disabled={!!busy} onClick={() => act('plan', { plan: 'pro' })} className="btn-primary w-full !h-10 mb-2">
+                    {busy === 'plan' ? 'Saving…' : 'Keep Pro permanently'}
+                  </button>
                 )}
                 {!isWaiting(user) && (
                   <button type="button" disabled={!!busy} onClick={() => act('plan', { plan: user.plan === 'pro' ? 'free' : 'pro' })} className={user.plan === 'pro' ? 'w-full h-10 rounded-xl border border-brand-200 text-ink-soft font-bold text-[12px] uppercase tracking-wider hover:bg-canvas' : 'btn-primary w-full !h-10'}>
@@ -304,7 +327,7 @@ const AdminPage = ({ admin, onSignOut }) => {
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           <StatCard icon={Users} label="Customers" value={stats?.customers} sub={stats && `${stats.activeLast7Days} active this week`} />
           <StatCard icon={Clock} label="Pro requests" value={stats?.pendingPro} tone="bg-warn-soft text-warn" onClick={() => setFilter('requests')} />
-          <StatCard icon={Sparkles} label="Pro customers" value={stats?.pro} sub={stats && `${stats.free} free`} onClick={() => setFilter('pro')} />
+          <StatCard icon={Sparkles} label="Pro customers" value={stats?.pro} sub={stats && `${stats.trial || 0} on trial · ${stats.free} free`} onClick={() => setFilter('pro')} />
           <StatCard icon={UserPlus} label="New in 7 days" value={stats?.newLast7Days} />
           <StatCard icon={Globe} label="Sites monitored" value={stats?.sites} sub={stats && `${stats.openIncidents} open incidents`} />
           <StatCard icon={stats?.sitesDown ? AlertTriangle : Activity} label="Sites down now" value={stats?.sitesDown} tone={stats?.sitesDown ? 'bg-bad-soft text-bad' : 'bg-good-soft text-good'} />

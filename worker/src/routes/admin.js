@@ -22,7 +22,8 @@ admin.get('/stats', async (c) => {
   const [users, sites, incidents] = await db.batch([
     db.prepare(`SELECT COUNT(*) AS total,
         SUM(plan = 'pro' AND role != 'admin') AS pro,
-        SUM(upgrade_requested_at IS NOT NULL AND plan != 'pro' AND role != 'admin') AS pending,
+        SUM(plan_source = 'trial' AND role != 'admin') AS trial,
+        SUM(upgrade_requested_at IS NOT NULL AND (plan != 'pro' OR plan_source = 'trial') AND role != 'admin') AS pending,
         SUM(status = 'suspended') AS suspended,
         SUM(created_at >= ?1) AS new7d,
         SUM(last_login_at >= ?1) AS active7d
@@ -52,7 +53,7 @@ admin.get('/users', async (c) => {
       (SELECT COUNT(*) FROM websites w WHERE w.owner_id = u.id) AS sites,
       (SELECT COUNT(*) FROM websites w WHERE w.owner_id = u.id AND w.status IN ('error', 'offline')) AS sites_down
     FROM users u
-    ORDER BY (u.upgrade_requested_at IS NULL OR u.plan = 'pro'), u.upgrade_requested_at DESC, u.created_at DESC`).all();
+    ORDER BY (u.upgrade_requested_at IS NULL OR (u.plan = 'pro' AND COALESCE(u.plan_source, '') != 'trial')), u.upgrade_requested_at DESC, u.created_at DESC`).all();
   return c.json(results.map((row) => serializeUser(row, { sites: row.sites, sitesDown: row.sites_down })));
 });
 
@@ -92,7 +93,8 @@ admin.patch('/users/:id', async (c) => {
         upgrade_requested_at = CASE WHEN ?1 = 'pro' THEN NULL ELSE upgrade_requested_at END, updated_at = ?2
       WHERE id = ?3`).bind(body.plan, now, user.id));
     audit(body.plan === 'pro' ? (user.upgrade_requested_at ? 'pro_approved' : 'plan_pro') : 'plan_free');
-    if (body.plan === 'pro' && user.plan !== 'pro') {
+    // A trial or Ruya Lab account made permanent is told too: its Pro no longer ends on its own.
+    if (body.plan === 'pro' && (user.plan !== 'pro' || (user.plan_source && user.plan_source !== 'manual'))) {
       statements.push(notificationStatement(db, {
         userId: user.id, type: 'pro_approved', title: 'Pro is active',
         body: 'Your Pro plan is on. The Advanced view is unlocked for all your sites.',
