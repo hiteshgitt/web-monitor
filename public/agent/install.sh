@@ -96,6 +96,27 @@ WantedBy=multi-user.target
 EOF
 getent group adm >/dev/null 2>&1 || sed -i '/^SupplementaryGroups=adm$/d' /etc/systemd/system/webmonitor-agent.service
 
+# Log access. Debian / Ubuntu: the adm group can read web-server logs. RHEL / CentOS / Alma / Rocky often keep
+# /var/log/httpd root-only and have no adm group: give the agent read-only access with ACLs (including a default ACL,
+# so logs created by rotation stay readable). Only the log folders below are touched, and only to add read access.
+can_read() { runuser -u webmonitor-agent -- test -r "$1" 2>/dev/null || su -s /bin/sh webmonitor-agent -c "test -r '$1'" 2>/dev/null; }
+for dir in /var/log/nginx /var/log/apache2 /var/log/httpd; do
+  [ -d "$dir" ] || continue
+  unreadable=""
+  for f in "$dir"/*access*log* "$dir"/*error*log*; do
+    [ -f "$f" ] || continue
+    can_read "$f" || unreadable="$unreadable $f"
+  done
+  [ -n "$unreadable" ] || continue
+  if command -v setfacl >/dev/null 2>&1; then
+    setfacl -m u:webmonitor-agent:rx "$dir" && setfacl -d -m u:webmonitor-agent:r "$dir" && setfacl -m u:webmonitor-agent:r "$dir"/*log* 2>/dev/null || true
+    echo "Gave webmonitor-agent read-only access to $dir (ACL)."
+  else
+    echo "Note: webmonitor-agent cannot read$unreadable. Install the acl package and run:" >&2
+    echo "  setfacl -m u:webmonitor-agent:rx $dir; setfacl -d -m u:webmonitor-agent:r $dir; setfacl -m u:webmonitor-agent:r $dir/*log*" >&2
+  fi
+done
+
 systemctl daemon-reload
 systemctl enable --now webmonitor-agent
 sleep 3
