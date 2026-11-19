@@ -32,6 +32,19 @@ Turning it on in the products:
 - WebMonitor worker: `npx wrangler secret put RUYALAB_CLIENT_SECRET`, then build the web app with `VITE_RUYALAB_SIGNIN=1`.
 - RuyaShield: add `RUYALAB_ISSUER=https://accounts.ruyalab.com`, `RUYALAB_CLIENT_ID=ruyashield`, `RUYALAB_CLIENT_SECRET=…` to `/etc/ruyashield/env`.
 
+## Ruya Lab Pro (operators)
+
+One plan on the Ruya Lab account that unlocks Pro in every product. Until online payment exists, switch it by hand:
+
+```bash
+node scripts/plan.mjs someone@example.com pro     # or: free   (add --local for the dev database)
+```
+
+Products read it from the `ruyalab_plan` ID-token claim at sign-in and from `POST /api/entitlements`
+(client credentials, `{ subs: [...] }` → `{ plans: { sub: "pro" | "free" } }`): WebMonitor every 15 minutes,
+RuyaShield every 5 minutes (for organizations whose creator has a linked Ruya Lab account). Pro that an admin
+or operator set by hand in a product is never removed by this.
+
 ## Local testing
 
 `.dev.vars` holds a local key and test clients. `npx wrangler dev --port 8799 --local-upstream 127.0.0.1:8799`
