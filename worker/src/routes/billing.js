@@ -9,7 +9,7 @@ const billing = new Hono();
 
 billing.get('/status', (c) => c.json(billingStatus(c.env)));
 
-// Free accounts that never had a trial start their 14 days of Pro here.
+// Free accounts that never had a trial start their 7 days of Pro here.
 billing.post('/trial', async (c) => c.json({ user: serializeUser(await startTrial(c.env, c.get('user'))) }));
 
 billing.post('/order', async (c) => c.json(await createProOrder(c.env, c.get('user'))));

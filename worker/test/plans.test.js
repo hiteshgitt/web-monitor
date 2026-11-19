@@ -6,12 +6,12 @@ import { canStartTrial, newAccountPlan, ruyaLabPlanStatements, TRIAL_DAYS, trial
 const db = { prepare: (sql) => ({ bind: (...args) => ({ sql, args }) }) };
 const at = new Date('2026-11-19T12:00:00Z');
 
-test('a new account starts on a 14-day Pro trial', () => {
+test('a new account starts on a 7-day Pro trial', () => {
   const p = newAccountPlan(at);
   assert.equal(p.plan, 'pro');
   assert.equal(p.plan_source, 'trial');
   assert.equal(Date.parse(p.trial_ends_at) - at.getTime(), TRIAL_DAYS * 86400e3);
-  assert.equal(trialDaysLeft({ plan_source: 'trial', trial_ends_at: p.trial_ends_at }, at), 14);
+  assert.equal(trialDaysLeft({ plan_source: 'trial', trial_ends_at: p.trial_ends_at }, at), 7);
   assert.equal(trialDaysLeft({ plan_source: 'trial', trial_ends_at: '2026-11-19T13:00:00Z' }, at), 1);
   assert.equal(trialDaysLeft({ plan_source: 'manual', trial_ends_at: p.trial_ends_at }, at), null);
 });

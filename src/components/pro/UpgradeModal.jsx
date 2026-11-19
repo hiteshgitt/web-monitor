@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { TRIAL_DAYS } from '../../config/plans';
 import { X, Sparkles, Check, Clock, PartyPopper, CreditCard } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { API_BASE_URL } from '../../config/api';
@@ -155,9 +156,9 @@ const UpgradeModal = ({ isOpen, onClose, feature = null }) => {
               {!onTrial && user?.canStartTrial && (
                 <>
                   <button type="button" onClick={trial} disabled={busy} className="btn-primary w-full !h-12 mt-6">
-                    {busy ? 'Starting…' : <><Sparkles size={16} /> Start your free 14-day Pro trial</>}
+                    {busy ? 'Starting…' : <><Sparkles size={16} /> Start your free {TRIAL_DAYS}-day Pro trial</>}
                   </button>
-                  <p className="text-[12px] text-ink-muted text-center mt-2">No card needed. Your account goes back to Free after 14 days unless Pro is activated.</p>
+                  <p className="text-[12px] text-ink-muted text-center mt-2">No card needed. Your account goes back to Free after {TRIAL_DAYS} days unless Pro is activated.</p>
                 </>
               )}
               {billing?.enabled && (

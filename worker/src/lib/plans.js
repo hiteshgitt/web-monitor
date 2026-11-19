@@ -1,5 +1,5 @@
 // Where a customer's Pro comes from, and the parts of it that change on their own:
-// - trial:   every new account gets 14 days of Pro (no card). Reminders 3 days and 1 day before the end (in-app
+// - trial:   every new account gets 7 days of Pro (no card). Reminders 3 days and 1 day before the end (in-app
 //            and email), then the account goes back to Free. One trial per account: trial_ends_at is never cleared.
 // - ruyalab: Ruya Lab Pro on the linked Ruya Lab account (accounts.ruyalab.com) unlocks Pro here too. Read at
 //            sign-in (the ruyalab_plan claim) and every 15 minutes (POST /api/entitlements).
@@ -9,11 +9,11 @@ import { emailConfigured } from './reportEmail.js';
 import { ruyaLabConfigured } from './ruyalab.js';
 import { ApiError } from './util.js';
 
-export const TRIAL_DAYS = 14;
+export const TRIAL_DAYS = 7; // keep in step with src/config/plans.js
 const DAY = 86400e3;
 const REMINDERS = [3, 1]; // days left
 
-/** Plan columns for a brand-new account: Pro on a 14-day trial. */
+/** Plan columns for a brand-new account: Pro on a TRIAL_DAYS-day trial. */
 export function newAccountPlan(at = new Date()) {
   return { plan: 'pro', plan_source: 'trial', trial_ends_at: new Date(at.getTime() + TRIAL_DAYS * DAY).toISOString() };
 }

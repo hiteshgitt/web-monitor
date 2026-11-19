@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { TRIAL_DAYS } from '../../config/plans';
 import { LayoutGrid, Plus, Bell, Search, BarChart3, RefreshCw, Globe, Sparkles, Clock, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import SiteList from './SiteList';
@@ -339,8 +340,13 @@ const AppShell = ({
                     ? <><Sparkles size={12} /> Pro trial · {user.trialDaysLeft === 1 ? '1 day' : `${user.trialDaysLeft} days`} left</>
                     : user?.upgradeRequestedAt ? <><Clock size={12} /> Pro request pending</> : <><Sparkles size={12} /> Basic plan</>}
                 </span>
+                {user?.planSource === 'trial' && (
+                  <span className="relative mt-2 block h-1.5 rounded-full bg-white/20 overflow-hidden" aria-hidden="true">
+                    <span className="block h-full rounded-full bg-white" style={{ width: `${Math.min(100, Math.max(4, (user.trialDaysLeft / TRIAL_DAYS) * 100))}%` }} />
+                  </span>
+                )}
                 <span className="relative mt-1 flex items-center justify-between font-bold">
-                  {user?.upgradeRequestedAt ? 'We’ll activate Pro soon' : user?.planSource === 'trial' ? 'Keep Pro after your trial' : user?.canStartTrial ? 'Try Pro free for 14 days' : 'Unlock the Advanced view'}
+                  {user?.upgradeRequestedAt ? 'We’ll activate Pro soon' : user?.planSource === 'trial' ? 'Keep Pro after your trial' : user?.canStartTrial ? `Try Pro free for ${TRIAL_DAYS} days` : 'Unlock the Advanced view'}
                   <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
                 </span>
               </button>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { TRIAL_DAYS } from '../../config/plans';
 import { Lock, Sparkles, Brain, Puzzle, Server, Gauge, ShieldCheck, FileBarChart, Clock, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -13,10 +14,23 @@ const PRO_SECTIONS = [
 
 // Shown on the Advanced tab for Basic (free) accounts
 const LockedAdvanced = ({ siteName }) => {
-  const { user, requestUpgrade } = useAuth();
+  const { user, requestUpgrade, startTrial } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const requested = Boolean(user?.upgradeRequestedAt);
+
+  const run = (fn) => async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await fn();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const trial = run(startTrial);
 
   const request = async () => {
     setBusy(true);
@@ -44,7 +58,15 @@ const LockedAdvanced = ({ siteName }) => {
             <p className="mt-2 text-white/80">You’re on the Basic plan. Pro adds deep analytics, AI insights and audits for every site you monitor.</p>
           </div>
           <div className="shrink-0 w-full md:w-64">
-            {requested ? (
+            {user?.canStartTrial ? (
+              <>
+                <button type="button" onClick={trial} disabled={busy}
+                  className="w-full h-12 rounded-xl bg-white text-brand-700 font-bold text-[13px] uppercase tracking-[0.08em] flex items-center justify-center gap-2 shadow-card hover:-translate-y-0.5 transition-transform disabled:opacity-70">
+                  {busy ? 'Starting…' : <><Sparkles size={16} /> Start {TRIAL_DAYS}-day free trial</>}
+                </button>
+                <p className="text-[11px] text-white/70 text-center mt-2">No card needed. Everything in Pro for {TRIAL_DAYS} days.</p>
+              </>
+            ) : requested ? (
               <div className="rounded-2xl bg-white/15 backdrop-blur-sm px-4 py-3.5">
                 <div className="flex items-center gap-2 font-bold"><Clock size={16} /> Request received</div>
                 <div className="text-[12px] text-white/80 mt-1">Our team will switch you to Pro. Requested {new Date(user.upgradeRequestedAt).toLocaleDateString()}.</div>

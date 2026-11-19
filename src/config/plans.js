@@ -1,6 +1,9 @@
 // What each plan includes. Shared by the upgrade dialog and the marketing site,
 // so the promise and the product never drift apart. Only list features that exist.
 
+// Every new account starts with this many days of Pro (no card). Same value as TRIAL_DAYS in worker/src/lib/plans.js.
+export const TRIAL_DAYS = 7;
+
 export const PLANS = {
   basic: {
     name: 'Basic',
