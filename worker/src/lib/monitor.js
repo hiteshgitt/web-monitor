@@ -409,7 +409,12 @@ export function recordCheckStatements(db, site, result, at = new Date()) {
   // Runtime versions: written only when they change (an upgrade), like components.
   if (result.runtime) {
     const json = JSON.stringify(result.runtime);
-    if (json !== (site.runtime || null)) statements.push(db.prepare('UPDATE websites SET runtime = ? WHERE id = ?').bind(json, site.id));
+    if (json !== (site.runtime || null)) {
+      // A new integration version may add features (e.g. the file scan): start its scan again soon instead of
+      // waiting out the "not supported" retry interval.
+      const upgraded = (parseJson(site.runtime) || {}).integration !== result.runtime.integration;
+      statements.push(db.prepare(`UPDATE websites SET runtime = ?${upgraded ? ', filescan_at = NULL' : ''} WHERE id = ?`).bind(json, site.id));
+    }
   }
 
   if (result.components) {
