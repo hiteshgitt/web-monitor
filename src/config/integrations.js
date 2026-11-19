@@ -3,7 +3,7 @@
 // packages/nextjs (package.json) when releasing.
 export const LATEST_INTEGRATION = {
   wordpress: { version: '1.3.0', whatsNew: 'Reports the PHP version and PHP security settings, so Release Radar can say whether a PHP security release affects the site and whether it is exposed.' },
-  nextjs: { version: '1.2.0', whatsNew: 'Reports Node.js security flags and the real runtime (Cloudflare Workers and edge runtimes are no longer mistaken for Node.js), for Release Radar.' },
+  nextjs: { version: '1.2.1', whatsNew: 'Reports Node.js security flags and the real runtime (Cloudflare Workers and edge runtimes are no longer mistaken for Node.js), for Release Radar.' },
   laravel: { version: '1.2.0', whatsNew: 'Reports PHP security settings for Release Radar.' },
   codeigniter: { version: '1.2.0', whatsNew: 'Reports PHP security settings for Release Radar.' },
   php: { version: '1.2.0', whatsNew: 'Reports PHP security settings for Release Radar.' },

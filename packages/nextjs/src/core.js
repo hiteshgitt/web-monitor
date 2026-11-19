@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 import { timingSafeEqual } from 'node:crypto';
 import { errorStore } from './instrumentation.js';
 
-export const VERSION = '1.2.0';
+export const VERSION = '1.2.1';
 export const ENDPOINTS = ['health', 'analytics', 'performance', 'seo', 'security', 'libraries', 'logs', 'recommendations'];
 
 const projectRoot = () => process.cwd();

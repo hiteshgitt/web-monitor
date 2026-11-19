@@ -1,6 +1,6 @@
 {
   "name": "@ruyalab/webmonitor-nextjs",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Connect a Next.js site to Web Monitor (webmonitor.ruyalab.com): uptime, performance, SEO and security checks.",
   "keywords": [
     "nextjs",
