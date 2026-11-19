@@ -16,6 +16,7 @@ import { withVulnerabilities } from '../lib/vulnerabilities.js';
 import { advisoriesForSite } from '../lib/advisories.js';
 import { listErrorGroups, syncErrorGroups } from '../lib/errorTracking.js';
 import { fileScanView } from '../lib/fileScan.js';
+import { agentView, createAgentToken } from '../lib/agent.js';
 import { ApiError, daysAgo } from '../lib/util.js';
 
 const advanced = new Hono();
@@ -105,6 +106,21 @@ advanced.get('/errors/:id', async (c) => {
     ? 'This site\'s integration does not report errors yet: update it to the latest version.' : `Could not read the site just now (${payload.error}); showing the last saved errors.`;
   else if (payload) await syncErrorGroups(c.env, site, payload);
   return c.json({ tracked: payload?.tracked ?? null, summary: payload?.summary || null, note, groups: await listErrorGroups(c.env, site.id) });
+});
+
+// Server agent: status, latest snapshot and 24 h of minutes; create / rotate the token (shown once); remove.
+advanced.get('/agent/:id', async (c) => c.json(await agentView(c.env, c.get('website'))));
+advanced.post('/agent-token/:id', async (c) => {
+  const token = await createAgentToken(c.env, c.get('website').id);
+  const base = (c.env.APP_URL || new URL(c.req.url).origin).replace(/\/$/, '');
+  return c.json({ token, install: `curl -fsSL ${base}/agent/install.sh | sudo sh -s -- --token ${token}` });
+});
+advanced.post('/agent-remove/:id', async (c) => {
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM agents WHERE website_id = ?').bind(c.get('website').id),
+    c.env.DB.prepare('DELETE FROM agent_minutes WHERE website_id = ?').bind(c.get('website').id),
+  ]);
+  return c.json({ installed: false });
 });
 
 // Suspicious-file scan results (the scanner itself is advanced by the monitor).

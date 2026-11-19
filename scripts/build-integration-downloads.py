@@ -98,6 +98,16 @@ def main():
             archive.writestr(readme_path, spec['readme'])
         print(f'{name}: {(OUT / name).stat().st_size // 1024} KB')
 
+    # Server agent: served as plain files; the installer carries the agent's SHA-256 and refuses anything else.
+    import hashlib
+    agent_dir = ROOT / 'public' / 'agent'
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    agent = (ROOT / 'agent' / 'webmonitor-agent.py').read_bytes()
+    (agent_dir / 'webmonitor-agent.py').write_bytes(agent)
+    installer = (ROOT / 'agent' / 'install.sh').read_text().replace('__AGENT_SHA256__', hashlib.sha256(agent).hexdigest())
+    (agent_dir / 'install.sh').write_text(installer)
+    print(f'agent: {len(agent) // 1024} KB, sha256 {hashlib.sha256(agent).hexdigest()[:12]}...')
+
 
 if __name__ == '__main__':
     main()

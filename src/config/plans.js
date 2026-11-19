@@ -31,6 +31,8 @@ export const PLAN_COMPARISON = [
   { feature: 'Plugin & package audit (outdated, inactive)', basic: false, pro: true },
   { feature: 'Known vulnerabilities in packages, PHP, Node.js & WordPress, with alerts', basic: false, pro: true },
   { feature: 'Release Radar: security releases from announcement to patched', basic: false, pro: true },
+  { feature: 'Error tracking with stack traces, suspicious-file scan (file and line)', basic: false, pro: true },
+  { feature: 'Server agent: per-process CPU / memory, disks and inodes, floods and attack attempts per IP', basic: false, pro: true },
   { feature: 'Server infrastructure & downtime hours', basic: false, pro: true },
   { feature: 'PageSpeed & Core Web Vitals', basic: false, pro: true },
   { feature: 'Deep security: SSL grade, malware, vulnerabilities', basic: false, pro: true },

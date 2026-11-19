@@ -24,6 +24,7 @@ import WebVitalsPanel from './shell/WebVitalsPanel';
 import SecurityScanPanel from './shell/SecurityScanPanel';
 import VulnerabilitiesPanel from './security/VulnerabilitiesPanel';
 import ErrorsPanel from './errors/ErrorsPanel';
+import ServerPanel from './server/ServerPanel';
 import SuspiciousFilesPanel from './security/SuspiciousFilesPanel';
 import RuyaShieldPanel from './ruyashield/RuyaShieldPanel';
 
@@ -296,7 +297,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
   
   const advancedTabs = [
     'overview', 'analytics', 'performance', 'seo', 'security', 
-    'reports', 'alerts', 'errors', 'logs', getPluginsTabName()
+    'reports', 'alerts', 'errors', 'server', 'logs', getPluginsTabName()
   ];
   const [incidents, setIncidents] = useState([]);
   const [incidentsLoading, setIncidentsLoading] = useState(false);
@@ -785,6 +786,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
                     {tab === 'alerts' && <Bell size={14} />}
                     {tab === 'logs' && <FileCode size={14} />}
                     {tab === 'errors' && <Bug size={14} />}
+                    {tab === 'server' && <Server size={14} />}
                     {(tab === 'plugins' || tab === 'libraries' || tab === 'packages') && <Settings size={14} />}
                     <span>{tab === 'libraries' ? 'Libraries' : tab === 'packages' ? 'Packages' : tab}</span>
                   </button>
@@ -1851,6 +1853,8 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
 
         {/* Logs Tab - Cyberpunk Terminal Style */}
         {activeTab === 'errors' && <ErrorsPanel siteId={selectedWebsite._id} platform={selectedWebsite.platform} />}
+
+        {activeTab === 'server' && <ServerPanel siteId={selectedWebsite._id} />}
 
         {activeTab === 'logs' && (
           <div className="space-y-6">

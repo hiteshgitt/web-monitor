@@ -38,6 +38,8 @@ const FEATURES = [
   { icon: ShieldAlert, title: 'Known vulnerabilities', text: 'Pro: installed npm and Composer packages checked against OSV.dev, plus your PHP, Node.js and WordPress versions. Alerts the moment something new affects a site.', pro: true },
   { icon: Activity, title: 'Root-cause diagnosis', text: 'When a site goes down we say what broke (database, PHP memory, a fatal error) and what to do, not just “500”.' },
   { icon: Radar, title: 'Release Radar', text: 'Pro: PHP, Node.js and WordPress security releases matched to your sites, from the announcement to proof each one is patched.', pro: true },
+  { icon: Monitor, title: 'Server agent', text: 'Pro: one command on your VPS. CPU and memory per process, disks and inodes, request floods and XSS / SQL-injection attempts per IP from your nginx or Apache logs, with alerts.', pro: true },
+  { icon: Search, title: 'Error tracking and file scan', text: 'Pro: every error with its file, line and stack trace, and a scan for backdoors, web shells and injected code with the exact line.', pro: true },
 ];
 
 // Release Radar: the three moments of a security release, as a site owner experiences them.

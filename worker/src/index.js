@@ -13,6 +13,7 @@ import { refreshRuyaShieldAlerts } from './lib/ruyashield.js';
 import { sweepTrials, syncRuyaLabPlans } from './lib/plans.js';
 import { scanVulnerabilities } from './lib/vulnerabilities.js';
 import { radarFor } from './lib/advisories.js';
+import { checkSilentAgents, ingestSnapshot } from './lib/agent.js';
 import { ApiError } from './lib/util.js';
 import adminRoutes from './routes/admin.js';
 import adminAuthRoutes from './routes/adminAuth.js';
@@ -82,6 +83,8 @@ app.route('/advanced', advancedRoutes);
 
 // Razorpay posts here with its own signature. There is no customer session on that call.
 app.post('/billing/razorpay', razorpayWebhook);
+// Server agent snapshots (token in the Authorization header; no session). One-way: nothing is ever sent back but a status.
+app.post('/agent/ingest', async (c) => c.json(await ingestSnapshot(c.env, c.req.raw)));
 app.use('/billing/*', requireAuth);
 app.route('/billing', billingRoutes);
 
@@ -135,6 +138,7 @@ export default {
         // Ruya Lab Pro first, so an account that just got it is not reminded that its trial is ending.
         console.log('Ruya Lab plans', await syncRuyaLabPlans(env, at).catch((error) => ({ error: error.message })));
         console.log('Trials', await sweepTrials(env, at).catch((error) => ({ error: error.message })));
+        console.log('Agents', await checkSilentAgents(env, at).catch((error) => ({ error: error.message })));
       })());
       ctx.waitUntil(refreshRuyaShieldAlerts(env).then(
         (summary) => console.log('RuyaShield alerts', summary),
