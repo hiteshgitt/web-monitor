@@ -7,6 +7,7 @@
 // New problems raise a 'vulnerability' notification; problems already known do not alert again.
 import { notificationStatement } from './alerts.js';
 import { shareVulnerablePackages } from './ruyashield.js';
+import { syncAdvisories } from './advisories.js';
 import { nowIso, parseJson } from './util.js';
 
 const OSV = 'https://api.osv.dev/v1';
@@ -47,9 +48,9 @@ export function advisorySeverity(advisory) {
 
 // ---------- caches ----------
 
-async function cachedReference(env, key, url, parse = (t) => JSON.parse(t)) {
+async function cachedReference(env, key, url, parse = (t) => JSON.parse(t), ttlMs = REFERENCE_TTL_MS) {
   const row = await env.DB.prepare('SELECT body, fetched_at FROM reference_cache WHERE key = ?').bind(key).first();
-  if (row && Date.now() - Date.parse(row.fetched_at) < REFERENCE_TTL_MS) return parse(row.body);
+  if (row && Date.now() - Date.parse(row.fetched_at) < ttlMs) return parse(row.body);
   try {
     const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'WebMonitor (+https://webmonitor.ruyalab.com)' }, signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -159,7 +160,8 @@ export function runtimeIssues(runtime, { php, node, nodeReleases, wordpress }, t
     if (cycle && cycle.eol && cycle.eol <= day) {
       out.push({ key: `php-eol-${cycle.cycle}`, component: 'PHP', version: runtime.php, severity: 'high', title: `PHP ${cycle.cycle} is past end of life (${cycle.eol})`, fix: `Move to a supported PHP version (${php.filter((c) => c.eol > day).map((c) => c.cycle).slice(-1)[0] || 'current'} or newer).` });
     } else if (cycle?.latest && compareVersions(runtime.php, cycle.latest) === -1) {
-      out.push({ key: `php-patch-${cycle.latest}`, component: 'PHP', version: runtime.php, severity: 'moderate', title: `PHP ${runtime.php} is behind ${cycle.latest}, which includes security fixes`, fix: `Update PHP to ${cycle.latest} (same ${cycle.cycle} branch).` });
+      // PHP patch releases are security releases; running behind one is a high-severity gap.
+      out.push({ key: `php-patch-${cycle.latest}`, component: 'PHP', version: runtime.php, severity: 'high', title: `PHP ${runtime.php} is behind ${cycle.latest}, which includes security fixes`, fix: `Update PHP to ${cycle.latest} (same ${cycle.cycle} branch).` });
     }
   }
   if (runtime?.node && Array.isArray(node)) {
@@ -189,10 +191,11 @@ export function runtimeIssues(runtime, { php, node, nodeReleases, wordpress }, t
 
 async function runtimeReference(env, runtime) {
   return {
-    php: runtime?.php ? await cachedReference(env, 'eol:php', 'https://endoflife.date/api/php.json') : null,
+    // Hourly for PHP and Node.js release lists, so a security release is picked up on the next run.
+    php: runtime?.php ? await cachedReference(env, 'eol:php', 'https://endoflife.date/api/php.json', undefined, 3600e3) : null,
     node: runtime?.node ? await cachedReference(env, 'eol:nodejs', 'https://endoflife.date/api/nodejs.json') : null,
     nodeReleases: runtime?.node ? await cachedReference(env, 'node:releases', 'https://nodejs.org/dist/index.json',
-      (t) => JSON.parse(t).filter((r) => !/-/.test(r.version)).map((r) => ({ version: r.version.replace(/^v/, ''), security: Boolean(r.security) }))) : null,
+      (t) => JSON.parse(t).filter((r) => !/-/.test(r.version)).map((r) => ({ version: r.version.replace(/^v/, ''), security: Boolean(r.security) })), 3600e3) : null,
     wordpress: runtime?.wordpress ? await cachedReference(env, 'wp:stable', 'https://api.wordpress.org/core/stable-check/1.0/') : null,
   };
 }
@@ -236,7 +239,7 @@ function alertFor(site, fresh) {
   return {
     userId: site.owner_id, websiteId: site.id, type: 'vulnerability',
     title: `${site.name}: ${n === 1 ? 'a known vulnerability' : `${n} known vulnerabilities`} found`,
-    body: parts.join('. ').slice(0, 900),
+    body: `${parts.map((x) => x.replace(/\.+$/, '')).join('. ')}.`.slice(0, 900),
   };
 }
 
@@ -291,7 +294,9 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
     }
   }
   if (statements.length) await env.DB.batch(statements);
-  return { sites: sites.length, packagesChecked: checked, alerts, failed };
+  // Release Radar: new matches, upgrade targets and "patched" (the health check keeps runtime versions current).
+  const radar = await syncAdvisories(env, at).catch((error) => ({ error: error.message }));
+  return { sites: sites.length, packagesChecked: checked, alerts, failed, radar };
 }
 
 /**

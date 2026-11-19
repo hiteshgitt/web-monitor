@@ -13,6 +13,7 @@ import { requestScan, ruyashieldForSite } from '../lib/ruyashield.js';
 import { readVitals, refreshVitals } from '../lib/webVitals.js';
 import { withUpdates } from '../lib/packageVersions.js';
 import { withVulnerabilities } from '../lib/vulnerabilities.js';
+import { advisoriesForSite } from '../lib/advisories.js';
 import { ApiError, daysAgo } from '../lib/util.js';
 
 const advanced = new Hono();
@@ -85,6 +86,7 @@ advanced.get('/comprehensive/:id', async (c) => {
     securityScan,
     // Saved by the hourly check: runtime (PHP / Node.js / WordPress) problems and the last package check.
     knownVulnerabilities: (() => { try { return site.vulnerabilities ? JSON.parse(site.vulnerabilities) : null; } catch { return null; } })(),
+    advisories: await advisoriesForSite(c.env, site.id),
     serverInfo: await serverInfo(c.env.DB, site, live),
     timestamp: new Date().toISOString(),
     website: { id: site.id, name: site.name, url: site.url, platform: site.platform },

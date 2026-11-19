@@ -21,7 +21,7 @@ export const ADMIN_ALERT_TYPES = [
 // notification.type -> preference key
 const CATEGORY = {
   site_down: 'downtime', site_up: 'downtime', change_suspect: 'downtime', slow: 'slow', slow_ok: 'slow', plugins: 'plugins',
-  ssl_off: 'ssl', ssl_ok: 'ssl', security_low: 'security', vulnerability: 'security', pro_approved: 'account', pro_declined: 'account',
+  ssl_off: 'ssl', ssl_ok: 'ssl', security_low: 'security', vulnerability: 'security', advisory: 'security', advisory_patched: 'security', pro_approved: 'account', pro_declined: 'account',
   pro_ended: 'account', trial_started: 'account', trial_ending: 'account', trial_ended: 'account',
   ruyashield_critical: 'ruyashield', ruyashield_high: 'ruyashield', ruyashield_ok: 'ruyashield',
   component_failed: 'components', component_ok: 'components',

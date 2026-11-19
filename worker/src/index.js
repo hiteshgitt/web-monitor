@@ -12,6 +12,7 @@ import { scanDueVitals } from './lib/webVitals.js';
 import { refreshRuyaShieldAlerts } from './lib/ruyashield.js';
 import { sweepTrials, syncRuyaLabPlans } from './lib/plans.js';
 import { scanVulnerabilities } from './lib/vulnerabilities.js';
+import { radarFor } from './lib/advisories.js';
 import { ApiError } from './lib/util.js';
 import adminRoutes from './routes/admin.js';
 import adminAuthRoutes from './routes/adminAuth.js';
@@ -74,6 +75,8 @@ app.use('/websites/*', requireAuth);
 app.route('/websites', websiteRoutes);
 
 // Advanced view is the paid Pro tier
+// Release Radar (Pro): every live advisory with the state of each of the customer's sites.
+app.get('/radar', requireAuth, requirePro, async (c) => c.json({ advisories: await radarFor(c.env, c.get('user').id) }));
 app.use('/advanced/*', requireAuth, requirePro);
 app.route('/advanced', advancedRoutes);
 

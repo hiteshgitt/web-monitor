@@ -3,6 +3,7 @@
 import { Hono } from 'hono';
 import { deleteCustomerStatements } from '../lib/accounts.js';
 import { auditStatement } from '../lib/adminAuth.js';
+import { listAdvisories, saveAdvisory, syncAdvisories } from '../lib/advisories.js';
 import { notificationStatement } from '../lib/alerts.js';
 import { serializeIncident, serializeUser, serializeWebsite } from '../lib/serialize.js';
 import { liveStatsFor } from '../lib/stats.js';
@@ -136,6 +137,20 @@ admin.delete('/users/:id', async (c) => {
 });
 
 // Activity log, newest first
+// ---------- Release Radar advisories ----------
+// Publishing (announced / released) matches Pro sites at once and notifies their owners.
+admin.get('/advisories', async (c) => c.json(await listAdvisories(c.env)));
+
+const saveAndSync = async (c, id) => {
+  const body = await c.req.json().catch(() => ({}));
+  const a = await saveAdvisory(c.env, body, id);
+  await auditStatement(c.env.DB, c.get('admin'), id ? 'advisory_updated' : 'advisory_created', { targetId: a.id, detail: `${a.status}: ${a.title}` }).run();
+  const sync = a.status === 'announced' || a.status === 'released' ? await syncAdvisories(c.env, new Date(), a.id) : null;
+  return c.json({ id: a.id, status: a.status, sync });
+};
+admin.post('/advisories', (c) => saveAndSync(c, null));
+admin.patch('/advisories/:id', (c) => saveAndSync(c, c.req.param('id')));
+
 admin.get('/audit', async (c) => {
   const limit = Math.min(Number(c.req.query('limit')) || 100, 200);
   const { results } = await c.env.DB.prepare('SELECT * FROM admin_audit ORDER BY created_at DESC LIMIT ?').bind(limit).all();

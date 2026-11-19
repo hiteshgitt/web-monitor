@@ -10,6 +10,7 @@ import DeleteAccountPage from './components/site/DeleteAccountPage';
 import IntegrationsPage from './components/site/IntegrationsPage';
 import StatusPage from './components/site/StatusPage';
 import SiteReport from './components/report/SiteReport';
+import ReleaseRadar from './components/radar/ReleaseRadar';
 import SharedReport from './components/report/SharedReport';
 
 const FullScreenLoader = () => (
@@ -43,6 +44,7 @@ const Root = () => (
         <Route path="/ruyashield/*" element={<AdminApp />} />
         <Route path="/r/:token" element={<SharedReport />} />
         <Route path="/app/report/:siteId" element={<RequireAuth><SiteReport /></RequireAuth>} />
+        <Route path="/app/radar" element={<RequireAuth><ReleaseRadar /></RequireAuth>} />
         <Route path="/app/*" element={<RequireAuth><App /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>

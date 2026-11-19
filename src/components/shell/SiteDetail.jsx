@@ -157,6 +157,8 @@ const ALERT_KIND = {
   component_ok: 'Component recovered',
   change_suspect: 'Possible cause found',
   vulnerability: 'Known vulnerability',
+  advisory: 'Security release',
+  advisory_patched: 'Patched',
 };
 
 const AlertContext = ({ focus, incidents, incidentsLoaded, checks, checksLoaded, threshold, onDismiss }) => {

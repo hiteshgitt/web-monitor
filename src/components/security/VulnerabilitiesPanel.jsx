@@ -17,13 +17,14 @@ export const SeverityChip = ({ severity }) => (
   </span>
 );
 
-const VulnerabilitiesPanel = ({ known, inventory, platform }) => {
+const VulnerabilitiesPanel = ({ known, inventory, platform, advisories = [] }) => {
   const runtime = known?.runtime || [];
   const live = inventory?.vulnerability_check === 'ok';
   const packages = live ? inventory.vulnerable || [] : known?.packages || [];
   const failed = inventory?.vulnerability_check === 'failed';
   const checksPackages = platform === 'nextjs' || ['laravel', 'php', 'codeigniter'].includes(platform);
-  const total = runtime.length + packages.length;
+  const open = advisories.filter((a) => a.siteState === 'affected');
+  const total = runtime.length + packages.length + open.length;
 
   return (
     <div className="bg-white rounded-2xl shadow-card border border-brand-100 overflow-hidden">
@@ -45,6 +46,22 @@ const VulnerabilitiesPanel = ({ known, inventory, platform }) => {
             {platform === 'wordpress' && ' WordPress plugins are not covered yet; WordPress itself and PHP are.'}
           </p>
         )}
+        {open.map((a) => (
+          <div key={a.id} className="rounded-2xl border border-rose-200 bg-rose-50/60 px-5 py-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <SeverityChip severity={a.severity} />
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-ink-muted">Release Radar · {a.componentLabel} {a.versionSeen}</span>
+              {a.cves.slice(0, 2).map((c) => <span key={c} className="text-[11px] font-mono text-ink-muted">{c}</span>)}
+            </div>
+            <div className="font-bold text-ink mt-1.5">{a.title}</div>
+            <div className="text-[13px] text-ink-soft mt-1">
+              <span className="font-bold text-brand-700">What to do: </span>
+              {a.status === 'released' ? `upgrade to the fixed release (${Object.values(a.fixed).join(', ')}).` : `the fix is due${a.releaseAt ? ` ${new Date(a.releaseAt).toUTCString().slice(5, 22)} UTC` : ' soon'}.`}
+              {a.mitigation && ` ${a.status === 'released' ? 'Until then' : 'Now'}: ${a.mitigation}`}
+            </div>
+            <a href="/app/radar" className="inline-block mt-1.5 text-[12px] font-bold text-brand-700 hover:underline">Open Release Radar</a>
+          </div>
+        ))}
         {runtime.map((r) => (
           <div key={r.key} className="rounded-2xl border border-rose-100 bg-rose-50/40 px-5 py-4">
             <div className="flex items-center gap-2 flex-wrap">

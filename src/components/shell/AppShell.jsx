@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { TRIAL_DAYS } from '../../config/plans';
-import { LayoutGrid, Plus, Bell, Search, BarChart3, RefreshCw, Globe, Sparkles, Clock, ChevronRight } from 'lucide-react';
+import { LayoutGrid, Plus, Bell, Search, BarChart3, RefreshCw, Globe, Sparkles, Clock, ChevronRight, Radar } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import SiteList from './SiteList';
 import SiteDetail from './SiteDetail';
@@ -293,6 +293,7 @@ const AppShell = ({
           <RailButton icon={Plus} label="Add site" onClick={() => setShowAdd(true)} />
           <RailButton icon={Bell} label="Alerts" badge={notificationCount} onClick={() => setShowNotifications(true)} />
           <RailButton icon={Search} label="Command palette (Ctrl+K)" onClick={onOpenCommandPalette} />
+          <RailButton icon={Radar} label="Release Radar (Pro)" pro={!isPro} onClick={() => navigate('/app/radar')} />
           <RailButton icon={Globe} label="Website" onClick={() => navigate('/')} />
           {selectedWebsite && <RailButton icon={BarChart3} label="Advanced analytics (Pro)" pro={!isPro} onClick={() => onOpenAdvanced(selectedWebsite)} />}
           <div className="flex-1" />

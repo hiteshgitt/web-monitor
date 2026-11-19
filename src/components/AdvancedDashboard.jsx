@@ -1389,6 +1389,7 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
               known={advancedData?.knownVulnerabilities}
               inventory={advancedData?.libraries || advancedData?.packages}
               platform={selectedWebsite.platform}
+              advisories={advancedData?.advisories || []}
             />
             <SecurityScanPanel siteId={selectedWebsite._id} />
             <RuyaShieldPanel siteId={selectedWebsite._id} />

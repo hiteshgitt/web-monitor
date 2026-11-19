@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Search, Sparkles, Clock, Users, X, Globe, Ban, Trash2, CheckCircle2, AlertTriangle, UserPlus, Activity, ShieldOff,
-  ShieldCheck, LogOut, Bell, ScrollText,
+  ShieldCheck, LogOut, Bell, ScrollText, Radar,
 } from 'lucide-react';
 import { adminRequest as request } from '../../services/adminSession';
 import AdminAlerts from './AdminAlerts';
 import AuditLog from './AuditLog';
+import AdvisoriesAdmin from './AdvisoriesAdmin';
 import PlatformIcon from '../PlatformIcon';
 import {
   STATUS_LABEL, TONE, displayUrl, formatMs, formatPercent, platformLabel, statusTone, timeAgo,
@@ -306,7 +307,7 @@ const AdminPage = ({ admin, onSignOut }) => {
 
       <div className="bg-white border-b border-brand-100 px-4 sm:px-6 lg:px-10 py-3 flex flex-wrap items-center gap-3 justify-between">
         <div className="flex gap-1.5">
-          {[['customers', 'Customers', Users], ['activity', 'Activity log', ScrollText]].map(([id, label, Icon]) => (
+          {[['customers', 'Customers', Users], ['radar', 'Release Radar', Radar], ['activity', 'Activity log', ScrollText]].map(([id, label, Icon]) => (
             <button key={id} type="button" onClick={() => setView(id)} className={`h-9 px-4 rounded-xl text-[13px] font-bold flex items-center gap-2 transition-colors ${view === id ? 'bg-brand-600 text-white shadow-btn' : 'text-ink-soft hover:bg-brand-50'}`}>
               <Icon size={15} /> {label}
             </button>
@@ -320,7 +321,7 @@ const AdminPage = ({ admin, onSignOut }) => {
         )}
       </div>
 
-      {view === 'activity' ? <main className="p-4 sm:p-6 lg:p-10"><AuditLog /></main> : (
+      {view === 'radar' ? <main className="p-4 sm:p-6 lg:p-10"><AdvisoriesAdmin /></main> : view === 'activity' ? <main className="p-4 sm:p-6 lg:p-10"><AuditLog /></main> : (
       <main className="p-4 sm:p-6 lg:p-10 space-y-6">
         {error && <div className="text-sm font-semibold text-bad bg-bad-soft rounded-xl px-4 py-3">{error}</div>}
 

@@ -147,6 +147,8 @@ export const ALERT_KIND = {
   component_ok: 'Component recovered',
   change_suspect: 'Possible cause found',
   vulnerability: 'Known vulnerability',
+  advisory: 'Security release',
+  advisory_patched: 'Patched',
 };
 
 export const formatWhen = (iso) => (iso ? new Date(iso).toLocaleString() : '—');

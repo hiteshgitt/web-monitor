@@ -25,10 +25,10 @@ test('the first fixed version above the installed one', () => {
   assert.equal(fixedVersion(adv, 'npm', 'react', '16.4.3'), null);
 });
 
-test('PHP: end of life is high, a missed patch release is moderate, current is fine', () => {
+test('PHP: end of life and a missed patch release are high, current is fine', () => {
   assert.equal(runtimeIssues({ php: '8.1.30' }, { php }, today)[0].key, 'php-eol-8.1');
   const patch = runtimeIssues({ php: '8.4.20' }, { php }, today)[0];
-  assert.equal(patch.severity, 'moderate');
+  assert.equal(patch.severity, 'high');
   assert.match(patch.fix, /8\.4\.27/);
   assert.deepEqual(runtimeIssues({ php: '8.4.27' }, { php }, today), []);
 });
