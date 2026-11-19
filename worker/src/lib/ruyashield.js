@@ -309,3 +309,40 @@ export async function requestScan(env, site, scan, trackedHost = null) {
   console.error('RuyaShield handoff failed', res.status, code);
   throw new ApiError(502, 'RuyaShield did not accept the scan request. Try again later.');
 }
+
+// ---------- vulnerable packages → RuyaShield ----------
+// After each package check, the result goes to RuyaShield (signed with the same handoff secret), so the
+// webmonitor.packages check can raise findings for an organization that verified this host. Sent only for
+// customers who connected RuyaShield, and also when nothing is vulnerable, so a FixProof re-test can pass.
+
+const REPORT_FIELDS = (p) => ({
+  name: p.name, version: p.version, severity: p.severity, ids: p.ids.slice(0, 10),
+  aliases: (p.aliases || []).filter((a) => /^CVE-\d{4}-\d{3,9}$/.test(a)).slice(0, 5),
+  fixed: p.fixed || null, summary: p.summary ? String(p.summary).slice(0, 300) : null,
+});
+
+export async function shareVulnerablePackages(env, site, ecosystem, packages) {
+  if (!handoffConfigured(env)) return { skipped: 'not-configured' };
+  const connected = await env.DB.prepare('SELECT 1 FROM ruyashield_connections WHERE user_id = ?').bind(site.owner_id).first();
+  if (!connected) return { skipped: 'not-connected' };
+  const host = hostsForUrl(site.url)[0];
+  if (!host) return { skipped: 'no-host' };
+  // Same rules RuyaShield validates with: one odd entry must not get the whole report refused.
+  const valid = packages.map(REPORT_FIELDS).filter((p) => /^[@a-z0-9][\w./@-]{0,213}$/i.test(p.name) && /^[\w.+-]{1,64}$/.test(p.version)
+    && p.ids.length && p.ids.every((id) => /^[A-Za-z0-9._:-]{3,64}$/.test(id)) && (!p.fixed || /^[\w.+-]{1,64}$/.test(p.fixed)));
+  const body = JSON.stringify({ host, ecosystem, observedAt: nowIso(), packages: valid.slice(0, 200) });
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const res = await fetch(`${baseUrl(env)}/v1/integrations/webmonitor/packages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-WebMonitor-Timestamp': timestamp,
+      'X-WebMonitor-Signature': await signHandoff(env.RUYASHIELD_HANDOFF_SECRET, timestamp, body),
+    },
+    body,
+    signal: AbortSignal.timeout(10000),
+  });
+  await res.body?.cancel();
+  if (res.status !== 202) throw new Error(`RuyaShield answered ${res.status}`);
+  return { sent: packages.length };
+}

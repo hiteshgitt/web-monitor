@@ -6,6 +6,7 @@
 //   (endoflife.date), Node.js security releases (nodejs.org) and WordPress.org's stable-check.
 // New problems raise a 'vulnerability' notification; problems already known do not alert again.
 import { notificationStatement } from './alerts.js';
+import { shareVulnerablePackages } from './ruyashield.js';
 import { nowIso, parseJson } from './util.js';
 
 const OSV = 'https://api.osv.dev/v1';
@@ -199,7 +200,7 @@ async function runtimeReference(env, runtime) {
 // ---------- the job ----------
 
 const PACKAGE_RECHECK_MS = 12 * 3600e3;
-// Per run: 3 sites × (1 integration call + 1 OSV batch + ≤8 advisories) + ≤4 reference lists ≈ 34 of 50 requests.
+// Per run: 3 sites × (1 integration call + 1 OSV batch + ≤8 advisories + 1 RuyaShield report) + ≤4 reference lists ≈ 37 of 50.
 const PACKAGE_SITES_PER_RUN = 3;
 const PHP_PLATFORMS = ['laravel', 'php', 'codeigniter'];
 
@@ -267,6 +268,9 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
           after.packages = await vulnerablePackages(env, inv.ecosystem, inv.items);
           packagesChecked = true;
           checked += 1;
+          // RuyaShield turns these into findings for organizations that verified this site (if connected).
+          await shareVulnerablePackages(env, site, inv.ecosystem, after.packages)
+            .catch((error) => console.error('sharing packages with RuyaShield failed', site.id, error.message));
         }
       } catch (error) {
         failed += 1;
