@@ -148,7 +148,7 @@ const PatchingSection = ({ patching }) => {
               </span>
               <span className="flex items-center gap-2 text-[12px]">
                 {a.hoursToPatch != null && <span className="text-ink-muted">patched in {a.hoursToPatch} h</span>}
-                <span className={`px-2 py-0.5 rounded-md font-bold ${STATE_STYLE[a.state] || ''}`}>{STATE_LABEL[a.state] || a.state}</span>
+                <span className={`px-2 py-0.5 rounded-md font-bold ${STATE_STYLE[a.state] || ''}`}>{a.state === 'patched' && !a.patchedAt ? 'Up to date' : STATE_LABEL[a.state] || a.state}</span>
               </span>
             </li>
           ))}

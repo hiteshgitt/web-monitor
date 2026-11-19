@@ -149,6 +149,8 @@ export const ALERT_KIND = {
   vulnerability: 'Known vulnerability',
   advisory: 'Security release',
   advisory_patched: 'Patched',
+  advisory_ok: 'Checked: all OK',
+  vulnerability_ok: 'No known vulnerabilities',
 };
 
 export const formatWhen = (iso) => (iso ? new Date(iso).toLocaleString() : '—');

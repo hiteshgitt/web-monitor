@@ -175,6 +175,8 @@ const ALERT_KIND = {
   vulnerability: 'Known vulnerability',
   advisory: 'Security release',
   advisory_patched: 'Patched',
+  advisory_ok: 'Checked: all OK',
+  vulnerability_ok: 'No known vulnerabilities',
 };
 
 const AlertContext = ({ focus, incidents, incidentsLoaded, checks, checksLoaded, threshold, onDismiss }) => {

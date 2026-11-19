@@ -160,17 +160,19 @@ export async function syncAdvisories(env, at = new Date(), onlyId = null) {
     const { results: rows } = await env.DB.prepare('SELECT * FROM advisory_sites WHERE advisory_id = ?').bind(adv.id).all();
     const known = new Map(rows.map((r) => [r.website_id, r]));
     const byOwner = new Map(); // owner -> { announce: [], release: [], patched: [] }
-    const bucket = (owner) => byOwner.get(owner) || byOwner.set(owner, { announce: [], release: [], patched: [] }).get(owner);
+    const bucket = (owner) => byOwner.get(owner) || byOwner.set(owner, { announce: [], release: [], patched: [], ok: [] }).get(owner);
     for (const site of sites) {
       const ev = evaluate(adv, parseJson(site.runtime), site.security_config);
       const row = known.get(site.id);
       if (!ev) continue;
       if (!row) {
-        // A site already on a fixed version when first seen was never affected: nothing to record.
-        if (ev.state === 'patched') continue;
-        statements.push(env.DB.prepare(`INSERT INTO advisory_sites (advisory_id, website_id, state, version_seen, first_seen_at) VALUES (?, ?, ?, ?, ?)`)
-          .bind(adv.id, site.id, ev.state, ev.version, now));
+        // Every site running the component gets a row, so owners also hear "all OK": not exposed, or already on
+        // the fixed version (stored as patched with no patched_at: it never needed patching).
+        statements.push(env.DB.prepare(`INSERT INTO advisory_sites (advisory_id, website_id, state, version_seen, first_seen_at, patched_version, notified_announce_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`)
+          .bind(adv.id, site.id, ev.state, ev.version, now, ev.state === 'patched' ? ev.version : null, ev.state === 'affected' ? null : now));
         if (ev.state === 'affected') bucket(site.owner_id)[adv.status === 'released' ? 'release' : 'announce'].push({ site, ev });
+        else bucket(site.owner_id).ok.push({ site, ev, reason: okReason(adv, ev, site) });
         continue;
       }
       if (row.state !== 'patched' && ev.state === 'patched') {
@@ -193,12 +195,22 @@ export async function syncAdvisories(env, at = new Date(), onlyId = null) {
     const cves = asList(adv.cves, []);
     const cveText = cves.length ? ` (${cves.slice(0, 3).join(', ')})` : '';
     for (const [owner, b] of byOwner) {
+      // "All OK" is folded into the same message when some sites need action, and sent on its own otherwise.
+      const okLines = b.ok.map((x) => `${x.site.name}: ${x.reason}`).join('; ');
+      if (b.ok.length && !b.announce.length && !b.release.length) {
+        statements.push(notificationStatement(env.DB, {
+          userId: owner, websiteId: b.ok.length === 1 ? b.ok[0].site.id : null, type: 'advisory_ok',
+          title: `Checked: ${b.ok.length === 1 ? b.ok[0].site.name : `your ${b.ok.length} sites`} ${b.ok.length === 1 ? 'is' : 'are'} OK for ${adv.title}`,
+          body: `${okLines}.${cveText} No action needed now.`.slice(0, 900),
+        }, at));
+        notices += 1;
+      }
       if (b.announce.length) {
         const names = b.announce.map((x) => `${x.site.name} (${label} ${x.ev.version})`).join(', ');
         statements.push(notificationStatement(env.DB, {
           userId: owner, websiteId: b.announce.length === 1 ? b.announce[0].site.id : null, type: 'advisory',
           title: `Security release ahead: ${adv.title}`,
-          body: `${adv.release_at ? `Due ${releaseTime(adv.release_at)}. ` : ''}Affects ${names}${cveText}. ${adv.mitigation ? `Do this now: ${adv.mitigation}` : 'Plan the upgrade as soon as it is out.'}`.slice(0, 900),
+          body: `${adv.release_at ? `Due ${releaseTime(adv.release_at)}. ` : ''}Affects ${names}${cveText}. ${adv.mitigation ? `Do this now: ${adv.mitigation}` : 'Plan the upgrade as soon as it is out.'}${okLines ? ` OK: ${okLines}.` : ''}`.slice(0, 900),
         }, at));
         for (const x of b.announce) statements.push(env.DB.prepare('UPDATE advisory_sites SET notified_announce_at = ? WHERE advisory_id = ? AND website_id = ?').bind(now, adv.id, x.site.id));
         notices += 1;
@@ -208,7 +220,7 @@ export async function syncAdvisories(env, at = new Date(), onlyId = null) {
         statements.push(notificationStatement(env.DB, {
           userId: owner, websiteId: b.release.length === 1 ? b.release[0].site.id : null, type: 'advisory',
           title: `${adv.severity === 'critical' ? 'Critical: ' : ''}${label} security fix is out, upgrade ${b.release.length === 1 ? b.release[0].site.name : `${b.release.length} sites`}`,
-          body: `${adv.title}${cveText}. ${lines}.${adv.mitigation ? ` Until then: ${adv.mitigation}` : ''}`.slice(0, 900),
+          body: `${adv.title}${cveText}. ${lines}.${adv.mitigation ? ` Until then: ${adv.mitigation}` : ''}${okLines ? ` OK: ${okLines}.` : ''}`.slice(0, 900),
         }, at));
         for (const x of b.release) statements.push(env.DB.prepare('UPDATE advisory_sites SET notified_release_at = ? WHERE advisory_id = ? AND website_id = ?').bind(now, adv.id, x.site.id));
         notices += 1;
@@ -225,6 +237,16 @@ export async function syncAdvisories(env, at = new Date(), onlyId = null) {
   }
   if (statements.length) await env.DB.batch(statements);
   return { advisories: advisories.length, sites: sites.length, notices };
+}
+
+/** Why a site is fine for an advisory, in words. */
+function okReason(adv, ev, site) {
+  if (ev.state === 'patched') return `already on ${LABEL[adv.component]} ${ev.version}, which has the fix`;
+  const rule = asObject(adv.exposure);
+  const config = asObject(site.security_config);
+  const off = Object.keys(rule).filter((k) => k in config && String(config[k]) !== String(rule[k]))
+    .map((k) => (typeof config[k] === 'boolean' ? `${k} is ${config[k] ? 'on' : 'off'}` : `${k} is ${config[k]}`));
+  return `not exposed on ${LABEL[adv.component]} ${ev.version} (${off.join(', ') || 'its settings rule this out'}); upgrade at your normal pace`;
 }
 
 // ---------- read models ----------

@@ -202,6 +202,17 @@ async function runtimeReference(env, runtime) {
 
 // ---------- the job ----------
 
+/** What a clean check covered, in words, for the "all OK" notification. */
+function okScope(site, runtime) {
+  const parts = [];
+  if (runtime.php) parts.push(`PHP ${runtime.php}`);
+  if (runtime.node) parts.push(`Node.js ${runtime.node}`);
+  if (runtime.wordpress) parts.push(`WordPress ${runtime.wordpress}`);
+  if (runtime.nextjs) parts.push(`Next.js ${runtime.nextjs}`);
+  const pk = site.platform === 'nextjs' ? 'its npm packages' : ['laravel', 'php', 'codeigniter'].includes(site.platform) ? 'its Composer packages' : null;
+  return `Checked ${[...parts, pk].filter(Boolean).join(', ')} against known vulnerabilities, end-of-life dates and security releases: nothing found.`;
+}
+
 const PACKAGE_RECHECK_MS = 12 * 3600e3;
 // Per run: 3 sites × (1 integration call + 1 OSV batch + ≤8 advisories + 1 RuyaShield report) + ≤4 reference lists ≈ 37 of 50.
 const PACKAGE_SITES_PER_RUN = 3;
@@ -262,7 +273,10 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
     const runtime = parseJson(site.runtime) || {};
     const before = parseJson(site.vulnerabilities) || { packages: [], runtime: [] };
     const after = { ...before };
-    after.runtime = runtimeIssues(runtime, await runtimeReference(env, runtime), at);
+    const reference = await runtimeReference(env, runtime);
+    after.runtime = runtimeIssues(runtime, reference, at);
+    // Complete only when every release list this site needs loaded; otherwise "no issues" could just be "no data".
+    const runtimeComplete = (!runtime.php || reference.php) && (!runtime.node || (reference.node && reference.nodeReleases)) && (!runtime.wordpress || reference.wordpress);
     let packagesChecked = false;
     if (due.has(site.id)) {
       try {
@@ -280,7 +294,19 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
         console.error('vulnerability check failed', site.id, error.message);
       }
     }
-    const json = JSON.stringify({ packages: after.packages || [], runtime: after.runtime, checkedAt: packagesChecked ? at.toISOString() : before.checkedAt || null });
+    // "All OK" needs a complete check: release lists loaded, and (for Next.js / PHP framework sites) the packages checked.
+    const checksPackages = site.platform === 'nextjs' || PHP_PLATFORMS.includes(site.platform);
+    const complete = runtimeComplete && (!checksPackages || packagesChecked || Boolean(before.checkedAt));
+    const total = (after.packages || []).length + after.runtime.length;
+    const beforeTotal = (before.packages || []).length + (before.runtime || []).length;
+    const anyData = Object.values(runtime).some(Boolean);
+    const okAlert = complete && anyData && total === 0 && (beforeTotal > 0 || !before.okNotified) ? {
+      userId: site.owner_id, websiteId: site.id, type: 'vulnerability_ok',
+      title: beforeTotal > 0 ? `All clear on ${site.name}: no known vulnerabilities left` : `Checked: no known vulnerabilities on ${site.name}`,
+      body: `${okScope(site, runtime)} We keep checking and tell you as soon as something new affects this site.`,
+    } : null;
+    const json = JSON.stringify({ packages: after.packages || [], runtime: after.runtime, checkedAt: packagesChecked ? at.toISOString() : before.checkedAt || null,
+      okNotified: Boolean(before.okNotified || okAlert) });
     if (json !== (site.vulnerabilities || null) || packagesChecked) {
       statements.push(env.DB.prepare(`UPDATE websites SET vulnerabilities = ?${packagesChecked ? ', vulns_checked_at = ?' : ''} WHERE id = ?`)
         .bind(...(packagesChecked ? [json, at.toISOString(), site.id] : [json, site.id])));
@@ -292,6 +318,7 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
       statements.push(notificationStatement(env.DB, alert, at));
       alerts += 1;
     }
+    if (okAlert) statements.push(notificationStatement(env.DB, okAlert, at));
   }
   if (statements.length) await env.DB.batch(statements);
   // Release Radar: fixes that just shipped, then new matches, upgrade targets and "patched" (the health check keeps

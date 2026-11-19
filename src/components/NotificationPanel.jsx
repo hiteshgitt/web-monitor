@@ -21,6 +21,8 @@ const LOOK = {
   vulnerability: { icon: ShieldAlert, tone: 'bg-bad-soft text-bad' },
   advisory: { icon: ShieldAlert, tone: 'bg-bad-soft text-bad' },
   advisory_patched: { icon: ShieldCheck, tone: 'bg-good-soft text-good' },
+  advisory_ok: { icon: ShieldCheck, tone: 'bg-good-soft text-good' },
+  vulnerability_ok: { icon: ShieldCheck, tone: 'bg-good-soft text-good' },
   component_ok: { icon: CheckCircle2, tone: 'bg-good-soft text-good' },
   pro_approved: { icon: Sparkles, tone: 'bg-brand-50 text-brand-600' },
   pro_declined: { icon: Info, tone: 'bg-canvas text-ink-muted' },

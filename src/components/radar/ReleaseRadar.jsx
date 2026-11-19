@@ -14,6 +14,7 @@ const STATE = {
   affected: { label: 'Action needed', tone: 'bg-bad-soft text-bad', Icon: ShieldAlert },
   not_exposed: { label: 'Not exposed', tone: 'bg-brand-50 text-brand-700', Icon: ShieldCheck },
   patched: { label: 'Patched', tone: 'bg-good-soft text-good', Icon: ShieldCheck },
+  up_to_date: { label: 'Up to date', tone: 'bg-good-soft text-good', Icon: ShieldCheck },
 };
 const utc = (iso) => `${new Date(iso).toUTCString().slice(5, 22)} UTC`;
 
@@ -109,7 +110,7 @@ const ReleaseRadar = () => {
             </div>
             <div className="divide-y divide-brand-50">
               {a.sites.map((s) => {
-                const st = STATE[s.state] || STATE.affected;
+                const st = s.state === 'patched' && !s.patchedAt ? STATE.up_to_date : STATE[s.state] || STATE.affected;
                 return (
                   <div key={s.id} className="px-5 py-3 flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
