@@ -164,7 +164,14 @@ export async function syncAdvisories(env, at = new Date(), onlyId = null) {
     for (const site of sites) {
       const ev = evaluate(adv, parseJson(site.runtime), site.security_config);
       const row = known.get(site.id);
-      if (!ev) continue;
+      if (!ev) {
+        // The site no longer runs this component or branch (moved platform, or a runtime once misread): an open
+        // match is dropped so the radar does not show "action needed" for something that no longer applies.
+        if (row && row.state !== 'patched') {
+          statements.push(env.DB.prepare('DELETE FROM advisory_sites WHERE advisory_id = ? AND website_id = ?').bind(adv.id, site.id));
+        }
+        continue;
+      }
       if (!row) {
         // Every site running the component gets a row, so owners also hear "all OK": not exposed, or already on
         // the fixed version (stored as patched with no patched_at: it never needed patching).
