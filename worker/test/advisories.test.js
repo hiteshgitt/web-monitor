@@ -1,3 +1,4 @@
+import { wordpressSecurityPosts, wordpressFixed, nextjsBatches } from '../src/lib/advisories.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { branchOf, evaluate, validateAdvisory } from '../src/lib/advisories.js';
@@ -92,4 +93,36 @@ test('Node.js security releases over consecutive days are one advisory; a batch 
   const all = nodeSecurityDays(releases, new Set(), '2026-10-01');
   assert.deepEqual(all.map((b) => [b.sourceRef, b.fixed]), [['node-security-2026-10-20', { 20: '20.19.9' }], ['node-security-2026-11-10', { 24: '24.22.1', 22: '22.23.5' }]]);
   assert.equal(nodeSecurityDays(releases, new Set(['node-security-2026-11-11']), '2026-10-01').length, 1);
+});
+
+test('WordPress: only core release posts from the security feed; fixes per branch come from stable-check', () => {
+  const xml = `<rss><channel>
+    <item><title>WordPress 7.1.5 Release</title><link>https://wordpress.org/news/2026/11/wordpress-7-1-5-release/</link><pubDate>Wed, 18 Nov 2026 17:08:59 +0000</pubDate><description><![CDATA[<p>Fixes CVE-2026-1234 in the REST API.</p>]]></description></item>
+    <item><title>Critical PHP Security Release</title><link>https://wordpress.org/news/2026/10/critical-php-security-release/</link><pubDate>Wed, 21 Oct 2026 10:00:00 +0000</pubDate></item>
+    <item><title>WordPress 7.2 RC 1</title><link>https://wordpress.org/news/2026/11/rc1/</link><pubDate>Wed, 18 Nov 2026 10:00:00 +0000</pubDate></item>
+  </channel></rss>`;
+  const posts = wordpressSecurityPosts(xml);
+  assert.deepEqual(posts.map((p) => [p.version, p.cves]), [['7.1.5', ['CVE-2026-1234']]]);
+  const stable = { '7.1.4': 'insecure', '7.1.5': 'latest', '7.0.8': 'insecure', '7.0.9': 'outdated', '6.9.12': 'outdated', '4.6.30': 'insecure' };
+  assert.deepEqual(wordpressFixed(stable, '7.1.5'), { 7.1: '7.1.5', '7.0': '7.0.9', 6.9: '6.9.12' });
+  assert.equal(wordpressFixed({ '7.1.4': 'latest' }, '7.1.5'), null); // not live yet
+});
+
+test('Next.js: OSV advisories within two days are one release with fixes per major and the worst severity', () => {
+  const v = (id, published, severity, ranges, cve) => ({ id, published, aliases: cve ? [cve] : [], database_specific: { severity }, summary: id,
+    affected: [{ package: { name: 'next', ecosystem: 'npm' }, ranges: ranges.map(([introduced, fixed]) => ({ type: 'SEMVER', events: [{ introduced }, { fixed }] })) }] });
+  const vulns = [
+    v('GHSA-a', '2026-11-19T22:23:21Z', 'MODERATE', [['15.0.0', '15.5.29']], 'CVE-2026-119346'),
+    v('GHSA-b', '2026-11-20T08:00:00Z', 'HIGH', [['16.0.0', '16.4.5'], ['13.0.0', '14.2.40']], 'CVE-2026-119348'),
+    v('GHSA-old', '2026-09-01T00:00:00Z', 'LOW', [['15.0.0', '15.1.0']]),
+    { ...v('GHSA-w', '2026-11-19T00:00:00Z', 'CRITICAL', [['15.0.0', '15.9.9']]), withdrawn: '2026-11-19T01:00:00Z' },
+  ];
+  const [b] = nextjsBatches(vulns, '2026-11-01');
+  assert.equal(nextjsBatches(vulns, '2026-11-01').length, 1);
+  assert.equal(b.sourceRef, 'nextjs-security-2026-11-19');
+  assert.deepEqual(b.fixed, { 14: '14.2.40', 15: '15.5.29', 16: '16.4.5' });
+  assert.deepEqual(b.branches, ['13', '14', '15', '16']); // 13 is affected and gets no fix
+  assert.equal(b.severity, 'high');
+  assert.deepEqual(b.cves, ['CVE-2026-119346', 'CVE-2026-119348']);
+  assert.deepEqual(b.refs, ['nextjs-security-2026-11-19', 'nextjs-security-2026-11-20']);
 });

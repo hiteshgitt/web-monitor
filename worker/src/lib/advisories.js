@@ -357,9 +357,97 @@ export function nodeSecurityDays(releases, knownRefs, since) {
   return out;
 }
 
-/** Hourly: release announced PHP advisories when the fixes ship, and add new Node.js security releases. */
+// ---------- WordPress: security posts + WordPress.org's version API ----------
+const WP_SECURITY_FEED = 'https://wordpress.org/news/category/security/feed/';
+const WP_STABLE_CHECK = 'https://api.wordpress.org/core/stable-check/1.0/';
+
+/** Core security releases from WordPress.org's security category feed (not its PHP or plugin posts). Pure. */
+export function wordpressSecurityPosts(xml) {
+  const out = [];
+  for (const b of String(xml || '').match(/<item[\s>][\s\S]*?<\/item>/gi) || []) {
+    const title = plain(tag(b, 'title'));
+    const version = (title.match(/^WordPress (\d+\.\d+(?:\.\d+)?)\b/i) || [])[1];
+    const at = Date.parse(tag(b, 'pubDate'));
+    const link = tag(b, 'link');
+    if (!version || /\b(beta|RC|release candidate)\b/i.test(title) || Number.isNaN(at) || !/^https:\/\//.test(link)) continue;
+    const body = plain(tag(b, 'description')).slice(0, 600);
+    out.push({ version, title, link, publishedAt: new Date(at).toISOString(), body, cves: [...new Set(`${title} ${body}`.match(/CVE-\d{4}-\d{3,9}/g) || [])].slice(0, 10) });
+  }
+  return out;
+}
+
+/**
+ * Fixed version per branch from stable-check ({ version: latest | outdated | insecure }): a security release marks
+ * every older version insecure, so each branch's newest version that is not insecure is its fix. Null until the
+ * release itself is live there. Pure.
+ */
+export function wordpressFixed(stable, releaseVersion) {
+  if (!stable || !stable[releaseVersion] || stable[releaseVersion] === 'insecure') return null;
+  const fixed = {};
+  for (const [v, status] of Object.entries(stable)) {
+    if (status === 'insecure' || !parseSemver(v)) continue;
+    const b = branchOf('wordpress', v);
+    if (!fixed[b] || compareVersions(v, fixed[b]) > 0) fixed[b] = v;
+  }
+  return Object.keys(fixed).length ? fixed : null;
+}
+
+// ---------- Next.js: OSV.dev advisories for the npm package "next" ----------
+const OSV_QUERY = 'https://api.osv.dev/v1/query';
+const OSV_SEVERITY = { CRITICAL: 'critical', HIGH: 'high', MODERATE: 'moderate', MEDIUM: 'moderate', LOW: 'low' };
+const SEV_RANK = { low: 0, moderate: 1, high: 2, critical: 3 };
+
+/**
+ * Next.js advisories published within two days of each other are one batch (one security release), named after its
+ * first day: fixed version per major, the majors affected without a fix, CVEs and the worst severity. Pure.
+ */
+export function nextjsBatches(vulns, since) {
+  const recent = (vulns || []).filter((v) => !v.withdrawn && v.published && v.published.slice(0, 10) >= since)
+    .sort((a, b) => a.published.localeCompare(b.published));
+  const batches = [];
+  for (const v of recent) {
+    const day = v.published.slice(0, 10);
+    const last = batches[batches.length - 1];
+    if (last && (Date.parse(day) - Date.parse(last.lastDate)) / 86400e3 <= 2) last.items.push(v), (last.lastDate = day);
+    else batches.push({ date: day, lastDate: day, items: [v] });
+  }
+  return batches.map((b) => {
+    const fixed = {};
+    const affected = new Set();
+    let severity = 'low';
+    const cves = new Set();
+    for (const v of b.items) {
+      const sev = OSV_SEVERITY[String(v.database_specific?.severity || '').toUpperCase()] || 'moderate';
+      if (SEV_RANK[sev] > SEV_RANK[severity]) severity = sev;
+      for (const a of v.aliases || []) if (/^CVE-\d{4}-\d{3,9}$/.test(a)) cves.add(a);
+      for (const aff of v.affected || []) {
+        if (aff.package?.name !== 'next' || aff.package?.ecosystem !== 'npm') continue;
+        for (const r of aff.ranges || []) {
+          let intro = null;
+          for (const e of r.events || []) {
+            if (e.introduced !== undefined) intro = e.introduced;
+            if (e.fixed === undefined || !parseSemver(e.fixed)) continue;
+            const fm = Number(branchOf('nextjs', e.fixed));
+            if (!fixed[fm] || compareVersions(e.fixed, fixed[fm]) > 0) fixed[fm] = e.fixed;
+            // Majors from where it was introduced up to the fixed one are affected (at most three lines back).
+            const im = parseSemver(intro) ? Number(branchOf('nextjs', intro)) : fm;
+            for (let m = Math.max(im, fm - 3); m <= fm; m++) affected.add(m);
+          }
+        }
+      }
+    }
+    return {
+      sourceRef: `nextjs-security-${b.date}`, refs: [...new Set(b.items.map((v) => `nextjs-security-${v.published.slice(0, 10)}`))],
+      date: b.date, severity, cves: [...cves].slice(0, 10), fixed: Object.fromEntries(Object.entries(fixed).map(([m, v]) => [String(m), v])),
+      branches: [...affected].sort((x, y) => x - y).map(String), ids: b.items.map((v) => v.id),
+      summaries: b.items.map((v) => v.summary).filter(Boolean),
+    };
+  }).filter((b) => Object.keys(b.fixed).length);
+}
+
+/** Hourly: release announced PHP advisories when the fixes ship, and add new Node.js, WordPress and Next.js security releases. */
 export async function detectReleases(env, cachedReference, at = new Date()) {
-  const out = { phpReleased: 0, nodeAdded: 0 };
+  const out = { phpReleased: 0, nodeAdded: 0, wordpressAdded: 0, nextjsAdded: 0, nextjsUpdated: 0 };
   const { results: announced } = await env.DB.prepare(`SELECT * FROM advisories WHERE status = 'announced' AND component = 'php'`).all();
   if (announced.length) {
     const cycles = await cachedReference(env, 'eol:php', PHP_RELEASES_URL, undefined, 3600e3);
@@ -383,6 +471,55 @@ export async function detectReleases(env, cachedReference, at = new Date()) {
         branches: Object.keys(day.fixed), fixed: day.fixed, url: 'https://nodejs.org/en/blog/vulnerability',
       }, null, at);
       out.nodeAdded += 1;
+    }
+  }
+
+  // WordPress: a core security post from the last 14 days, once its release is live on WordPress.org.
+  const wpXml = await cachedReference(env, 'feed:wordpress-security', WP_SECURITY_FEED, (t) => t, 3600e3);
+  const wpPosts = wordpressSecurityPosts(wpXml).filter((p) => Date.parse(p.publishedAt) >= at.getTime() - 14 * 86400e3);
+  if (wpPosts.length) {
+    const stable = await cachedReference(env, 'wp:stable-check', WP_STABLE_CHECK, undefined, 3600e3);
+    for (const post of wpPosts) {
+      const ref = `wordpress-security-${post.version}`;
+      if (await env.DB.prepare('SELECT 1 FROM advisories WHERE source_ref = ?').bind(ref).first()) continue;
+      const fixed = wordpressFixed(stable, post.version);
+      if (!fixed) continue; // not live yet: next hour
+      await saveAdvisory(env, {
+        component: 'wordpress', severity: /critical/i.test(`${post.title} ${post.body}`) ? 'critical' : 'high', status: 'released',
+        source: 'feed:wordpress.org', sourceRef: ref, title: `WordPress ${post.version} security release`,
+        summary: post.body || `WordPress ${post.version} fixes security issues; older versions in each branch are now marked insecure by WordPress.org.`,
+        mitigation: 'Sites with automatic minor updates (the default) install it on their own within about a day. If yours are off, update now: Dashboard → Updates.',
+        branches: ['*'], fixed, url: post.link, cves: post.cves,
+      }, null, at);
+      out.wordpressAdded += 1;
+    }
+  }
+
+  // Next.js: OSV advisories for "next" from the last 30 days, one advisory per security release.
+  const osv = await cachedReference(env, 'osv:npm:next', OSV_QUERY, undefined, 3600e3,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ package: { name: 'next', ecosystem: 'npm' } }) });
+  if (Array.isArray(osv?.vulns)) {
+    const since = new Date(at.getTime() - 30 * 86400e3).toISOString().slice(0, 10);
+    for (const b of nextjsBatches(osv.vulns, since)) {
+      const fields = {
+        component: 'nextjs', severity: b.severity, status: 'released', source: 'osv.dev', sourceRef: b.sourceRef,
+        title: `Next.js security release (${b.date})`,
+        summary: `${b.ids.length} advisor${b.ids.length === 1 ? 'y' : 'ies'} for Next.js ${b.branches.map((m) => `${m}.x`).join(', ')}: ${b.summaries.slice(0, 5).join('; ')}${b.summaries.length > 5 ? '; …' : ''}`.slice(0, 2000),
+        branches: b.branches, fixed: b.fixed, cves: b.cves,
+        url: b.ids.length === 1 ? `https://github.com/advisories/${b.ids[0]}` : 'https://github.com/vercel/next.js/security/advisories',
+      };
+      const placeholders = b.refs.map(() => '?').join(',');
+      const known = await env.DB.prepare(`SELECT id, fixed, cves, branches FROM advisories WHERE source_ref IN (${placeholders})`).bind(...b.refs).first();
+      if (!known) {
+        await saveAdvisory(env, fields, null, at);
+        out.nextjsAdded += 1;
+      } else if (JSON.stringify(asObject(known.fixed)) !== JSON.stringify(b.fixed) || JSON.stringify(asList(known.cves, [])) !== JSON.stringify(b.cves)
+        || JSON.stringify(asList(known.branches, [])) !== JSON.stringify(b.branches)) {
+        // A later advisory joined the same release: widen the known one instead of adding a second.
+        const { component, source, sourceRef, status, ...update } = fields;
+        await saveAdvisory(env, update, known.id, at);
+        out.nextjsUpdated += 1;
+      }
     }
   }
   return out;

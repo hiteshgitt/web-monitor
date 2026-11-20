@@ -35,10 +35,11 @@ export function VulnerabilitiesCard({ data, platform, onOpenRadar }) {
   const inventory = data?.libraries || data?.packages;
   const runtime = known?.runtime || [];
   const live = inventory?.vulnerability_check === 'ok';
-  const packages = live ? inventory.vulnerable || [] : known?.packages || [];
+  const open = (data?.advisories || []).filter((a) => a.siteState === 'affected');
+  // A Next.js release on the Release Radar already covers the vulnerable "next" package: show it once.
+  const packages = (live ? inventory.vulnerable || [] : known?.packages || []).filter((p) => !(p.name === 'next' && open.some((a) => a.component === 'nextjs')));
   const failed = inventory?.vulnerability_check === 'failed';
   const checksPackages = ['nextjs', 'laravel', 'php', 'codeigniter'].includes(platform);
-  const open = (data?.advisories || []).filter((a) => a.siteState === 'affected');
   const total = runtime.length + packages.length + open.length;
 
   return (

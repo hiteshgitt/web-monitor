@@ -48,11 +48,11 @@ export function advisorySeverity(advisory) {
 
 // ---------- caches ----------
 
-export async function cachedReference(env, key, url, parse = (t) => JSON.parse(t), ttlMs = REFERENCE_TTL_MS) {
+export async function cachedReference(env, key, url, parse = (t) => JSON.parse(t), ttlMs = REFERENCE_TTL_MS, init = {}) {
   const row = await env.DB.prepare('SELECT body, fetched_at FROM reference_cache WHERE key = ?').bind(key).first();
   if (row && Date.now() - Date.parse(row.fetched_at) < ttlMs) return parse(row.body);
   try {
-    const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'WebMonitor (+https://webmonitor.ruyalab.com)' }, signal: AbortSignal.timeout(10000) });
+    const res = await fetch(url, { ...init, headers: { Accept: 'application/json', 'User-Agent': 'WebMonitor (+https://webmonitor.ruyalab.com)', ...(init.headers || {}) }, signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
     const value = parse(text);
