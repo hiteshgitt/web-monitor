@@ -8,11 +8,12 @@ export const EARLY_ACCESS_APK = {
   url: 'https://expo.dev/artifacts/eas/5MyE1KsKdZ0G5BYTM-OnMH-uE3IoECNoXpsnY08X1nM.apk',
   version: '1.3.0',
   sizeMb: 72,
-  nextVersion: '1.3.0',
+  nextVersion: '1.4.0',
   whatsNew: [
-    'RuyaShield findings on each site’s Security tab (Pro)',
-    'Connect your RuyaShield account from the app menu',
-    'Alerts when RuyaShield finds a new critical or high issue',
-    'Push notifications on Android when a site goes down or recovers',
+    'Release Radar: security releases affecting your sites, from announcement to patched (Pro)',
+    'Errors: grouped errors with file, line and stack trace (Pro)',
+    'Server: CPU, memory, disks and attack attempts from the server agent (Pro)',
+    'Known vulnerabilities and suspicious files on the Security tab (Pro)',
+    'Tapping a Pro alert opens the right section',
   ],
 };

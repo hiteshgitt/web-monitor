@@ -37,14 +37,15 @@ const FEATURES = [
   { icon: Puzzle, title: 'Plugin and package audits', text: 'Pro: every plugin and package with its latest release, outdated and inactive ones flagged.', pro: true },
   { icon: ShieldAlert, title: 'Known vulnerabilities', text: 'Pro: installed npm and Composer packages checked against OSV.dev, plus your PHP, Node.js and WordPress versions. Alerts the moment something new affects a site.', pro: true },
   { icon: Activity, title: 'Root-cause diagnosis', text: 'When a site goes down we say what broke (database, PHP memory, a fatal error) and what to do, not just “500”.' },
-  { icon: Radar, title: 'Release Radar', text: 'Pro: PHP, Node.js and WordPress security releases matched to your sites, from the announcement to proof each one is patched.', pro: true },
+  { icon: Radar, title: 'Release Radar', text: 'Pro: PHP, Node.js, WordPress and Next.js security releases matched to your sites, from the announcement to proof each one is patched.', pro: true },
   { icon: Monitor, title: 'Server agent', text: 'Pro: one command on your VPS. CPU and memory per process, disks and inodes, request floods and XSS / SQL-injection attempts per IP from your nginx or Apache logs, with alerts.', pro: true },
   { icon: Search, title: 'Error tracking and file scan', text: 'Pro: every error with its file, line and stack trace, and a scan for backdoors, web shells and injected code with the exact line.', pro: true },
+  { icon: Activity, title: 'Inode monitoring', text: 'The file count on your hosting, read by the integration, with an alert before the limit stops uploads, email and caching. No server access needed.' },
 ];
 
 // Release Radar: the three moments of a security release, as a site owner experiences them.
 const RADAR_STEPS = [
-  { icon: BellRing, when: 'Before the release', title: 'Know which sites are affected', text: 'A security release is announced. We match it to the exact PHP, Node.js or WordPress version each site runs and send the mitigation to apply now, plus the release time.' },
+  { icon: BellRing, when: 'Before the release', title: 'Know which sites are affected', text: 'A security release is announced. We match it to the exact PHP, Node.js, WordPress or Next.js version each site runs and send the mitigation to apply now, plus the release time.' },
   { icon: ShieldAlert, when: 'Release day', title: 'The exact upgrade, per site', text: 'The moment the fix ships you get the version to install on every affected site. Sites whose settings rule the issue out are marked not exposed, so you fix what matters first.' },
   { icon: CheckCircle2, when: 'After you upgrade', title: 'Proof it is patched', text: 'Our one-minute checks see the new version live and confirm it: “patched in 3 h 12 min”. Agencies get a fleet view and a PDF patch report for clients.' },
 ];
@@ -54,7 +55,7 @@ const RUYASHIELD_POINTS = [
   { icon: ShieldCheck, title: 'Findings on every site', text: 'Pro: open vulnerabilities by severity and the latest assessment, on the Security tab and in the app.' },
   { icon: BellRing, title: 'Alerts on critical issues', text: 'Pro: a notification when RuyaShield finds a new critical or high issue on a site you monitor.' },
   { icon: Search, title: 'Scan in one click', text: 'Ask RuyaShield to scan a site from Web Monitor. Nothing runs until you accept it in RuyaShield.' },
-  { icon: Puzzle, title: 'Vulnerable packages become findings', text: 'Pro: packages Web Monitor finds vulnerable show up in RuyaShield with the CVE, the fixed version and a re-test that confirms the upgrade.' },
+  { icon: Puzzle, title: 'Vulnerable packages and suspicious files become findings', text: 'Pro: vulnerable packages arrive in RuyaShield with the CVE, the fixed version and a re-test that confirms the upgrade. Suspicious files from the file scan arrive with the file and line; files you mark safe stay out.' },
 ];
 
 const STEPS = [
@@ -228,7 +229,7 @@ const LandingPage = () => {
             </h1>
             <p className="mt-6 text-lg text-white/80 max-w-xl">
               Web Monitor watches your WordPress, Laravel, Next.js and PHP websites around the clock — real response
-              times, downtime incidents, security and SEO health — on the web and on your phone.
+              times, downtime incidents, errors, security and SEO health — on the web and on your phone.
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
               {primaryCta}
@@ -292,7 +293,7 @@ const LandingPage = () => {
           <Reveal className="text-center max-w-3xl mx-auto">
             <span className="label-caps !text-brand-600 inline-flex items-center gap-1.5"><Radar size={14} /> Release Radar · Pro</span>
             <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight">Security releases, from announcement to patched</h2>
-            <p className="mt-4 text-ink-muted text-lg">Scanners see your site from outside. Our integration runs inside it, so we know the exact PHP or Node.js version and the settings that decide whether an issue applies. Then we follow every release until each site is fixed.</p>
+            <p className="mt-4 text-ink-muted text-lg">Scanners see your site from outside. Our integration runs inside it, so we know the exact PHP, Node.js, WordPress or Next.js version and the settings that decide whether an issue applies. Then we follow every release until each site is fixed.</p>
           </Reveal>
           <div className="mt-16 grid md:grid-cols-3 gap-6">
             {RADAR_STEPS.map(({ icon: Icon, when, title, text }, i) => (
