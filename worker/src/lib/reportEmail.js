@@ -143,7 +143,7 @@ export function renderEmail(report, link, unsubscribeLink, appBase = 'https://we
   const subject = `${report.site.name}: ${score ?? '—'}/100 site health · ${month}`;
   const preheader = `Uptime ${u.percent ?? '—'}%, ${u.incidentCount} incident${u.incidentCount === 1 ? '' : 's'}, ${plan.length} thing${plan.length === 1 ? '' : 's'} to fix first.`;
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(subject)}</title></head>
-<body style="margin:0;padding:0;background:#0f1230">
+<body style="margin:0;padding:0;background:#eef1fb">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(preheader)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0f1230;background-image:linear-gradient(180deg,#0f1230 0%,#1b2050 340px,#eef1fb 340px,#eef1fb 100%)"><tr><td align="center" style="padding:28px 12px 36px">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px">

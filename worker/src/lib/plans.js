@@ -146,21 +146,94 @@ export async function sweepTrials(env, at = new Date()) {
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
-async function sendTrialEmail(env, user, days) {
-  const app = String(env.APP_URL || 'https://webmonitor.ruyalab.com').replace(/\/+$/, '');
+const FONT = "font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const PRO_LOSES = [
+  ['Advanced view', 'AI insights, plugin and package audits, PageSpeed and server details'],
+  ['Security depth', 'Known vulnerabilities, Release Radar and the suspicious-file scan'],
+  ['Errors and server', 'Error tracking with stack traces and the server agent'],
+  ['Reports', 'Site health reports, client links and the monthly report email'],
+];
+const FREE_KEEPS = ['Every site checked each minute', 'Downtime incidents and alerts', 'SEO and security scores', 'Web dashboard and mobile app'];
+
+/** The trial reminder: a table-based email in the same style as the monthly report (Gmail, Outlook, Apple Mail). */
+export function renderTrialEmail(user, days, app = 'https://webmonitor.ruyalab.com') {
   const left = days === 1 ? 'tomorrow' : `in ${days} days`;
   const subject = `Your Web Monitor Pro trial ends ${left}`;
   const hello = user.name ? `Hi ${user.name},` : 'Hi,';
+  const ends = longDate(user.trial_ends_at);
+  const link = `${app}/app`;
   const lines = [
-    `Your free Pro trial ends ${left}, on ${longDate(user.trial_ends_at)}.`,
+    `Your free Pro trial ends ${left}, on ${ends}.`,
     'After that your account goes back to Free: your sites keep being monitored, but the Advanced view, site health reports and report emails need Pro.',
     'To keep Pro, open your dashboard and choose Request Pro. Our team activates it.',
   ];
-  const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#1f2547;line-height:1.55">
-<h2 style="color:#4a5bc4;margin:0 0 12px">${esc(subject)}</h2><p>${esc(hello)}</p>${lines.map((l) => `<p>${esc(l)}</p>`).join('')}
-<p><a href="${esc(`${app}/app`)}" style="display:inline-block;background:#6c80e0;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:bold">Open Web Monitor</a></p>
-<p style="color:#8a90b0;font-size:12px">You get this email once or twice during your trial. Web Monitor by Ruya Lab.</p></div>`;
-  const text = [hello, '', ...lines, '', `${app}/app`].join('\n');
+  const preheader = `Pro stays on until ${ends}. Request Pro from your dashboard to keep the Advanced view.`;
+  const tick = (color) => `<span style="display:inline-block;width:18px;height:18px;line-height:18px;border-radius:9px;background:${color};color:#ffffff;font-size:11px;font-weight:800;text-align:center">&#10003;</span>`;
+  const loses = PRO_LOSES.map(([title, text], i) => `<tr><td valign="top" width="30" style="padding:12px 0;border-top:${i ? '1px solid #eef0fa' : '0'}">${tick('#5868cf')}</td>
+      <td style="padding:12px 0;border-top:${i ? '1px solid #eef0fa' : '0'};${FONT}"><div style="font-size:14px;font-weight:700;color:#1f2557">${title}</div><div style="font-size:13px;color:#4a5079;padding-top:2px;line-height:1.5">${text}</div></td></tr>`).join('');
+  const keeps = FREE_KEEPS.map((t) => `<tr><td valign="top" width="28" style="padding:5px 0">${tick('#3cc48c')}</td><td style="padding:5px 0;${FONT};font-size:13px;color:#4a5079">${t}</td></tr>`).join('');
+
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(subject)}</title></head>
+<body style="margin:0;padding:0;background:#eef1fb">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0f1230;background-image:linear-gradient(180deg,#0f1230 0%,#1b2050 300px,#eef1fb 300px,#eef1fb 100%)"><tr><td align="center" style="padding:28px 12px 36px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px">
+  <tr><td style="padding:0 6px 18px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td><img src="${app}/icons/logo-mark-white.png" width="64" height="24" alt="Web Monitor" style="display:block;border:0;height:24px;width:auto"></td>
+      <td align="right" style="${FONT};font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#aab7f0;font-weight:700">Pro trial</td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="border-radius:22px;overflow:hidden;background:#363f86;background-image:linear-gradient(135deg,#262d5f 0%,#4653ae 55%,#8799e8 100%)">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td valign="middle" style="padding:30px 28px;${FONT}">
+        <div style="font-size:12px;color:#ccd4f6;letter-spacing:1px">${esc(hello)}</div>
+        <div style="font-size:28px;line-height:1.15;font-weight:800;color:#ffffff;padding-top:6px">Your Pro trial ends ${esc(left)}</div>
+        <div style="font-size:14px;color:#ccd4f6;padding-top:10px;line-height:1.5">Everything in Pro stays on until <b style="color:#ffffff">${esc(ends)}</b>. Keep it with one click from your dashboard.</div>
+      </td>
+      <td valign="middle" align="center" width="150" style="padding:24px 28px 24px 0">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr><td align="center" valign="middle" width="116" height="116" style="width:116px;height:116px;border-radius:66px;background:#ffffff;border:8px solid ${days === 1 ? '#e5536a' : '#e3b23c'};${FONT}">
+          <div style="font-size:40px;font-weight:800;color:#1f2557;line-height:1">${days}</div>
+          <div style="font-size:11px;color:#8a90b2;padding-top:2px">day${days === 1 ? '' : 's'} left</div>
+        </td></tr></table>
+      </td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="padding-top:16px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:22px">
+      <tr><td style="padding:26px 28px 0;${FONT}">
+        <div style="font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#5868cf;padding-bottom:6px">What needs Pro after ${esc(ends)}</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${loses}</table>
+      </td></tr>
+      <tr><td style="padding:18px 28px 0">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7fd;border:1px solid #e6eafb;border-radius:14px"><tr><td style="padding:16px 18px;${FONT}">
+          <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#8a90b2;font-weight:700;padding-bottom:6px">Free keeps working</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${keeps}</table>
+        </td></tr></table>
+      </td></tr>
+      <tr><td align="center" style="padding:30px 28px 10px">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr><td align="center" style="border-radius:14px;background:#5868cf;background-image:linear-gradient(135deg,#4653ae,#8799e8)">
+          <a href="${esc(link)}" style="display:inline-block;padding:16px 34px;${FONT};font-size:15px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:14px">Keep Pro &rarr;</a>
+        </td></tr></table>
+        <div style="${FONT};font-size:12px;color:#8a90b2;padding-top:12px;line-height:1.5">Open your dashboard and choose <b style="color:#4a5079">Request Pro</b>. Our team activates it, no card needed.</div>
+      </td></tr>
+      <tr><td style="padding:14px 28px 26px"></td></tr>
+    </table>
+  </td></tr>
+  <tr><td align="center" style="padding:22px 12px 0;${FONT};font-size:11px;color:#8a90b2;line-height:1.6">
+    <b style="color:#4a5079">Web Monitor</b> · uptime, speed and security for your sites · by Ruyalab<br>
+    You get this email once or twice during your trial.
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+  const text = [hello, '', ...lines, '', `Open Web Monitor: ${link}`].join('\n');
+  return { subject, html, text };
+}
+
+async function sendTrialEmail(env, user, days) {
+  const app = String(env.APP_URL || 'https://webmonitor.ruyalab.com').replace(/\/+$/, '');
+  const { subject, html, text } = renderTrialEmail(user, days, app);
   const res = await fetch(`${env.RESEND_API_BASE || 'https://api.resend.com'}/emails`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
