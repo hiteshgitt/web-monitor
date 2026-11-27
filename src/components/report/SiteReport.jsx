@@ -176,7 +176,7 @@ const AssessmentSection = ({ assessment }) => {
   if (!assessment) return null;
   const assessedAny = assessment.scope.some((s) => s.assessed);
   return (
-    <Section page title="Vulnerability assessment" aside="Automated · not a penetration test">
+    <Section page title="Vulnerability assessment" aside="Automated · not a manual penetration test">
       {assessedAny ? (
         <div className="grid grid-cols-2 sm:grid-cols-6 print:grid-cols-6 gap-2">
           <div className="col-span-2 rounded-2xl bg-canvas px-4 py-3.5 print:bg-white print:border print:border-brand-100">
@@ -413,6 +413,8 @@ export const FullReport = ({ report }) => {
         <ActionPlan items={report.actionPlan} />
       </Section>
 
+      <AssessmentSection assessment={report.assessment} />
+
       <Section page title="Uptime and response time" aside={`${u.checks.toLocaleString()} checks, one a minute`}>
         <div className="space-y-6 break-inside-avoid">
           <UptimeStrip daily={u.daily} />
@@ -454,8 +456,6 @@ export const FullReport = ({ report }) => {
           </>
         ) : <NotMeasured>No PageSpeed run yet.</NotMeasured>}
       </Section>
-
-      <AssessmentSection assessment={report.assessment} />
 
       <Section title="Security" aside={pc ? `Public checks, ${fmtDate(pc.checkedAt)}` : null}>
         {pc ? (
