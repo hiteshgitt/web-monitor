@@ -13,7 +13,7 @@ export const EARLY_ACCESS_APK = {
     'Release Radar: security releases affecting your sites, from announcement to patched (Pro)',
     'Errors: grouped errors with file, line and stack trace (Pro)',
     'Server: CPU, memory, disks and attack attempts from the server agent (Pro)',
-    'Known vulnerabilities and suspicious files on the Security tab (Pro)',
+    'Known vulnerabilities with CVSS, including WordPress plugins, and suspicious files on the Security tab (Pro)',
     'Tapping a Pro alert opens the right section',
   ],
 };

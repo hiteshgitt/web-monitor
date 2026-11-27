@@ -86,12 +86,13 @@ export function VulnerabilitiesCard({ data, platform, onOpenRadar }) {
             <SeverityChip severity={p.severity} />
             <Text style={styles.pkg}>{p.name}</Text>
             <Text style={styles.kicker}>v{p.version}</Text>
+            {p.cvss?.score != null ? <Text style={styles.kicker}>CVSS {Number(p.cvss.score).toFixed(1)}</Text> : null}
           </View>
           {p.aliases?.[0] || p.ids?.[0] ? <Text style={styles.mono}>{p.aliases?.[0] || p.ids[0]}{p.ids?.length > 1 ? ` +${p.ids.length - 1}` : ''}</Text> : null}
           {p.summary ? <Text style={styles.body}>{p.summary}</Text> : null}
           <Text style={styles.body}>
             <Text style={styles.todo}>What to do: </Text>
-            {p.fixed ? `update to ${p.fixed} or later.` : 'no fixed release yet: check the advisory for a workaround.'}
+            {p.fixed ? `update to ${p.fixed} or later.` : p.fixAbove ? `update to a version newer than ${p.fixAbove}.` : 'no fixed release yet: check the advisory for a workaround.'}
           </Text>
           {p.url ? <Pressable onPress={() => Linking.openURL(p.url)} hitSlop={6}><Text style={styles.link}>Advisory ›</Text></Pressable> : null}
         </View>

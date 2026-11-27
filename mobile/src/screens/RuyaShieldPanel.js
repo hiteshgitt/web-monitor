@@ -118,7 +118,7 @@ export default function RuyaShieldPanel({ siteId, session, onExpired }) {
           {(findings?.top || []).map((f, i) => (
             <View key={`${f.title}-${i}`} style={styles.finding}>
               <Text style={[styles.badge, { color: STYLE[f.severity]?.fg, backgroundColor: STYLE[f.severity]?.bg }]}>{f.severity.toUpperCase()}</Text>
-              <Text style={styles.findingTitle} numberOfLines={2}>{f.title}</Text>
+              <Text style={styles.findingTitle} numberOfLines={2}>{f.title}{f.cvss?.score != null ? ` · CVSS ${Number(f.cvss.score).toFixed(1)}` : ''}</Text>
             </View>
           ))}
           <Text style={styles.muted}>

@@ -40,3 +40,8 @@ public/downloads/*.apk
 accounts/.dev.vars
 accounts/.wrangler/
 accounts/node_modules
+
+# Local artefacts
+__pycache__/
+/screenshots/
+/videos/

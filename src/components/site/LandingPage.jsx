@@ -35,10 +35,11 @@ const FEATURES = [
   { icon: Search, title: 'SEO checks', text: 'Missing descriptions, heading structure, alt text and links — turned into a clear fix checklist.' },
   { icon: Brain, title: 'AI insights', text: 'Pro: an AI assistant reads your real site data and explains what to fix first.', pro: true },
   { icon: Puzzle, title: 'Plugin and package audits', text: 'Pro: every plugin and package with its latest release, outdated and inactive ones flagged.', pro: true },
-  { icon: ShieldAlert, title: 'Known vulnerabilities', text: 'Pro: installed npm and Composer packages checked against OSV.dev, plus your PHP, Node.js and WordPress versions. Alerts the moment something new affects a site.', pro: true },
+  { icon: ShieldAlert, title: 'Known vulnerabilities with CVSS', text: 'Pro: WordPress plugins checked against the official CVE List, npm and Composer packages against OSV.dev, plus your PHP, Node.js and WordPress versions. Each issue comes with its CVSS score and the version that fixes it.', pro: true },
   { icon: Activity, title: 'Root-cause diagnosis', text: 'When a site goes down we say what broke (database, PHP memory, a fatal error) and what to do, not just “500”.' },
   { icon: Radar, title: 'Release Radar', text: 'Pro: PHP, Node.js, WordPress and Next.js security releases matched to your sites, from the announcement to proof each one is patched.', pro: true },
   { icon: Monitor, title: 'Server agent', text: 'Pro: one command on your VPS. CPU and memory per process, disks and inodes, request floods and XSS / SQL-injection attempts per IP from your nginx or Apache logs, with alerts.', pro: true },
+  { icon: CheckCircle2, title: 'Client-ready assessment report', text: 'Pro: one PDF per site with uptime, speed, SSL, vulnerabilities by severity and CVSS, and exactly what was and was not assessed. Share a link or email it monthly. An automated assessment, not a penetration test.', pro: true },
   { icon: Search, title: 'Error tracking and file scan', text: 'Pro: every error with its file, line and stack trace, and a scan for backdoors, web shells and injected code with the exact line.', pro: true },
   { icon: Activity, title: 'Inode monitoring', text: 'The file count on your hosting, read by the integration, with an alert before the limit stops uploads, email and caching. No server access needed.' },
 ];
