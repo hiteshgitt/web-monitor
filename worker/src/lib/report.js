@@ -123,7 +123,7 @@ async function patchingFor(env, site, from, now) {
     openCount: advisories.filter((a) => a.state === 'affected').length,
     medianHoursToPatch: patched.length ? patched.map((a) => a.hoursToPatch).sort((x, y) => x - y)[Math.floor((patched.length - 1) / 2)] : null,
     runtime: known?.runtime || [],
-    packages: (known?.packages || []).slice(0, 10).map((p) => ({ name: p.name, version: p.version, severity: p.severity, fixed: p.fixed, cve: p.aliases?.[0] || p.ids?.[0] || null })),
+    packages: (known?.packages || []).slice(0, 10).map((p) => ({ name: p.name, version: p.version, severity: p.severity, fixed: p.fixed, cve: p.aliases?.[0] || p.ids?.[0] || null, cvss: p.cvss || null })),
     packagesCheckedAt: known?.checkedAt || null,
   };
 }

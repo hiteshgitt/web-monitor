@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compareVersions, fixedVersion, newProblems, runtimeIssues } from '../src/lib/vulnerabilities.js';
+import { advisoryCvss, advisorySeverity, compareVersions, cvss3Score, fixedVersion, newProblems, runtimeIssues } from '../src/lib/vulnerabilities.js';
 import { runtimeFrom } from '../src/lib/monitor.js';
 
 const today = new Date('2026-11-19T12:00:00Z');
@@ -77,4 +77,29 @@ test('security config keeps known keys with plain values only', () => {
 test('Node.js flags are kept as security config', () => {
   assert.deepEqual(securityConfigFrom({ security_config: { 'node.permission_model': true, 'node.env': 'production', 'node.secret': 'x' } }),
     { 'node.permission_model': true, 'node.env': 'production' });
+});
+
+test('CVSS v3.x base scores match the FIRST calculator', () => {
+  assert.equal(cvss3Score('CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'), 9.8);
+  assert.equal(cvss3Score('CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H'), 10);
+  assert.equal(cvss3Score('CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N'), 6.1);
+  assert.equal(cvss3Score('CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N'), 7.5);
+  assert.equal(cvss3Score('CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N'), 5.9);
+  assert.equal(cvss3Score('CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N'), 0);
+  assert.equal(cvss3Score('CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N'), null);
+  assert.equal(cvss3Score('garbage'), null);
+});
+
+test('advisory CVSS: highest v3 score wins, v4-only keeps the vector, severity falls back to the score', () => {
+  const both = { severity: [
+    { type: 'CVSS_V3', score: 'CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N' },
+    { type: 'CVSS_V3', score: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' },
+    { type: 'CVSS_V4', score: 'CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N' },
+  ] };
+  assert.deepEqual(advisoryCvss(both), { score: 9.8, vector: 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H' });
+  assert.deepEqual(advisoryCvss({ severity: [both.severity[2]] }), { score: null, vector: both.severity[2].score });
+  assert.deepEqual(advisoryCvss({}), { score: null, vector: null });
+  assert.equal(advisorySeverity({ ...both, database_specific: { severity: 'MODERATE' } }), 'moderate'); // the advisory's own label wins
+  assert.equal(advisorySeverity(both), 'critical');
+  assert.equal(advisorySeverity({}), 'unknown');
 });

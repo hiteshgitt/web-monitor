@@ -17,6 +17,13 @@ export const SeverityChip = ({ severity }) => (
   </span>
 );
 
+// CVSS base score (v3.x, computed from the advisory's vector). A v4.0 vector without a computed score shows as "CVSS 4.0".
+export const CvssChip = ({ cvss }) => {
+  if (!cvss?.vector && cvss?.score == null) return null;
+  const label = cvss.score != null ? `CVSS ${cvss.score.toFixed(1)}` : 'CVSS 4.0';
+  return <span title={cvss.vector || undefined} className="px-2 py-0.5 rounded-md text-[10px] font-extrabold tabular-nums bg-ink/5 text-ink-soft">{label}</span>;
+};
+
 // The fixed version for this site's own branch (PHP / WordPress by major.minor, Node.js / Next.js by major).
 const siteTarget = (a) => {
   const parts = String(a.versionSeen || '').split('.');
@@ -86,6 +93,7 @@ const VulnerabilitiesPanel = ({ known, inventory, platform, advisories = [] }) =
               <SeverityChip severity={p.severity} />
               <span className="font-extrabold text-ink">{p.name}</span>
               <span className="text-[11px] font-bold text-ink-muted">v{p.version}</span>
+              <CvssChip cvss={p.cvss} />
               {(p.aliases?.[0] || p.ids?.[0]) && <span className="text-[11px] font-mono text-ink-muted">{p.aliases?.[0] || p.ids[0]}{p.ids?.length > 1 ? ` +${p.ids.length - 1}` : ''}</span>}
             </div>
             {p.summary && <div className="text-[13px] text-ink-soft mt-1.5">{p.summary}</div>}

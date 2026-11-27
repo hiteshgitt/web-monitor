@@ -157,7 +157,7 @@ const PatchingSection = ({ patching }) => {
       {(patching.runtime.length > 0 || patching.packages.length > 0) && (
         <ul className="mt-4 space-y-1.5 text-sm">
           {patching.runtime.map((r) => <li key={r.key} className="text-ink"><span className="font-semibold">{r.component} {r.version}:</span> {r.title}. {r.fix}</li>)}
-          {patching.packages.map((p) => <li key={`${p.name}@${p.version}`} className="text-ink"><span className="font-semibold">{p.name} {p.version}</span> ({p.severity}{p.cve ? `, ${p.cve}` : ''}){p.fixed ? ` → update to ${p.fixed}` : ''}</li>)}
+          {patching.packages.map((p) => <li key={`${p.name}@${p.version}`} className="text-ink"><span className="font-semibold">{p.name} {p.version}</span> ({p.severity}{p.cvss?.score != null ? `, CVSS ${p.cvss.score.toFixed(1)}` : ''}{p.cve ? `, ${p.cve}` : ''}){p.fixed ? ` → update to ${p.fixed}` : ''}</li>)}
         </ul>
       )}
     </Section>
@@ -201,7 +201,8 @@ const SecuritySection = ({ security, shared }) => {
           {security.top.map((f, i) => (
             <li key={`${f.title}-${i}`} className="flex items-center gap-3 px-4 py-2.5 text-sm">
               <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-canvas text-ink-soft">{f.severity}</span>
-              <span className="text-ink">{f.title}</span>
+              <span className="text-ink flex-1 min-w-0">{f.title}</span>
+              {f.cvss?.score != null && <span title={f.cvss.vector || undefined} className="text-[11px] font-bold tabular-nums text-ink-muted whitespace-nowrap">CVSS {Number(f.cvss.score).toFixed(1)}</span>}
             </li>
           ))}
         </ul>
@@ -464,9 +465,9 @@ export const FullReport = ({ report }) => {
           <li>Uptime and response time come from Web Monitor checking the site once a minute from its own servers.</li>
           <li>Speed comes from Google PageSpeed Insights (lab test) and the Chrome UX Report (real visitors), refreshed weekly.</li>
           <li>SSL grade from Qualys SSL Labs, blocklist status from Google Safe Browsing, headers from a request to the home page.</li>
-          <li>Security findings come from RuyaShield assessments of verified sites. Only counts and titles are included, never evidence.</li>
+          <li>Security findings come from RuyaShield assessments of verified sites. Only counts, titles and CVSS scores are included, never evidence.</li>
           <li>Site health and SEO are reported by the Web Monitor integration installed on the site.</li>
-          <li>Anything without data is shown as &quot;not measured&quot;. This report is not a certification.</li>
+          <li>Anything without data is shown as &quot;not measured&quot;. This is an automated assessment, not a penetration test or a certification. CVSS scores are v3.x base scores computed from each advisory’s vector.</li>
         </ul>
       </Section>
 

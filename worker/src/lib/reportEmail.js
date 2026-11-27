@@ -136,7 +136,7 @@ export function renderEmail(report, link, unsubscribeLink, appBase = 'https://we
       <td style="${FONT};font-size:13px;color:#4a5079;padding:7px 0;border-top:1px solid #eef0fa">${esc(i.message || i.status)}</td></tr>`).join('') : '';
 
   const findings = sec.open && sec.lastAssessment ? `<table role="presentation" cellpadding="0" cellspacing="0"><tr>${SEV.map(([k, fg, bg]) => `<td style="padding:0 6px 6px 0"><div style="${FONT};background:${bg};color:${fg};border-radius:10px;padding:8px 12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px">${k}<div style="font-size:20px;letter-spacing:0">${sec.open[k] ?? 0}</div></div></td>`).join('')}</tr></table>
-    ${(sec.top || []).map((f) => `<div style="${FONT};font-size:13px;color:#4a5079;padding:4px 0">&#8226; <b style="color:#1f2557">${esc(f.title)}</b> <span style="color:#8a90b2">(${esc(f.severity)})</span></div>`).join('')}` : '';
+    ${(sec.top || []).map((f) => `<div style="${FONT};font-size:13px;color:#4a5079;padding:4px 0">&#8226; <b style="color:#1f2557">${esc(f.title)}</b> <span style="color:#8a90b2">(${esc(f.severity)}${f.cvss?.score != null ? `, CVSS ${esc(Number(f.cvss.score).toFixed(1))}` : ''})</span></div>`).join('')}` : '';
 
   const section = (title, body) => `<tr><td style="padding:22px 28px 0"><div style="${FONT};font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#5868cf;padding-bottom:10px">${title}</div>${body}</td></tr>`;
 

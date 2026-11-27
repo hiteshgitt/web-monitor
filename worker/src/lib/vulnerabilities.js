@@ -40,10 +40,47 @@ export function fixedVersion(advisory, ecosystem, name, installed) {
   return fixes.sort((p, q) => compareVersions(p, q))[0] || null;
 }
 
+/** CVSS v3.x base score from a vector string (FIRST CVSS v3.1 spec, section 7). null for anything it cannot score. */
+export function cvss3Score(vector) {
+  const parts = String(vector || '').split('/');
+  if (!/^CVSS:3\.[01]$/.test(parts[0])) return null;
+  const m = Object.fromEntries(parts.slice(1).map((p) => p.split(':')));
+  const W = {
+    AV: { N: 0.85, A: 0.62, L: 0.55, P: 0.2 }, AC: { L: 0.77, H: 0.44 }, UI: { N: 0.85, R: 0.62 },
+    C: { H: 0.56, L: 0.22, N: 0 }, I: { H: 0.56, L: 0.22, N: 0 }, A: { H: 0.56, L: 0.22, N: 0 },
+  };
+  const scope = m.S;
+  const pr = (scope === 'C' ? { N: 0.85, L: 0.68, H: 0.5 } : { N: 0.85, L: 0.62, H: 0.27 })[m.PR];
+  const v = (k) => W[k][m[k]];
+  if ((scope !== 'U' && scope !== 'C') || [v('AV'), v('AC'), v('UI'), v('C'), v('I'), v('A'), pr].some((x) => x === undefined)) return null;
+  const iss = 1 - (1 - v('C')) * (1 - v('I')) * (1 - v('A'));
+  const impact = scope === 'U' ? 6.42 * iss : 7.52 * (iss - 0.029) - 3.25 * (iss - 0.02) ** 15;
+  if (impact <= 0) return 0;
+  const exploitability = 8.22 * v('AV') * v('AC') * pr * v('UI');
+  const roundUp = (x) => { const i = Math.round(x * 100000); return i % 10000 === 0 ? i / 100000 : (Math.floor(i / 10000) + 1) / 10; };
+  return roundUp(Math.min(scope === 'U' ? impact + exploitability : 1.08 * (impact + exploitability), 10));
+}
+
+/** The advisory's CVSS: the highest-scoring v3.x vector, else a v4.0 vector without a score. */
+export function advisoryCvss(advisory) {
+  let best = null;
+  for (const s of advisory.severity || []) {
+    if (s.type !== 'CVSS_V3') continue;
+    const score = cvss3Score(s.score);
+    if (score !== null && (!best || score > best.score)) best = { score, vector: s.score };
+  }
+  if (best) return best;
+  const v4 = (advisory.severity || []).find((s) => s.type === 'CVSS_V4' && /^CVSS:4\.0\//.test(s.score || ''));
+  return v4 ? { score: null, vector: v4.score } : { score: null, vector: null };
+}
+
+const severityFromScore = (n) => (n >= 9 ? 'critical' : n >= 7 ? 'high' : n >= 4 ? 'moderate' : n > 0 ? 'low' : 'unknown');
+
 export function advisorySeverity(advisory) {
   const s = String(advisory.database_specific?.severity || '').toLowerCase();
   if (SEVERITY_RANK[s] !== undefined) return s === 'medium' ? 'moderate' : s;
-  return 'unknown';
+  const { score } = advisoryCvss(advisory);
+  return score === null ? 'unknown' : severityFromScore(score);
 }
 
 // ---------- caches ----------
@@ -88,12 +125,13 @@ async function advisories(env, ids) {
       id: a.id, summary: String(a.summary || a.details || '').slice(0, 300), severity: advisorySeverity(a),
       aliases: JSON.stringify((a.aliases || []).filter((x) => /^CVE-/.test(x)).slice(0, 5)), fixed: JSON.stringify(fixed),
       url: (a.references || []).find((r) => r.type === 'ADVISORY')?.url || `https://osv.dev/vulnerability/${a.id}`, fetched_at: nowIso(),
+      cvss_score: advisoryCvss(a).score, cvss_vector: advisoryCvss(a).vector,
     };
     out.set(a.id, row);
-    writes.push(env.DB.prepare(`INSERT INTO osv_vulns (id, summary, severity, aliases, fixed, url, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+    writes.push(env.DB.prepare(`INSERT INTO osv_vulns (id, summary, severity, aliases, fixed, url, fetched_at, cvss_score, cvss_vector) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET summary = excluded.summary, severity = excluded.severity, aliases = excluded.aliases,
-      fixed = excluded.fixed, url = excluded.url, fetched_at = excluded.fetched_at`)
-      .bind(row.id, row.summary, row.severity, row.aliases, row.fixed, row.url, row.fetched_at));
+      fixed = excluded.fixed, url = excluded.url, fetched_at = excluded.fetched_at, cvss_score = excluded.cvss_score, cvss_vector = excluded.cvss_vector`)
+      .bind(row.id, row.summary, row.severity, row.aliases, row.fixed, row.url, row.fetched_at, row.cvss_score, row.cvss_vector));
   }
   if (writes.length) await env.DB.batch(writes);
   return out;
@@ -139,7 +177,11 @@ export async function vulnerablePackages(env, ecosystemKey, packages) {
     const rows = h.ids.map((id) => details.get(id)).filter(Boolean);
     const worst = rows.reduce((w, r) => (SEVERITY_RANK[r.severity] > SEVERITY_RANK[w] ? r.severity : w), 'unknown');
     const fixes = rows.map((r) => firstFixAbove(r, ecosystem, h.name, h.version)).filter(Boolean).sort((p, q) => compareVersions(q, p));
+    // The package's CVSS is its highest-scoring advisory (a vector without a score only when none can be scored).
+    const scored = rows.filter((r) => r.cvss_score != null).sort((p, q) => q.cvss_score - p.cvss_score)[0];
+    const cvss = scored ? { score: scored.cvss_score, vector: scored.cvss_vector } : rows.find((r) => r.cvss_vector) ? { score: null, vector: rows.find((r) => r.cvss_vector).cvss_vector } : null;
     return {
+      cvss,
       name: h.name, version: h.version, ids: h.ids.slice(0, 10), severity: worst,
       summary: rows[0]?.summary || null, fixed: fixes[0] || null, // the highest first-fix covers every advisory listed
       aliases: rows.flatMap((r) => parseJson(r.aliases) || []).slice(0, 5), url: rows[0]?.url || `https://osv.dev/list?q=${encodeURIComponent(h.name)}`,
@@ -244,7 +286,7 @@ function alertFor(site, fresh) {
   if (!n) return null;
   const parts = [
     ...fresh.runtime.map((r) => `${r.title}. ${r.fix}`),
-    ...fresh.packages.slice(0, 3).map((p) => `${p.name} ${p.version} (${p.severity}${p.aliases[0] ? `, ${p.aliases[0]}` : ''})${p.fixed ? `: update to ${p.fixed} or later` : ''}`),
+    ...fresh.packages.slice(0, 3).map((p) => `${p.name} ${p.version} (${p.severity}${p.cvss?.score != null ? `, CVSS ${p.cvss.score}` : ''}${p.aliases[0] ? `, ${p.aliases[0]}` : ''})${p.fixed ? `: update to ${p.fixed} or later` : ''}`),
   ];
   if (fresh.packages.length > 3) parts.push(`and ${fresh.packages.length - 3} more package(s)`);
   return {
