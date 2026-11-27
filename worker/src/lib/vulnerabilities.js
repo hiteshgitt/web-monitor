@@ -74,6 +74,28 @@ export function advisoryCvss(advisory) {
   return v4 ? { score: null, vector: v4.score } : { score: null, vector: null };
 }
 
+/**
+ * CVSS for a CVE from the NVD (used for Release Radar items, which have CVE ids but no package advisory).
+ * Prefers the NVD's own (Primary) v3.x vector, else the highest-scoring one; v4.0 only as a vector. Cached a day;
+ * a CVE the NVD has not scored yet is null, never guessed.
+ */
+export async function cveCvss(env, cve) {
+  if (!/^CVE-\d{4}-\d{4,}$/.test(String(cve || ''))) return null;
+  const data = await cachedReference(env, `nvd:${cve}`, `https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${cve}`, undefined, 24 * 3600e3);
+  return nvdCvss(data);
+}
+
+export function nvdCvss(data) {
+  const metrics = data?.vulnerabilities?.[0]?.cve?.metrics || {};
+  const v3 = [...(metrics.cvssMetricV31 || []), ...(metrics.cvssMetricV30 || [])]
+    .map((m) => ({ primary: m.type === 'Primary', vector: m.cvssData?.vectorString, score: cvss3Score(m.cvssData?.vectorString) }))
+    .filter((m) => m.score !== null)
+    .sort((a, b) => (b.primary - a.primary) || (b.score - a.score))[0];
+  if (v3) return { score: v3.score, vector: v3.vector };
+  const v4 = (metrics.cvssMetricV40 || []).find((m) => /^CVSS:4\.0\//.test(m.cvssData?.vectorString || ''));
+  return v4 ? { score: null, vector: v4.cvssData.vectorString } : null;
+}
+
 const severityFromScore = (n) => (n >= 9 ? 'critical' : n >= 7 ? 'high' : n >= 4 ? 'moderate' : n > 0 ? 'low' : 'unknown');
 
 export function advisorySeverity(advisory) {

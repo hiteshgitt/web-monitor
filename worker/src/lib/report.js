@@ -5,6 +5,7 @@ import { dayKey, daysAgo, parseJson } from './util.js';
 import { readSecurityScan } from './securityScan.js';
 import { readVitals } from './webVitals.js';
 import { ruyashieldForSite } from './ruyashield.js';
+import { cveCvss } from './vulnerabilities.js';
 
 export const REPORT_PERIODS = [7, 30, 90];
 const MAX_INCIDENTS = 10;
@@ -116,6 +117,11 @@ async function patchingFor(env, site, from, now) {
       hoursToPatch: r.patched_at ? Math.round((Date.parse(r.patched_at) - start) / 360000) / 10 : null,
     };
   });
+  // CVSS for the first CVE of each item, from the NVD (cached; a few lookups per report at most).
+  for (const a of advisories.slice(0, 6)) {
+    a.cvss = a.cves[0] ? await cveCvss(env, a.cves[0]).catch(() => null) : null;
+  }
+  const packages = known?.packages || [];
   const patched = advisories.filter((a) => a.hoursToPatch != null);
   return {
     advisories,
@@ -123,8 +129,56 @@ async function patchingFor(env, site, from, now) {
     openCount: advisories.filter((a) => a.state === 'affected').length,
     medianHoursToPatch: patched.length ? patched.map((a) => a.hoursToPatch).sort((x, y) => x - y)[Math.floor((patched.length - 1) / 2)] : null,
     runtime: known?.runtime || [],
-    packages: (known?.packages || []).slice(0, 10).map((p) => ({ name: p.name, version: p.version, severity: p.severity, fixed: p.fixed, cve: p.aliases?.[0] || p.ids?.[0] || null, cvss: p.cvss || null })),
+    runtimeKnown: Boolean(runtime),
+    packageTotal: packages.length,
+    packageSeverities: packages.map((p) => p.severity),
+    packageMaxCvss: packages.reduce((m, p) => (p.cvss?.score != null && p.cvss.score > (m ?? -1) ? p.cvss.score : m), null),
+    packages: packages.slice(0, 10).map((p) => ({ name: p.name, version: p.version, severity: p.severity, fixed: p.fixed, cve: p.aliases?.[0] || p.ids?.[0] || null, cvss: p.cvss || null })),
     packagesCheckedAt: known?.checkedAt || null,
+  };
+}
+
+// One summary of every known vulnerability on the site, by severity, with the highest CVSS and what was (and was
+// not) assessed. Counts come only from checks that ran; a part that did not run is "not assessed", never zero.
+const NORMAL_SEVERITY = { critical: 'critical', high: 'high', moderate: 'medium', medium: 'medium', low: 'low' };
+export function vulnerabilityAssessment({ patching, security, publicChecks, siteHealth }) {
+  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+  const add = (severity, n = 1) => { const k = NORMAL_SEVERITY[severity]; if (k) counts[k] += n; };
+  const cvssScores = [];
+  const packagesChecked = Boolean(patching?.packagesCheckedAt);
+  if (packagesChecked) {
+    for (const s of patching.packageSeverities || []) add(s);
+    if (patching.packageMaxCvss != null) cvssScores.push(patching.packageMaxCvss);
+  }
+  for (const r of patching?.runtime || []) add(r.severity);
+  for (const a of patching?.advisories || []) {
+    if (a.state !== 'affected') continue;
+    add(a.severity);
+    if (a.cvss?.score != null) cvssScores.push(a.cvss.score);
+  }
+  const rsAssessed = Boolean(security?.tracked && security.open && security.lastAssessment);
+  if (rsAssessed) {
+    for (const k of Object.keys(counts)) add(k, security.open[k] || 0);
+    for (const f of security.top || []) if (f.cvss?.score != null) cvssScores.push(Number(f.cvss.score));
+  }
+  const pluginsKnown = siteHealth?.plugins?.total != null;
+  const scope = [
+    { area: 'Installed npm and Composer packages, against the OSV.dev vulnerability database', assessed: packagesChecked,
+      detail: packagesChecked ? `${patching.packageTotal} vulnerable package${patching.packageTotal === 1 ? '' : 's'}` : 'The integration has not reported a package list.' },
+    { area: 'PHP, Node.js and WordPress versions: end of life and security releases', assessed: Boolean(patching?.runtimeKnown),
+      detail: patching?.runtimeKnown ? 'From the versions the site reports.' : 'The site has not reported its versions.' },
+    { area: 'WordPress plugins', assessed: false,
+      detail: pluginsKnown ? `Outdated plugins are counted (${siteHealth.plugins.outdated ?? 0}), but plugins are not checked against a vulnerability database.` : 'Not reported.' },
+    { area: 'SSL / TLS, security headers and Google Safe Browsing', assessed: Boolean(publicChecks), detail: publicChecks ? 'Public checks from outside the site.' : 'No public check yet.' },
+    { area: 'RuyaShield automated security checks', assessed: rsAssessed,
+      detail: rsAssessed ? 'Open findings from the latest RuyaShield assessment (these can include the vulnerable packages above, shared from Web Monitor).' : !security?.connected ? 'RuyaShield is not connected.' : !security.tracked ? 'The site is not in RuyaShield.' : 'No RuyaShield assessment has run yet.' },
+    { area: 'Manual penetration testing', assessed: false, detail: 'Not part of this automated assessment.' },
+  ];
+  return {
+    counts,
+    total: Object.values(counts).reduce((x, y) => x + y, 0),
+    highestCvss: cvssScores.length ? Math.max(...cvssScores) : null,
+    scope,
   };
 }
 
@@ -257,6 +311,8 @@ export async function buildReport(env, userId, site, days, now = new Date()) {
     publicChecks: publicChecksScore(scan),
   };
 
+  const assessment = vulnerabilityAssessment({ patching, security, publicChecks, siteHealth });
+
   return {
     site: { id: site.id, name: site.name, url: site.url, platform: site.platform },
     period: { days, from: from.toISOString(), to: now.toISOString() },
@@ -270,6 +326,7 @@ export async function buildReport(env, userId, site, days, now = new Date()) {
     seo,
     recommendations,
     patching,
+    assessment,
     actionPlan: actionPlan({ uptime, security, publicChecks, speed, siteHealth, seo, patching }),
   };
 }

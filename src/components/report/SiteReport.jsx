@@ -132,7 +132,7 @@ const STATE_STYLE = { affected: 'bg-rose-50 text-rose-700', patched: 'bg-emerald
 const PatchingSection = ({ patching }) => {
   if (!patching || (!patching.advisories.length && !patching.runtime.length && !patching.packages.length)) return null;
   return (
-    <Section title="Security releases and patching" aside={patching.medianHoursToPatch != null ? `Median time to patch: ${patching.medianHoursToPatch} h` : null}>
+    <Section title="Security releases and patching" aside={patching.medianHoursToPatch != null ? (patching.medianHoursToPatch < 1 ? 'Median time to patch: under an hour' : `Median time to patch: ${patching.medianHoursToPatch} h`) : null}>
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Patched in period" value={patching.patchedCount} />
         <Stat label="Still open" value={patching.openCount + patching.runtime.length} />
@@ -144,10 +144,10 @@ const PatchingSection = ({ patching }) => {
             <li key={`${a.title}-${i}`} className="px-4 py-2.5 text-sm flex flex-wrap items-center justify-between gap-2">
               <span className="min-w-0">
                 <span className="font-semibold text-ink">{a.title}</span>
-                <span className="block text-[12px] text-ink-muted">{a.component} {a.version}{a.state === 'affected' && a.target ? ` → ${a.target}` : ''}{a.cves.length ? ` · ${a.cves.join(', ')}` : ''} · flagged {fmtDate(a.flaggedAt)}</span>
+                <span className="block text-[12px] text-ink-muted">{a.component} {a.version}{a.state === 'affected' && a.target ? ` → ${a.target}` : ''}{a.cves.length ? ` · ${a.cves.join(', ')}` : ''}{a.cvss?.score != null ? ` · CVSS ${a.cvss.score.toFixed(1)}` : ''} · flagged {fmtDate(a.flaggedAt)}</span>
               </span>
               <span className="flex items-center gap-2 text-[12px]">
-                {a.hoursToPatch != null && <span className="text-ink-muted">patched in {a.hoursToPatch} h</span>}
+                {a.hoursToPatch != null && <span className="text-ink-muted">{a.hoursToPatch < 1 ? 'patched within an hour' : `patched in ${a.hoursToPatch} h`}</span>}
                 <span className={`px-2 py-0.5 rounded-md font-bold ${STATE_STYLE[a.state] || ''}`}>{a.state === 'patched' && !a.patchedAt ? 'Up to date' : STATE_LABEL[a.state] || a.state}</span>
               </span>
             </li>
@@ -160,6 +160,45 @@ const PatchingSection = ({ patching }) => {
           {patching.packages.map((p) => <li key={`${p.name}@${p.version}`} className="text-ink"><span className="font-semibold">{p.name} {p.version}</span> ({p.severity}{p.cvss?.score != null ? `, CVSS ${p.cvss.score.toFixed(1)}` : ''}{p.cve ? `, ${p.cve}` : ''}){p.fixed ? ` → update to ${p.fixed}` : ''}</li>)}
         </ul>
       )}
+    </Section>
+  );
+};
+
+// Vulnerability assessment: every known vulnerability by severity, the highest CVSS, and an honest scope list.
+const ASSESS_SEVERITIES = [
+  ['critical', 'Critical', 'bg-rose-100 text-rose-800'], ['high', 'High', 'bg-orange-100 text-orange-800'],
+  ['medium', 'Medium', 'bg-amber-100 text-amber-800'], ['low', 'Low', 'bg-brand-50 text-brand-700'],
+];
+const AssessmentSection = ({ assessment }) => {
+  if (!assessment) return null;
+  const assessedAny = assessment.scope.some((s) => s.assessed);
+  return (
+    <Section page title="Vulnerability assessment" aside="Automated · not a penetration test">
+      {assessedAny ? (
+        <div className="grid grid-cols-2 sm:grid-cols-6 print:grid-cols-6 gap-2">
+          <div className="col-span-2 rounded-2xl bg-canvas px-4 py-3.5 print:bg-white print:border print:border-brand-100">
+            <div className="text-[11px] font-extrabold uppercase tracking-widest text-ink-muted">Known vulnerabilities</div>
+            <div className="text-2xl font-extrabold text-ink tabular-nums mt-1">{assessment.total}</div>
+            <div className="text-xs text-ink-muted mt-0.5">{assessment.highestCvss != null ? `Highest CVSS ${assessment.highestCvss.toFixed(1)}` : assessment.total ? 'No CVSS score available' : 'in the assessed areas'}</div>
+          </div>
+          {ASSESS_SEVERITIES.map(([key, label, style]) => (
+            <div key={key} className={`rounded-xl px-3 py-2.5 ${style}`}>
+              <div className="text-[10px] font-extrabold uppercase tracking-widest opacity-80">{label}</div>
+              <div className="text-xl font-extrabold tabular-nums">{assessment.counts[key]}</div>
+            </div>
+          ))}
+        </div>
+      ) : <NotMeasured>Nothing could be assessed yet.</NotMeasured>}
+      <h3 className="mt-6 text-[11px] font-extrabold uppercase tracking-widest text-ink-muted">What was assessed</h3>
+      <ul className="mt-2 divide-y divide-brand-100 rounded-xl border border-brand-100">
+        {assessment.scope.map((s) => (
+          <li key={s.area} className="px-4 py-2.5 text-sm flex gap-3 break-inside-avoid">
+            <span className={`mt-0.5 shrink-0 px-2 py-0.5 h-fit rounded-md text-[10px] font-extrabold uppercase tracking-wider ${s.assessed ? 'bg-emerald-50 text-emerald-700' : 'bg-canvas text-ink-muted'}`}>{s.assessed ? 'Assessed' : 'Not assessed'}</span>
+            <span className="min-w-0"><span className="font-semibold text-ink">{s.area}</span><span className="block text-[12px] text-ink-muted">{s.detail}</span></span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-[12px] text-ink-muted">Severity counts combine vulnerable packages, unsupported or unpatched PHP / Node.js / WordPress versions, open security releases and open RuyaShield findings. CVSS scores are v3.x base scores.</p>
     </Section>
   );
 };
@@ -386,6 +425,8 @@ export const FullReport = ({ report }) => {
           </>
         ) : <NotMeasured>No PageSpeed run yet.</NotMeasured>}
       </Section>
+
+      <AssessmentSection assessment={report.assessment} />
 
       <Section title="Security" aside={pc ? `Public checks, ${fmtDate(pc.checkedAt)}` : null}>
         {pc ? (
