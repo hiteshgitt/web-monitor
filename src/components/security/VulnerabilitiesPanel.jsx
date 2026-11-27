@@ -98,7 +98,7 @@ const VulnerabilitiesPanel = ({ known, inventory, platform, advisories = [] }) =
             </div>
             {p.summary && <div className="text-[13px] text-ink-soft mt-1.5">{p.summary}</div>}
             <div className="text-[13px] mt-1.5 flex items-center gap-3 flex-wrap">
-              <span><span className="font-bold text-brand-700">What to do: </span>{p.fixed ? `update to ${p.fixed} or later` : 'no fixed release yet: check the advisory for a workaround'}.</span>
+              <span><span className="font-bold text-brand-700">What to do: </span>{p.fixed ? `update to ${p.fixed} or later` : p.fixAbove ? `update to a version newer than ${p.fixAbove}` : 'no fixed release yet: check the advisory for a workaround'}.</span>
               {p.url && <a href={p.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-bold text-brand-700 hover:underline">Advisory <ExternalLink size={12} /></a>}
             </div>
           </div>

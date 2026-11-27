@@ -211,6 +211,89 @@ export async function vulnerablePackages(env, ecosystemKey, packages) {
   }).sort((p, q) => SEVERITY_RANK[q.severity] - SEVERITY_RANK[p.severity]);
 }
 
+// ---------- WordPress plugins ----------
+// Matched against wp_vulns: WordPress plugin CVEs from the official CVE List, loaded by the wp-vulns GitHub Action.
+
+const WP_DATA_MAX_AGE_MS = 3 * 24 * 3600e3;
+
+/** Compares plugin versions segment by segment ("1.3.9.7" vs "1.3.10"); suffixes after the numbers are ignored. */
+export function compareLoose(a, b) {
+  const seg = (v) => (String(v || '').trim().replace(/^v/i, '').match(/^\d+(?:\.\d+)*/)?.[0] || '').split('.').filter(Boolean).map(Number);
+  const x = seg(a); const y = seg(b);
+  if (!x.length || !y.length) return null;
+  for (let i = 0; i < Math.max(x.length, y.length); i += 1) {
+    const p = x[i] || 0; const q = y[i] || 0;
+    if (p !== q) return p < q ? -1 : 1;
+  }
+  return 0;
+}
+
+/** Whether `version` is in any of the ranges ([{from, lt, lte}] or [{exact}]). An unreadable version never matches. */
+export function inRanges(version, ranges) {
+  return (ranges || []).some((r) => {
+    if (r.exact) return compareLoose(version, r.exact) === 0;
+    if (r.from && (compareLoose(version, r.from) ?? -1) < 0) return false;
+    if (r.lt) return compareLoose(version, r.lt) === -1;
+    if (r.lte) { const c = compareLoose(version, r.lte); return c === -1 || c === 0; }
+    return false;
+  });
+}
+
+/** The version that clears every matched CVE: {fixed} when the CVEs name it, else {fixAbove} (newer than this). */
+export function wpFix(rows) {
+  let lt = null; let lte = null;
+  for (const r of rows) for (const g of r.ranges) {
+    if (g.lt && (!lt || compareLoose(g.lt, lt) === 1)) lt = g.lt;
+    if (g.lte && (!lte || compareLoose(g.lte, lte) === 1)) lte = g.lte;
+    if (g.exact && (!lte || compareLoose(g.exact, lte) === 1)) lte = g.exact;
+  }
+  if (lte && (!lt || compareLoose(lte, lt) >= 0)) return { fixed: null, fixAbove: lte };
+  return { fixed: lt, fixAbove: null };
+}
+
+/** The installed plugins' slugs and versions, from the integration's plugin list. */
+export function wpPluginItems(list) {
+  return (Array.isArray(list) ? list : []).map((p) => {
+    const file = String(p?.file || '');
+    const slug = (file.includes('/') ? file.split('/')[0] : file.replace(/\.php$/i, '')).toLowerCase();
+    return { slug, name: String(p?.name || slug), version: String(p?.version || '').trim() };
+  }).filter((p) => /^[a-z0-9][a-z0-9_-]{0,99}$/.test(p.slug) && p.version);
+}
+
+/**
+ * Vulnerable WordPress plugins, in the same shape as vulnerablePackages(). Throws when the CVE data is missing or
+ * older than three days, so stale data never turns into "no vulnerabilities".
+ */
+export async function vulnerableWpPlugins(env, plugins, now = new Date()) {
+  const sync = await env.DB.prepare('SELECT synced_at FROM wp_vulns_sync WHERE id = 1').first();
+  if (!sync || now.getTime() - Date.parse(sync.synced_at) > WP_DATA_MAX_AGE_MS) throw new Error('WordPress vulnerability data is missing or stale');
+  const bySlug = new Map();
+  const slugs = [...new Set(plugins.map((p) => p.slug))];
+  for (let i = 0; i < slugs.length; i += 90) {
+    const chunk = slugs.slice(i, i + 90);
+    const { results } = await env.DB.prepare(`SELECT cve, slug, title, ranges, cvss_score, cvss_vector, severity, url FROM wp_vulns
+      WHERE slug IN (${chunk.map(() => '?').join(',')})`).bind(...chunk).all();
+    for (const r of results) {
+      const ranges = parseJson(r.ranges) || [];
+      if (!bySlug.has(r.slug)) bySlug.set(r.slug, []);
+      bySlug.get(r.slug).push({ ...r, ranges });
+    }
+  }
+  const out = [];
+  for (const p of plugins) {
+    const rows = (bySlug.get(p.slug) || []).filter((r) => inRanges(p.version, r.ranges))
+      .sort((a, b) => (b.cvss_score ?? -1) - (a.cvss_score ?? -1) || SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity]);
+    if (!rows.length) continue;
+    const worst = rows.reduce((w, r) => (SEVERITY_RANK[r.severity] > SEVERITY_RANK[w] ? r.severity : w), 'unknown');
+    out.push({
+      name: p.name, slug: p.slug, version: p.version, ecosystem: 'wordpress', ids: rows.map((r) => r.cve).slice(0, 10), severity: worst,
+      summary: rows[0].title, ...wpFix(rows), aliases: rows.map((r) => r.cve).slice(0, 5), url: rows[0].url,
+      cvss: rows[0].cvss_score != null ? { score: rows[0].cvss_score, vector: rows[0].cvss_vector } : null,
+    });
+  }
+  return out.sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity] || (b.cvss?.score ?? -1) - (a.cvss?.score ?? -1));
+}
+
 // ---------- runtime ----------
 
 const cycleOf = (version, depth) => (parseSemver(version) || []).slice(0, depth).join('.');
@@ -284,10 +367,11 @@ const PHP_PLATFORMS = ['laravel', 'php', 'codeigniter'];
 
 /** The site's installed packages from its integration, or null when it cannot report them. */
 async function installedPackages(site, fetchIntegration) {
-  const endpoint = site.platform === 'nextjs' ? 'libraries' : PHP_PLATFORMS.includes(site.platform) ? 'packages' : null;
+  const endpoint = site.platform === 'nextjs' ? 'libraries' : PHP_PLATFORMS.includes(site.platform) ? 'packages' : site.platform === 'wordpress' ? 'plugins' : null;
   if (!endpoint) return null;
   const data = await fetchIntegration(site, endpoint);
   if (!data || data.error) return null;
+  if (site.platform === 'wordpress') return Array.isArray(data.all_plugins) ? { ecosystem: 'wordpress', items: wpPluginItems(data.all_plugins) } : null;
   const items = data.all_libraries || data.all_packages || [];
   return Array.isArray(items) ? { ecosystem: site.platform === 'nextjs' ? 'npm' : 'packagist', items } : null;
 }
@@ -308,7 +392,7 @@ function alertFor(site, fresh) {
   if (!n) return null;
   const parts = [
     ...fresh.runtime.map((r) => `${r.title}. ${r.fix}`),
-    ...fresh.packages.slice(0, 3).map((p) => `${p.name} ${p.version} (${p.severity}${p.cvss?.score != null ? `, CVSS ${p.cvss.score}` : ''}${p.aliases[0] ? `, ${p.aliases[0]}` : ''})${p.fixed ? `: update to ${p.fixed} or later` : ''}`),
+    ...fresh.packages.slice(0, 3).map((p) => `${p.name} ${p.version} (${p.severity}${p.cvss?.score != null ? `, CVSS ${p.cvss.score}` : ''}${p.aliases[0] ? `, ${p.aliases[0]}` : ''})${p.fixed ? `: update to ${p.fixed} or later` : p.fixAbove ? `: update to a version newer than ${p.fixAbove}` : ''}`),
   ];
   if (fresh.packages.length > 3) parts.push(`and ${fresh.packages.length - 3} more package(s)`);
   return {
@@ -326,7 +410,7 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
   const { results: sites } = await env.DB.prepare(`SELECT w.* FROM websites w JOIN users u ON u.id = w.owner_id
     WHERE (u.plan = 'pro' OR u.role = 'admin') AND u.status = 'active' AND w.monitoring_enabled = 1`).all();
   const cutoff = new Date(at.getTime() - PACKAGE_RECHECK_MS).toISOString();
-  const due = new Set(sites.filter((s) => s.platform === 'nextjs' || PHP_PLATFORMS.includes(s.platform))
+  const due = new Set(sites.filter((s) => s.platform === 'nextjs' || s.platform === 'wordpress' || PHP_PLATFORMS.includes(s.platform))
     .filter((s) => !s.vulns_checked_at || s.vulns_checked_at < cutoff)
     .sort((a, b) => (a.vulns_checked_at || '').localeCompare(b.vulns_checked_at || ''))
     .slice(0, PACKAGE_SITES_PER_RUN).map((s) => s.id));
@@ -346,12 +430,15 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
       try {
         const inv = await installedPackages(site, fetchIntegration);
         if (inv) {
-          after.packages = await vulnerablePackages(env, inv.ecosystem, inv.items);
+          after.packages = inv.ecosystem === 'wordpress' ? await vulnerableWpPlugins(env, inv.items, at) : await vulnerablePackages(env, inv.ecosystem, inv.items);
           packagesChecked = true;
           checked += 1;
           // RuyaShield turns these into findings for organizations that verified this site (if connected).
-          await shareVulnerablePackages(env, site, inv.ecosystem, after.packages)
-            .catch((error) => console.error('sharing packages with RuyaShield failed', site.id, error.message));
+          // WordPress plugins are not shared yet: RuyaShield's package check knows npm and Composer only.
+          if (inv.ecosystem !== 'wordpress') {
+            await shareVulnerablePackages(env, site, inv.ecosystem, after.packages)
+              .catch((error) => console.error('sharing packages with RuyaShield failed', site.id, error.message));
+          }
         }
       } catch (error) {
         failed += 1;
@@ -359,7 +446,7 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
       }
     }
     // "All OK" needs a complete check: release lists loaded, and (for Next.js / PHP framework sites) the packages checked.
-    const checksPackages = site.platform === 'nextjs' || PHP_PLATFORMS.includes(site.platform);
+    const checksPackages = site.platform === 'nextjs' || site.platform === 'wordpress' || PHP_PLATFORMS.includes(site.platform);
     const complete = runtimeComplete && (!checksPackages || packagesChecked || Boolean(before.checkedAt));
     const total = (after.packages || []).length + after.runtime.length;
     const beforeTotal = (before.packages || []).length + (before.runtime || []).length;

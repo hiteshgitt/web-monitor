@@ -1,0 +1,53 @@
+# WordPress plugin vulnerabilities for Web Monitor: from the official CVE List into the D1 table wp_vulns.
+# Hourly: the latest delta release (CVEs changed today). Sundays 01:20 UTC and on demand: the full list, which also
+# removes CVEs that left it. Needs repository secrets CLOUDFLARE_API_TOKEN (D1 edit) and CLOUDFLARE_ACCOUNT_ID.
+name: wp-vulns
+on:
+  schedule:
+    - cron: '45 * * * *'
+    - cron: '20 1 * * 0'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'full or delta'
+        default: 'full'
+concurrency: { group: wp-vulns, cancel-in-progress: false }
+permissions: { contents: read }
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Choose mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT";
+          elif [ "${{ github.event.schedule }}" = "20 1 * * 0" ]; then echo "mode=full" >> "$GITHUB_OUTPUT";
+          else echo "mode=delta" >> "$GITHUB_OUTPUT"; fi
+      - name: Download from the CVE List
+        id: dl
+        run: |
+          tag=$(gh release view --repo CVEProject/cvelistV5 --json tagName -q .tagName)
+          pattern=$([ "${{ steps.mode.outputs.mode }}" = full ] && echo '*_all_CVEs_at_midnight.zip.zip' || echo '*_delta_CVEs_at_*.zip')
+          gh release download "$tag" --repo CVEProject/cvelistV5 --pattern "$pattern" --dir dl
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Extract WordPress plugin vulnerabilities
+        run: python3 -I scripts/wp-vulns/extract.py dl/*.zip* > rows.jsonl && wc -l rows.jsonl
+      - name: Read current hashes (full sync only)
+        if: steps.mode.outputs.mode == 'full'
+        working-directory: worker
+        run: npx --yes wrangler@4 d1 execute DB --remote --json --command "SELECT cve, slug, hash FROM wp_vulns" > ../existing.json
+      - name: Build SQL
+        run: |
+          extra=$([ -f existing.json ] && echo "--existing existing.json" || true)
+          python3 -I scripts/wp-vulns/to_sql.py rows.jsonl --mode "${{ steps.mode.outputs.mode }}" --source "${{ steps.dl.outputs.tag }}" $extra > sync.sql
+      - name: Write to D1
+        working-directory: worker
+        run: npx --yes wrangler@4 d1 execute DB --remote --yes --file ../sync.sql

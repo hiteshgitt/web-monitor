@@ -28,7 +28,10 @@ test('assessment counts every source by severity, takes the highest CVSS, and ne
   assert.deepEqual(a.counts, { critical: 2, high: 2, medium: 3, low: 0 });
   assert.equal(a.total, 7);
   assert.equal(a.highestCvss, 9.8); // the patched advisory's 10 does not count
-  assert.equal(a.scope.find((s) => s.area.startsWith('WordPress plugins')).assessed, false);
+  assert.equal(a.scope.some((s) => s.area.startsWith('WordPress plugins')), false); // not a WordPress site
+  const wp = vulnerabilityAssessment({ patching, security, publicChecks: null, siteHealth: null, platform: 'wordpress' });
+  assert.equal(wp.scope[0].assessed, true);
+  assert.match(wp.scope[0].area, /WordPress plugins/);
   assert.equal(a.scope.find((s) => s.area.startsWith('Manual penetration')).assessed, false);
 
   const none = vulnerabilityAssessment({ patching: { packageSeverities: ['critical'], packageMaxCvss: 9, runtime: [], advisories: [] }, security: { connected: false }, publicChecks: null, siteHealth: null });

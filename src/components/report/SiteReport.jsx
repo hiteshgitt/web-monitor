@@ -136,7 +136,7 @@ const PatchingSection = ({ patching }) => {
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Patched in period" value={patching.patchedCount} />
         <Stat label="Still open" value={patching.openCount + patching.runtime.length} />
-        <Stat label="Vulnerable packages" value={patching.packages.length} sub={patching.packagesCheckedAt ? `checked ${fmtDate(patching.packagesCheckedAt)}` : null} />
+        <Stat label={patching.packages.some((p) => p.ecosystem === 'wordpress') ? 'Vulnerable plugins' : 'Vulnerable packages'} value={patching.packageTotal ?? patching.packages.length} sub={patching.packagesCheckedAt ? `checked ${fmtDate(patching.packagesCheckedAt)}` : null} />
       </div>
       {patching.advisories.length > 0 && (
         <ul className="mt-4 divide-y divide-brand-100 rounded-xl border border-brand-100">
@@ -157,7 +157,7 @@ const PatchingSection = ({ patching }) => {
       {(patching.runtime.length > 0 || patching.packages.length > 0) && (
         <ul className="mt-4 space-y-1.5 text-sm">
           {patching.runtime.map((r) => <li key={r.key} className="text-ink"><span className="font-semibold">{r.component} {r.version}:</span> {r.title}. {r.fix}</li>)}
-          {patching.packages.map((p) => <li key={`${p.name}@${p.version}`} className="text-ink"><span className="font-semibold">{p.name} {p.version}</span> ({p.severity}{p.cvss?.score != null ? `, CVSS ${p.cvss.score.toFixed(1)}` : ''}{p.cve ? `, ${p.cve}` : ''}){p.fixed ? ` → update to ${p.fixed}` : ''}</li>)}
+          {patching.packages.map((p) => <li key={`${p.name}@${p.version}`} className="text-ink"><span className="font-semibold">{p.name} {p.version}</span> ({p.severity}{p.cvss?.score != null ? `, CVSS ${p.cvss.score.toFixed(1)}` : ''}{p.cve ? `, ${p.cve}` : ''}){p.fixed ? ` → update to ${p.fixed}` : p.fixAbove ? ` → update to a version newer than ${p.fixAbove}` : ''}</li>)}
         </ul>
       )}
     </Section>
@@ -198,7 +198,7 @@ const AssessmentSection = ({ assessment }) => {
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-[12px] text-ink-muted">Severity counts combine vulnerable packages, unsupported or unpatched PHP / Node.js / WordPress versions, open security releases and open RuyaShield findings. CVSS scores are v3.x base scores.</p>
+      <p className="mt-3 text-[12px] text-ink-muted">Severity counts combine vulnerable plugins or packages, unsupported or unpatched PHP / Node.js / WordPress versions, open security releases and open RuyaShield findings. CVSS scores are v3.x base scores.</p>
     </Section>
   );
 };
