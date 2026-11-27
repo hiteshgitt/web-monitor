@@ -176,7 +176,7 @@ export function vulnerabilityAssessment({ patching, security, publicChecks, site
     { area: 'PHP, Node.js and WordPress versions: end of life and security releases', assessed: Boolean(patching?.runtimeKnown),
       detail: patching?.runtimeKnown ? 'From the versions the site reports.' : 'The site has not reported its versions.' },
     { area: 'SSL / TLS, security headers and Google Safe Browsing', assessed: Boolean(publicChecks), detail: publicChecks ? 'Public checks from outside the site.' : 'No public check yet.' },
-    { area: 'RuyaShield automated security checks', assessed: rsAssessed,
+    { area: 'RuyaShield automated security checks and automated penetration test (attack surface, when enabled)', assessed: rsAssessed,
       detail: rsAssessed ? 'Open findings from the latest RuyaShield assessment (these can include the vulnerable packages above, shared from Web Monitor).' : !security?.connected ? 'RuyaShield is not connected.' : !security.tracked ? 'The site is not in RuyaShield.' : 'No RuyaShield assessment has run yet.' },
     { area: 'Manual penetration testing', assessed: false, detail: 'Not part of this automated assessment.' },
   ];
