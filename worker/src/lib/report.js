@@ -6,6 +6,7 @@ import { readSecurityScan } from './securityScan.js';
 import { readVitals } from './webVitals.js';
 import { ruyashieldForSite } from './ruyashield.js';
 import { cveCvss } from './vulnerabilities.js';
+import { configFindings, runtimeCvss } from './ratings.js';
 
 export const REPORT_PERIODS = [7, 30, 90];
 const MAX_INCIDENTS = 10;
@@ -128,12 +129,12 @@ async function patchingFor(env, site, from, now) {
     patchedCount: patched.length,
     openCount: advisories.filter((a) => a.state === 'affected').length,
     medianHoursToPatch: patched.length ? patched.map((a) => a.hoursToPatch).sort((x, y) => x - y)[Math.floor((patched.length - 1) / 2)] : null,
-    runtime: known?.runtime || [],
     runtimeKnown: Boolean(runtime),
     themesChecked: Boolean(known?.themesChecked),
     packageTotal: packages.length,
     packageSeverities: packages.map((p) => p.severity),
     packageMaxCvss: packages.reduce((m, p) => (p.cvss?.score != null && p.cvss.score > (m ?? -1) ? p.cvss.score : m), null),
+    runtime: (known?.runtime || []).map((r) => ({ ...r, cvss: r.cvss || runtimeCvss(r) })),
     packages: packages.slice(0, 10).map((p) => ({ kind: p.kind || null, name: p.name, version: p.version, severity: p.severity, fixed: p.fixed, cve: p.aliases?.[0] || p.ids?.[0] || null, cvss: p.cvss || null, fixAbove: p.fixAbove || null, ecosystem: p.ecosystem || null })),
     packagesCheckedAt: known?.checkedAt || null,
   };
@@ -179,10 +180,24 @@ export function vulnerabilityAssessment({ patching, security, publicChecks, site
       detail: rsAssessed ? 'Open findings from the latest RuyaShield assessment (these can include the vulnerable packages above, shared from Web Monitor).' : !security?.connected ? 'RuyaShield is not connected.' : !security.tracked ? 'The site is not in RuyaShield.' : 'No RuyaShield assessment has run yet.' },
     { area: 'Manual penetration testing', assessed: false, detail: 'Not part of this automated assessment.' },
   ];
+  // Every finding in one list with its CVSS: from the advisory where one exists, otherwise rated for its type.
+  const config = configFindings(publicChecks);
+  for (const c of config) add(c.severity);
+  const adv = (c) => (c && c.score != null ? { score: c.score, vector: c.vector, source: c.source || 'advisory' } : null);
+  const findings = [
+    ...(packagesChecked ? (patching.packages || []).map((p) => ({ kind: p.kind === 'theme' ? 'theme' : p.ecosystem === 'wordpress' ? 'plugin' : 'package', title: `${p.name} ${p.version}${p.cve ? ` (${p.cve})` : ''}`, severity: NORMAL_SEVERITY[p.severity] || 'unknown', cvss: adv(p.cvss), fix: p.fixed ? `Update to ${p.fixed}` : p.fixAbove ? `Update to a version newer than ${p.fixAbove}` : null })) : []),
+    ...(patching?.runtime || []).map((r) => ({ kind: 'runtime', title: r.title, severity: NORMAL_SEVERITY[r.severity] || 'high', cvss: r.cvss || null, fix: r.fix })),
+    ...(patching?.advisories || []).filter((a) => a.state === 'affected').map((a) => ({ kind: 'release', title: a.title, severity: NORMAL_SEVERITY[a.severity] || 'high', cvss: adv(a.cvss), fix: a.target ? `Update to ${a.target}` : null })),
+    ...(rsAssessed ? (security.top || []).map((f) => ({ kind: 'ruyashield', title: f.title, severity: NORMAL_SEVERITY[f.severity] || f.severity, cvss: f.cvss?.score != null ? { score: Number(f.cvss.score), vector: f.cvss.vector, source: f.cvss.source || 'advisory' } : null, fix: null })) : []),
+    ...config.map((c) => ({ ...c, fix: null })),
+  ].sort((a, b) => (b.cvss?.score ?? -1) - (a.cvss?.score ?? -1)).slice(0, 30);
+  for (const f of findings) if (f.cvss?.score != null) cvssScores.push(f.cvss.score);
   return {
     counts,
     total: Object.values(counts).reduce((x, y) => x + y, 0),
+    configCount: config.length,
     highestCvss: cvssScores.length ? Math.max(...cvssScores) : null,
+    findings,
     scope,
   };
 }

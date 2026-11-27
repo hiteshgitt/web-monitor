@@ -9,6 +9,7 @@ import { shareVulnerablePackages } from './ruyashield.js';
 import { detectReleases, draftFromFeeds, syncAdvisories } from './advisories.js';
 import { notificationStatement, notifyAdmins } from './alerts.js';
 import { nowIso, parseJson } from './util.js';
+import { runtimeCvss } from './ratings.js';
 
 const OSV = 'https://api.osv.dev/v1';
 const ECOSYSTEM = { npm: 'npm', packagist: 'Packagist' };
@@ -341,7 +342,8 @@ export function runtimeIssues(runtime, { php, node, nodeReleases, wordpress }, t
       out.push({ key: `wp-insecure-${runtime.wordpress}`, component: 'WordPress', version: runtime.wordpress, severity: 'high', title: `WordPress ${runtime.wordpress} has known security issues`, fix: `Update WordPress to ${latest || 'the latest version'}.` });
     }
   }
-  return out;
+  // Not a single published CVE, so the CVSS is rated for the issue type (see ratings.js).
+  return out.map((issue) => ({ ...issue, cvss: runtimeCvss(issue) }));
 }
 
 async function runtimeReference(env, runtime) {

@@ -20,8 +20,8 @@ export const SeverityChip = ({ severity }) => (
 // CVSS base score (v3.x, computed from the advisory's vector). A v4.0 vector without a computed score shows as "CVSS 4.0".
 export const CvssChip = ({ cvss }) => {
   if (!cvss?.vector && cvss?.score == null) return null;
-  const label = cvss.score != null ? `CVSS ${cvss.score.toFixed(1)}` : 'CVSS 4.0';
-  return <span title={cvss.vector || undefined} className="px-2 py-0.5 rounded-md text-[10px] font-extrabold tabular-nums bg-ink/5 text-ink-soft">{label}</span>;
+  const label = `${cvss.score != null ? `CVSS ${cvss.score.toFixed(1)}` : 'CVSS 4.0'}${cvss.source === 'rated' ? ' (rated)' : ''}`;
+  return <span title={`${cvss.vector || ''}${cvss.source === 'rated' ? ' · rated by Ruya Lab for this issue type' : ''}`} className="px-2 py-0.5 rounded-md text-[10px] font-extrabold tabular-nums bg-ink/5 text-ink-soft">{label}</span>;
 };
 
 // The fixed version for this site's own branch (PHP / WordPress by major.minor, Node.js / Next.js by major).
@@ -86,6 +86,7 @@ const VulnerabilitiesPanel = ({ known, inventory, platform, advisories = [] }) =
             <div className="flex items-center gap-2 flex-wrap">
               <SeverityChip severity={r.severity} />
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-ink-muted">{r.component} {r.version}</span>
+              <CvssChip cvss={r.cvss} />
             </div>
             <div className="font-bold text-ink mt-1.5">{r.title}</div>
             <div className="text-[13px] text-ink-soft mt-1"><span className="font-bold text-brand-700">What to do: </span>{r.fix}</div>

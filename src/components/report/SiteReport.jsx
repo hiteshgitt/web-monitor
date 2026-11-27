@@ -171,6 +171,7 @@ const ASSESS_SEVERITIES = [
   ['critical', 'Critical', 'bg-rose-100 text-rose-800'], ['high', 'High', 'bg-orange-100 text-orange-800'],
   ['medium', 'Medium', 'bg-amber-100 text-amber-800'], ['low', 'Low', 'bg-brand-50 text-brand-700'],
 ];
+const FINDING_KIND = { plugin: 'WordPress plugin', theme: 'WordPress theme', package: 'Package', runtime: 'Version', release: 'Security release', ruyashield: 'RuyaShield', configuration: 'Configuration' };
 const AssessmentSection = ({ assessment }) => {
   if (!assessment) return null;
   const assessedAny = assessment.scope.some((s) => s.assessed);
@@ -179,9 +180,12 @@ const AssessmentSection = ({ assessment }) => {
       {assessedAny ? (
         <div className="grid grid-cols-2 sm:grid-cols-6 print:grid-cols-6 gap-2">
           <div className="col-span-2 rounded-2xl bg-canvas px-4 py-3.5 print:bg-white print:border print:border-brand-100">
-            <div className="text-[11px] font-extrabold uppercase tracking-widest text-ink-muted">Known vulnerabilities</div>
+            <div className="text-[11px] font-extrabold uppercase tracking-widest text-ink-muted">Findings</div>
             <div className="text-2xl font-extrabold text-ink tabular-nums mt-1">{assessment.total}</div>
-            <div className="text-xs text-ink-muted mt-0.5">{assessment.highestCvss != null ? `Highest CVSS ${assessment.highestCvss.toFixed(1)}` : assessment.total ? 'No CVSS score available' : 'in the assessed areas'}</div>
+            <div className="text-xs text-ink-muted mt-0.5">
+              {assessment.total - (assessment.configCount || 0)} vulnerabilit{assessment.total - (assessment.configCount || 0) === 1 ? 'y' : 'ies'} · {assessment.configCount || 0} configuration
+              {assessment.highestCvss != null ? ` · highest CVSS ${assessment.highestCvss.toFixed(1)}` : ''}
+            </div>
           </div>
           {ASSESS_SEVERITIES.map(([key, label, style]) => (
             <div key={key} className={`rounded-xl px-3 py-2.5 ${style}`}>
@@ -191,6 +195,29 @@ const AssessmentSection = ({ assessment }) => {
           ))}
         </div>
       ) : <NotMeasured>Nothing could be assessed yet.</NotMeasured>}
+      {assessment.findings?.length > 0 && (
+        <>
+          <h3 className="mt-6 text-[11px] font-extrabold uppercase tracking-widest text-ink-muted">Findings by CVSS</h3>
+          <table className="mt-2 w-full text-sm">
+            <thead><tr className="text-left text-[10px] font-extrabold uppercase tracking-widest text-ink-muted">
+              <th className="py-2 pr-3">CVSS</th><th className="py-2 pr-3">Severity</th><th className="py-2 pr-3">Finding</th><th className="py-2">Type</th>
+            </tr></thead>
+            <tbody className="divide-y divide-brand-100">
+              {assessment.findings.map((f, i) => (
+                <tr key={`${f.title}-${i}`} className="align-top break-inside-avoid">
+                  <td className="py-2 pr-3 font-extrabold tabular-nums whitespace-nowrap" title={f.cvss?.vector || undefined}>
+                    {f.cvss?.score != null ? f.cvss.score.toFixed(1) : '—'}{f.cvss?.source === 'rated' && <span className="text-ink-muted font-bold">*</span>}
+                  </td>
+                  <td className="py-2 pr-3 capitalize whitespace-nowrap">{f.severity}</td>
+                  <td className="py-2 pr-3 text-ink">{f.title}{f.fix && <span className="block text-[12px] text-ink-muted">{f.fix}</span>}</td>
+                  <td className="py-2 text-[12px] text-ink-muted whitespace-nowrap">{FINDING_KIND[f.kind] || f.kind}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-[12px] text-ink-muted">* Rated by Ruya Lab: a standard CVSS v3.1 vector for the finding type, within its severity. Other scores come from the published advisory (CVE List, OSV.dev or the NVD).</p>
+        </>
+      )}
       <h3 className="mt-6 text-[11px] font-extrabold uppercase tracking-widest text-ink-muted">What was assessed</h3>
       <ul className="mt-2 divide-y divide-brand-100 rounded-xl border border-brand-100">
         {assessment.scope.map((s) => (
@@ -200,7 +227,7 @@ const AssessmentSection = ({ assessment }) => {
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-[12px] text-ink-muted">Severity counts combine vulnerable plugins or packages, unsupported or unpatched PHP / Node.js / WordPress versions, open security releases and open RuyaShield findings. CVSS scores are v3.x base scores.</p>
+      <p className="mt-3 text-[12px] text-ink-muted">Counts combine vulnerable plugins, themes and packages, unsupported or unpatched PHP / Node.js / WordPress versions, open security releases, open RuyaShield findings and configuration issues from the public checks. CVSS scores are v3.x base scores.</p>
     </Section>
   );
 };
@@ -243,7 +270,7 @@ const SecuritySection = ({ security, shared }) => {
             <li key={`${f.title}-${i}`} className="flex items-center gap-3 px-4 py-2.5 text-sm">
               <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider bg-canvas text-ink-soft">{f.severity}</span>
               <span className="text-ink flex-1 min-w-0">{f.title}</span>
-              {f.cvss?.score != null && <span title={f.cvss.vector || undefined} className="text-[11px] font-bold tabular-nums text-ink-muted whitespace-nowrap">CVSS {Number(f.cvss.score).toFixed(1)}</span>}
+              {f.cvss?.score != null && <span title={f.cvss.vector || undefined} className="text-[11px] font-bold tabular-nums text-ink-muted whitespace-nowrap">CVSS {Number(f.cvss.score).toFixed(1)}{f.cvss.source === 'rated' ? '*' : ''}</span>}
             </li>
           ))}
         </ul>
