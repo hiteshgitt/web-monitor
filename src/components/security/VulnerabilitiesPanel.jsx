@@ -38,7 +38,8 @@ const VulnerabilitiesPanel = ({ known, inventory, platform, advisories = [] }) =
   // A Next.js release on the Release Radar already covers the vulnerable "next" package: show it once.
   const packages = (live ? inventory.vulnerable || [] : known?.packages || []).filter((p) => !(p.name === 'next' && open.some((a) => a.component === 'nextjs')));
   const failed = inventory?.vulnerability_check === 'failed';
-  const checksPackages = platform === 'nextjs' || ['laravel', 'php', 'codeigniter'].includes(platform);
+  const checksPackages = platform === 'nextjs' || platform === 'wordpress' || ['laravel', 'php', 'codeigniter'].includes(platform);
+  const checkedAt = known?.checkedAt;
   const total = runtime.length + packages.length + open.length;
 
   return (
@@ -57,8 +58,10 @@ const VulnerabilitiesPanel = ({ known, inventory, platform, advisories = [] }) =
           <p className="text-sm text-ink-soft">
             {failed
               ? 'The vulnerability database could not be reached just now, so packages were not checked. The hourly check will try again.'
-              : `No known vulnerabilities in ${checksPackages ? 'the installed packages or ' : ''}the PHP, Node.js or WordPress version this site reports.`}
-            {platform === 'wordpress' && ' WordPress plugins are not covered yet; WordPress itself and PHP are.'}
+              : checksPackages && !checkedAt
+                ? `The ${platform === 'wordpress' ? 'plugins' : 'packages'} have not been checked yet (every 12 hours). No known vulnerabilities in the PHP, Node.js or WordPress version this site reports.`
+                : `No known vulnerabilities in ${checksPackages ? (platform === 'wordpress' ? 'the installed plugins or ' : 'the installed packages or ') : ''}the PHP, Node.js or WordPress version this site reports.`}
+            {total === 0 && !failed && ' CVSS scores appear here when a vulnerability is found.'}
           </p>
         )}
         {open.map((a) => (

@@ -1416,12 +1416,13 @@ const AdvancedDashboard = ({ selectedWebsite }) => {
               <div className="p-8 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {(() => {
-                    const vulnScan = selectedWebsite?.security?.vulnerabilityScan;
-                    const vulnOk = !vulnScan || ['secure', 'clean', 'passed'].includes(String(vulnScan).toLowerCase());
-                    const hasVulnIssues = Boolean(vulnScan) && !vulnOk;
-                    const vulnColor = hasVulnIssues ? 'text-rose-600' : 'text-emerald-600';
-                    const vulnBg = hasVulnIssues ? 'bg-rose-50' : 'bg-emerald-50';
-                    const vulnDisplay = !vulnScan ? 'N/A' : hasVulnIssues ? (vulnScan.replace(/_/g, ' ')) : 'Secure';
+                    // Same source as the Known vulnerabilities panel: known problems from the last check, not the site's own label.
+                    const kv = advancedData?.knownVulnerabilities;
+                    const vulnCount = kv ? (kv.packages || []).length + (kv.runtime || []).length : null;
+                    const hasVulnIssues = vulnCount > 0;
+                    const vulnColor = vulnCount == null ? 'text-ink-muted' : hasVulnIssues ? 'text-rose-600' : 'text-emerald-600';
+                    const vulnBg = vulnCount == null ? 'bg-brand-100' : hasVulnIssues ? 'bg-rose-50' : 'bg-emerald-50';
+                    const vulnDisplay = vulnCount == null ? 'Not checked yet' : hasVulnIssues ? `${vulnCount} known` : 'None known';
                     const malwareScan = selectedWebsite?.security?.malwareScan;
                     const malwareClean = malwareScan === 'clean' || malwareScan === 'Clean';
                     return [
