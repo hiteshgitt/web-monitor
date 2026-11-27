@@ -503,7 +503,7 @@ export const FullReport = ({ report }) => {
 
       <Section title="How this report is measured">
         <ul className="text-xs text-ink-soft list-disc pl-5 space-y-1">
-          <li>Uptime and response time come from Web Monitor checking the site once a minute from its own servers.</li>
+          <li>Uptime and response time come from Web Monitor checking the site once a minute from its own servers. A failed check is repeated after 5 seconds before an outage is recorded.</li>
           <li>Speed comes from Google PageSpeed Insights (lab test) and the Chrome UX Report (real visitors), refreshed weekly.</li>
           <li>SSL grade from Qualys SSL Labs, blocklist status from Google Safe Browsing, headers from a request to the home page.</li>
           <li>Security findings come from RuyaShield assessments of verified sites. Only counts, titles and CVSS scores are included, never evidence.</li>

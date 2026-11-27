@@ -479,6 +479,24 @@ export async function checkAndRecord(env, site) {
 // PUSH_REQUESTS are kept for delivering the alerts the run produced.
 const SUBREQUEST_BUDGET = 40;
 const PUSH_REQUESTS = 6;
+// A site that was up and fails is checked once more before an outage is recorded (a failed WordPress check can
+// cost three requests: wp-json, ?rest_route= and the homepage for the diagnosis).
+const CONFIRM_SITES = 2;
+const CONFIRM_REQUESTS = CONFIRM_SITES * 3;
+const CONFIRM_DELAY_MS = 5000;
+
+/**
+ * Re-checks sites that just went from up to down (at most `limit`), after `delayMs`. A recovered re-check replaces
+ * the failed result, so one slow or dropped response is not recorded as an outage. Returns how many were re-checked.
+ */
+export async function confirmOutages(due, results, recheck, { limit = CONFIRM_SITES, delayMs = CONFIRM_DELAY_MS } = {}) {
+  const fresh = due.map((s, i) => i).filter((i) => DOWN_STATUSES.includes(results[i]?.status) && !DOWN_STATUSES.includes(due[i].status)).slice(0, limit);
+  if (!fresh.length) return 0;
+  if (delayMs) await new Promise((resolve) => { setTimeout(resolve, delayMs); });
+  const again = await Promise.all(fresh.map((i) => recheck(due[i]).catch(() => null)));
+  fresh.forEach((i, k) => { if (again[k] && !DOWN_STATUSES.includes(again[k].status)) results[i] = again[k]; });
+  return fresh.length;
+}
 
 export async function runMonitoringCycle(env, scheduledTime = Date.now()) {
   const at = new Date(scheduledTime);
@@ -498,7 +516,7 @@ export async function runMonitoringCycle(env, scheduledTime = Date.now()) {
     .filter((s) => (!s.details_checked_at || at - new Date(s.details_checked_at) > refreshMs))
     .sort((a, b) => (a.details_checked_at || '').localeCompare(b.details_checked_at || ''));
   const detailIds = new Set();
-  let budget = SUBREQUEST_BUDGET - due.length;
+  let budget = SUBREQUEST_BUDGET - due.length - CONFIRM_REQUESTS;
   for (const site of stale) {
     if (budget < 4) break;
     detailIds.add(site.id);
@@ -506,6 +524,8 @@ export async function runMonitoringCycle(env, scheduledTime = Date.now()) {
   }
 
   const results = await Promise.all(due.map((site) => performHealthCheck(site, { withDetails: detailIds.has(site.id) })));
+  const confirmed = await confirmOutages(due, results, (site) => performHealthCheck(site));
+  budget += CONFIRM_REQUESTS - confirmed * 3;
   const statements = due.flatMap((site, i) => recordCheckStatements(env.DB, site, results[i], at));
   await env.DB.batch(statements);
 
