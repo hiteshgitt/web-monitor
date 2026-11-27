@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """WordPress plugin vulnerabilities from the official CVE List (github.com/CVEProject/cvelistV5).
 
-Reads a CVE List zip (the daily full "all_CVEs_at_midnight.zip.zip", whose cves.zip is nested inside, or an hourly
+Covers plugins and (since the 1.7.0 integration) themes. Reads a CVE List zip (the daily full "all_CVEs_at_midnight.zip.zip", whose cves.zip is nested inside, or an hourly
 "delta_CVEs" zip) and writes one JSON line per (CVE, plugin slug):
-  {"cve", "slug", "title", "ranges", "cvss_vector", "cvss_score", "severity", "published", "url", "rejected", "hash"}
+  {"cve", "kind" (plugin | theme), "slug", "title", "ranges", "cvss_vector", "cvss_score", "severity", "published", "url", "rejected", "hash"}
 
 A CVE counts as a WordPress plugin vulnerability only when its references name a plugin slug on wordpress.org,
 plugins.trac.wordpress.org, Wordfence, Patchstack or WPScan, and its affected versions can be read. Nothing is guessed:
@@ -14,13 +14,25 @@ Usage: python3 -I extract.py <zip> [<zip> ...] > rows.jsonl
 import hashlib, io, json, re, shutil, sys, tempfile, zipfile
 from collections import Counter
 
-SLUG_PATTERNS = [re.compile(p) for p in (
-    r'https?://plugins\.trac\.wordpress\.org/(?:browser|log|changeset/\d+)/([a-z0-9][a-z0-9-]{0,99})(?:[/?#]|$)',
-    r'https?://(?:[a-z]{2,3}\.)?wordpress\.org/plugins/([a-z0-9][a-z0-9-]{0,99})(?:[/?#]|$)',
-    r'https?://(?:www\.)?wordfence\.com/threat-intel/vulnerabilities/wordpress-plugins/([a-z0-9][a-z0-9-]{0,99})/',
-    r'https?://patchstack\.com/database/(?:wordpress/plugin|vulnerability)/([a-z0-9][a-z0-9-]{0,99})/',
-    r'https?://wpscan\.com/plugin/([a-z0-9][a-z0-9-]{0,99})(?:[/?#]|$)',
-)]
+S = r'([a-z0-9][a-z0-9_-]{0,99})'
+PATTERNS = {
+    'plugin': [re.compile(p) for p in (
+        r'https?://plugins\.trac\.wordpress\.org/(?:browser|log|changeset/\d+)/' + S + r'(?:[/?#]|$)',
+        r'https?://(?:[a-z]{2,3}\.)?wordpress\.org/plugins/' + S + r'(?:[/?#]|$)',
+        r'https?://(?:www\.)?wordfence\.com/threat-intel/vulnerabilities/wordpress-plugins/' + S + '/',
+        r'https?://patchstack\.com/database/wordpress/plugin/' + S + '/',
+        r'https?://wpscan\.com/plugin/' + S + r'(?:[/?#]|$)',
+    )],
+    'theme': [re.compile(p) for p in (
+        r'https?://themes\.trac\.wordpress\.org/(?:browser|log|changeset/\d+)/' + S + r'(?:[/?#]|$)',
+        r'https?://(?:[a-z]{2,3}\.)?wordpress\.org/themes/' + S + r'(?:[/?#]|$)',
+        r'https?://(?:www\.)?wordfence\.com/threat-intel/vulnerabilities/wordpress-themes/' + S + '/',
+        r'https?://patchstack\.com/database/wordpress/theme/' + S + '/',
+        r'https?://wpscan\.com/theme/' + S + r'(?:[/?#]|$)',
+    )],
+    # Older Patchstack links do not say plugin or theme; the record's own wording decides (see row_of).
+    'either': [re.compile(r'https?://patchstack\.com/database/vulnerability/' + S + '/')],
+}
 NOT_SLUGS = {'tags', 'trunk', 'branches', 'wordpress', 'plugin', 'plugins', 'database', 'vulnerability'}
 ADVISORY_HOSTS = ('wordfence.com', 'patchstack.com', 'wpscan.com')
 NO_LOWER = {'', '*', '0', 'n/a', '-', 'all', 'unspecified'}
@@ -47,14 +59,17 @@ def cvss3_score(vector):
     i = round(x * 100000)
     return i / 100000 if i % 10000 == 0 else (i // 10000 + 1) / 10
 
-def slug_of(urls):
+def slug_of(urls, about):
+    """(kind, slug) from the references; ambiguous links count as a theme only when the record says theme, not plugin."""
+    themey = bool(re.search(r'\btheme\b', about, re.I)) and not re.search(r'\bplugin\b', about, re.I)
     found = Counter()
     for u in urls:
-        for p in SLUG_PATTERNS:
-            mm = p.search(u)
-            if mm and mm.group(1) not in NOT_SLUGS:
-                found[mm.group(1)] += 1
-    return found.most_common(1)[0][0] if found else None
+        for kind, pats in PATTERNS.items():
+            for p in pats:
+                mm = p.search(u)
+                if mm and mm.group(1) not in NOT_SLUGS:
+                    found[(('theme' if themey else 'plugin') if kind == 'either' else kind, mm.group(1))] += 1
+    return found.most_common(1)[0][0] if found else (None, None)
 
 def ranges_of(affected):
     out = []
@@ -100,20 +115,18 @@ def row_of(rec):
     containers = rec.get('containers') or {}
     cna = containers.get('cna') or {}
     urls = [r.get('url', '') for r in cna.get('references') or []]
-    slug = slug_of(urls)
-    if not slug:
-        return None
     desc = next((d.get('value') for d in cna.get('descriptions') or [] if str(d.get('lang', '')).startswith('en')), '')
     about = ' '.join([cna.get('title') or '', desc or ''] + [str(a.get('product') or '') for a in cna.get('affected') or []])
-    if re.search(r'\btheme\b', about, re.I) and not re.search(r'\bplugin\b', about, re.I):
-        return None  # a theme; the integration reports plugins, and slugs can collide
+    kind, slug = slug_of(urls, about)
+    if not slug:
+        return None
     ranges = ranges_of(cna.get('affected'))
     if not ranges:
         return None
     vec, score = cvss_of(containers)
     title = (cna.get('title') or desc or cve).strip().replace('\n', ' ')[:200]
     url = next((u for u in urls if any(h in u for h in ADVISORY_HOSTS)), f'https://www.cve.org/CVERecord?id={cve}')
-    row = {'cve': cve, 'slug': slug, 'title': title, 'ranges': ranges, 'cvss_vector': vec, 'cvss_score': score,
+    row = {'cve': cve, 'kind': kind, 'slug': slug, 'title': title, 'ranges': ranges, 'cvss_vector': vec, 'cvss_score': score,
            'severity': severity(score), 'published': (meta.get('datePublished') or '')[:10] or None, 'url': url[:500], 'rejected': False}
     row['hash'] = hashlib.sha1(json.dumps(row, sort_keys=True).encode()).hexdigest()[:16]
     return row

@@ -70,6 +70,7 @@ const VulnerabilitiesPanel = ({ known, inventory, platform, advisories = [] }) =
               <SeverityChip severity={a.severity} />
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-ink-muted">Release Radar · {a.componentLabel} {a.versionSeen}</span>
               {a.cves.slice(0, 2).map((c) => <span key={c} className="text-[11px] font-mono text-ink-muted">{c}</span>)}
+              <CvssChip cvss={a.cvss} />
             </div>
             <div className="font-bold text-ink mt-1.5">{a.title}</div>
             <div className="text-[13px] text-ink-soft mt-1">
@@ -95,6 +96,7 @@ const VulnerabilitiesPanel = ({ known, inventory, platform, advisories = [] }) =
             <div className="flex items-center gap-2 flex-wrap">
               <SeverityChip severity={p.severity} />
               <span className="font-extrabold text-ink">{p.name}</span>
+              {p.kind === 'theme' && <span className="text-[10px] font-extrabold uppercase tracking-widest text-ink-muted">Theme</span>}
               <span className="text-[11px] font-bold text-ink-muted">v{p.version}</span>
               <CvssChip cvss={p.cvss} />
               {(p.aliases?.[0] || p.ids?.[0]) && <span className="text-[11px] font-mono text-ink-muted">{p.aliases?.[0] || p.ids[0]}{p.ids?.length > 1 ? ` +${p.ids.length - 1}` : ''}</span>}

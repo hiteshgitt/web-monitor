@@ -256,8 +256,16 @@ export function wpPluginItems(list) {
   return (Array.isArray(list) ? list : []).map((p) => {
     const file = String(p?.file || '');
     const slug = (file.includes('/') ? file.split('/')[0] : file.replace(/\.php$/i, '')).toLowerCase();
-    return { slug, name: String(p?.name || slug), version: String(p?.version || '').trim() };
+    return { kind: 'plugin', slug, name: String(p?.name || slug), version: String(p?.version || '').trim() };
   }).filter((p) => /^[a-z0-9][a-z0-9_-]{0,99}$/.test(p.slug) && p.version);
+}
+
+/** The installed themes (integration 1.7.0+): slug is the theme's directory. */
+export function wpThemeItems(list) {
+  return (Array.isArray(list) ? list : []).map((t) => {
+    const slug = String(t?.slug || '').toLowerCase();
+    return { kind: 'theme', slug, name: String(t?.name || slug), version: String(t?.version || '').trim(), active: Boolean(t?.is_active) };
+  }).filter((t) => /^[a-z0-9][a-z0-9_-]{0,99}$/.test(t.slug) && t.version);
 }
 
 /**
@@ -271,22 +279,22 @@ export async function vulnerableWpPlugins(env, plugins, now = new Date()) {
   const slugs = [...new Set(plugins.map((p) => p.slug))];
   for (let i = 0; i < slugs.length; i += 90) {
     const chunk = slugs.slice(i, i + 90);
-    const { results } = await env.DB.prepare(`SELECT cve, slug, title, ranges, cvss_score, cvss_vector, severity, url FROM wp_vulns
+    const { results } = await env.DB.prepare(`SELECT cve, kind, slug, title, ranges, cvss_score, cvss_vector, severity, url FROM wp_vulns
       WHERE slug IN (${chunk.map(() => '?').join(',')})`).bind(...chunk).all();
     for (const r of results) {
-      const ranges = parseJson(r.ranges) || [];
-      if (!bySlug.has(r.slug)) bySlug.set(r.slug, []);
-      bySlug.get(r.slug).push({ ...r, ranges });
+      const key = `${r.kind || 'plugin'}:${r.slug}`;
+      if (!bySlug.has(key)) bySlug.set(key, []);
+      bySlug.get(key).push({ ...r, ranges: parseJson(r.ranges) || [] });
     }
   }
   const out = [];
   for (const p of plugins) {
-    const rows = (bySlug.get(p.slug) || []).filter((r) => inRanges(p.version, r.ranges))
+    const rows = (bySlug.get(`${p.kind || 'plugin'}:${p.slug}`) || []).filter((r) => inRanges(p.version, r.ranges))
       .sort((a, b) => (b.cvss_score ?? -1) - (a.cvss_score ?? -1) || SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity]);
     if (!rows.length) continue;
     const worst = rows.reduce((w, r) => (SEVERITY_RANK[r.severity] > SEVERITY_RANK[w] ? r.severity : w), 'unknown');
     out.push({
-      name: p.name, slug: p.slug, version: p.version, ecosystem: 'wordpress', ids: rows.map((r) => r.cve).slice(0, 10), severity: worst,
+      name: p.name, slug: p.slug, kind: p.kind || 'plugin', version: p.version, ecosystem: 'wordpress', ids: rows.map((r) => r.cve).slice(0, 10), severity: worst,
       summary: rows[0].title, ...wpFix(rows), aliases: rows.map((r) => r.cve).slice(0, 5), url: rows[0].url,
       cvss: rows[0].cvss_score != null ? { score: rows[0].cvss_score, vector: rows[0].cvss_vector } : null,
     });
@@ -371,7 +379,11 @@ async function installedPackages(site, fetchIntegration) {
   if (!endpoint) return null;
   const data = await fetchIntegration(site, endpoint);
   if (!data || data.error) return null;
-  if (site.platform === 'wordpress') return Array.isArray(data.all_plugins) ? { ecosystem: 'wordpress', items: wpPluginItems(data.all_plugins) } : null;
+  if (site.platform === 'wordpress') {
+    if (!Array.isArray(data.all_plugins)) return null;
+    const themes = Array.isArray(data.all_themes); // integration 1.7.0+
+    return { ecosystem: 'wordpress', items: [...wpPluginItems(data.all_plugins), ...wpThemeItems(data.all_themes)], themes };
+  }
   const items = data.all_libraries || data.all_packages || [];
   return Array.isArray(items) ? { ecosystem: site.platform === 'nextjs' ? 'npm' : 'packagist', items } : null;
 }
@@ -433,6 +445,7 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
           after.packages = inv.ecosystem === 'wordpress' ? await vulnerableWpPlugins(env, inv.items, at) : await vulnerablePackages(env, inv.ecosystem, inv.items);
           packagesChecked = true;
           checked += 1;
+          after.themesChecked = inv.ecosystem === 'wordpress' ? Boolean(inv.themes) : undefined;
           // RuyaShield turns these into findings for organizations that verified this site (if connected).
           // WordPress plugins are not shared yet: RuyaShield's package check knows npm and Composer only.
           if (inv.ecosystem !== 'wordpress') {
@@ -457,6 +470,7 @@ export async function scanVulnerabilities(env, fetchIntegration, at = new Date()
       body: `${okScope(site, runtime)} We keep checking and tell you as soon as something new affects this site.`,
     } : null;
     const json = JSON.stringify({ packages: after.packages || [], runtime: after.runtime, checkedAt: packagesChecked ? at.toISOString() : before.checkedAt || null,
+      ...(after.themesChecked !== undefined ? { themesChecked: after.themesChecked } : {}),
       okNotified: Boolean(before.okNotified || okAlert) });
     if (json !== (site.vulnerabilities || null) || packagesChecked) {
       statements.push(env.DB.prepare(`UPDATE websites SET vulnerabilities = ?${packagesChecked ? ', vulns_checked_at = ?' : ''} WHERE id = ?`)

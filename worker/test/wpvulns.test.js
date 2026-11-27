@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compareLoose, inRanges, vulnerableWpPlugins, wpFix, wpPluginItems } from '../src/lib/vulnerabilities.js';
+import { compareLoose, inRanges, vulnerableWpPlugins, wpFix, wpPluginItems, wpThemeItems } from '../src/lib/vulnerabilities.js';
 
 test('plugin versions compare segment by segment', () => {
   assert.equal(compareLoose('1.3.9.7', '1.3.10'), -1);
@@ -33,8 +33,8 @@ test('plugin slugs come from the plugin file', () => {
     { file: '../evil', name: 'x', version: '1' },
     { file: 'no-version/x.php', name: 'y', version: '' },
   ]), [
-    { slug: 'really-simple-ssl', name: 'Really Simple Security', version: '9.1.1' },
-    { slug: 'hello', name: 'Hello Dolly', version: '1.7.2' },
+    { kind: 'plugin', slug: 'really-simple-ssl', name: 'Really Simple Security', version: '9.1.1' },
+    { kind: 'plugin', slug: 'hello', name: 'Hello Dolly', version: '1.7.2' },
   ]);
 });
 
@@ -66,4 +66,18 @@ test('vulnerable plugins: matched by slug and version, worst first, with CVSS; s
   assert.equal(out[0].fixed, '9.8.2');
   await assert.rejects(vulnerableWpPlugins(fakeEnv('2026-11-20T10:00:00Z', rows), plugins, now), /stale/);
   await assert.rejects(vulnerableWpPlugins(fakeEnv(null, rows), plugins, now), /missing/);
+});
+
+test('themes: slugs from the integration, matched only against theme CVEs', async () => {
+  assert.deepEqual(wpThemeItems([{ slug: 'Houzez', name: 'Houzez', version: '4.1.1', is_active: true }, { slug: 'x y', version: '1' }, { slug: 'astra', version: '' }]),
+    [{ kind: 'theme', slug: 'houzez', name: 'Houzez', version: '4.1.1', active: true }]);
+  const rows = [
+    { cve: 'CVE-2025-49406', kind: 'theme', slug: 'houzez', title: 'Broken Access Control', ranges: JSON.stringify([{ lte: '4.1.1' }]), cvss_score: 8.8, cvss_vector: null, severity: 'high', url: 'u' },
+    { cve: 'CVE-2025-1', kind: 'plugin', slug: 'houzez', title: 'plugin of the same name', ranges: JSON.stringify([{ lte: '9' }]), cvss_score: 9.8, cvss_vector: null, severity: 'critical', url: 'u' },
+  ];
+  const env = { DB: { prepare: (sql) => ({ bind: () => ({ all: async () => ({ results: rows }) }), first: async () => (sql.includes('wp_vulns_sync') ? { synced_at: '2026-11-27T10:00:00Z' } : null) }) } };
+  const out = await vulnerableWpPlugins(env, [{ kind: 'theme', slug: 'houzez', name: 'Houzez', version: '4.1.1' }], new Date('2026-11-27T12:00:00Z'));
+  assert.equal(out.length, 1);
+  assert.equal(out[0].kind, 'theme');
+  assert.deepEqual(out[0].ids, ['CVE-2025-49406']);
 });

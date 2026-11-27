@@ -130,10 +130,11 @@ async function patchingFor(env, site, from, now) {
     medianHoursToPatch: patched.length ? patched.map((a) => a.hoursToPatch).sort((x, y) => x - y)[Math.floor((patched.length - 1) / 2)] : null,
     runtime: known?.runtime || [],
     runtimeKnown: Boolean(runtime),
+    themesChecked: Boolean(known?.themesChecked),
     packageTotal: packages.length,
     packageSeverities: packages.map((p) => p.severity),
     packageMaxCvss: packages.reduce((m, p) => (p.cvss?.score != null && p.cvss.score > (m ?? -1) ? p.cvss.score : m), null),
-    packages: packages.slice(0, 10).map((p) => ({ name: p.name, version: p.version, severity: p.severity, fixed: p.fixed, cve: p.aliases?.[0] || p.ids?.[0] || null, cvss: p.cvss || null, fixAbove: p.fixAbove || null, ecosystem: p.ecosystem || null })),
+    packages: packages.slice(0, 10).map((p) => ({ kind: p.kind || null, name: p.name, version: p.version, severity: p.severity, fixed: p.fixed, cve: p.aliases?.[0] || p.ids?.[0] || null, cvss: p.cvss || null, fixAbove: p.fixAbove || null, ecosystem: p.ecosystem || null })),
     packagesCheckedAt: known?.checkedAt || null,
   };
 }
@@ -169,6 +170,8 @@ export function vulnerabilityAssessment({ patching, security, publicChecks, site
         detail: packagesChecked ? `${vulnerableCount}. Vulnerabilities without a CVE ID are not covered.` : 'Not checked yet: the plugin list or the vulnerability data was not available.' }
       : { area: 'Installed npm and Composer packages, against the OSV.dev vulnerability database', assessed: packagesChecked,
         detail: packagesChecked ? vulnerableCount : 'The integration has not reported a package list.' },
+    ...(wordpress ? [{ area: 'WordPress themes, against WordPress theme CVEs in the official CVE List', assessed: packagesChecked && Boolean(patching?.themesChecked),
+      detail: packagesChecked && patching?.themesChecked ? 'Installed themes, including inactive ones.' : 'Needs the Web Monitor plugin 1.7.0 or newer on the site.' }] : []),
     { area: 'PHP, Node.js and WordPress versions: end of life and security releases', assessed: Boolean(patching?.runtimeKnown),
       detail: patching?.runtimeKnown ? 'From the versions the site reports.' : 'The site has not reported its versions.' },
     { area: 'SSL / TLS, security headers and Google Safe Browsing', assessed: Boolean(publicChecks), detail: publicChecks ? 'Public checks from outside the site.' : 'No public check yet.' },

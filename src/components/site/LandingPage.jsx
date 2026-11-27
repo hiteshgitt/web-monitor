@@ -35,7 +35,7 @@ const FEATURES = [
   { icon: Search, title: 'SEO checks', text: 'Missing descriptions, heading structure, alt text and links — turned into a clear fix checklist.' },
   { icon: Brain, title: 'AI insights', text: 'Pro: an AI assistant reads your real site data and explains what to fix first.', pro: true },
   { icon: Puzzle, title: 'Plugin and package audits', text: 'Pro: every plugin and package with its latest release, outdated and inactive ones flagged.', pro: true },
-  { icon: ShieldAlert, title: 'Known vulnerabilities with CVSS', text: 'Pro: WordPress plugins checked against the official CVE List, npm and Composer packages against OSV.dev, plus your PHP, Node.js and WordPress versions. Each issue comes with its CVSS score and the version that fixes it.', pro: true },
+  { icon: ShieldAlert, title: 'Known vulnerabilities with CVSS', text: 'Pro: WordPress plugins and themes checked against the official CVE List, npm and Composer packages against OSV.dev, plus your PHP, Node.js and WordPress versions. Each issue comes with its CVSS score and the version that fixes it.', pro: true },
   { icon: Activity, title: 'Root-cause diagnosis', text: 'When a site goes down we say what broke (database, PHP memory, a fatal error) and what to do, not just “500”.' },
   { icon: Radar, title: 'Release Radar', text: 'Pro: PHP, Node.js, WordPress and Next.js security releases matched to your sites, from the announcement to proof each one is patched.', pro: true },
   { icon: Monitor, title: 'Server agent', text: 'Pro: one command on your VPS. CPU and memory per process, disks and inodes, request floods and XSS / SQL-injection attempts per IP from your nginx or Apache logs, with alerts.', pro: true },

@@ -2,7 +2,7 @@
 // package is behind. Keep in step with wordpress-plugin/ (Version header), packages/php-core (VERSION) and
 // packages/nextjs (package.json) when releasing.
 export const LATEST_INTEGRATION = {
-  wordpress: { version: '1.6.0', whatsNew: 'Inode (file count) monitoring with alerts, the suspicious-file scan (backdoors, web shells, code in uploads, modified WordPress core) and error tracking with stack traces.' },
+  wordpress: { version: '1.7.0', whatsNew: 'Reports installed themes, so themes are checked for known vulnerabilities (with CVSS) alongside plugins. Earlier: inode monitoring, the suspicious-file scan and error tracking with stack traces.' },
   nextjs: { version: '1.5.0', whatsNew: 'Suspicious-file scan (server scripts in public/, request input reaching shell or eval, injected JavaScript in source and the built .next output, cryptominers). Earlier: Inode (file count) monitoring, error tracking with stack traces (needs instrumentation.ts), and the real runtime and Node.js flags for Release Radar.' },
   laravel: { version: '1.5.0', whatsNew: 'Inode monitoring, the suspicious-file scan with file and line, and error tracking for every exception Laravel reports.' },
   codeigniter: { version: '1.5.0', whatsNew: 'Inode monitoring, the suspicious-file scan with file and line, and error tracking with stack traces.' },

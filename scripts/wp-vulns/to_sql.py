@@ -32,10 +32,10 @@ for key, r in live.items():
     if existing.get(key) == r['hash']:
         continue
     written += 1
-    out.append('INSERT INTO wp_vulns (cve, slug, title, ranges, cvss_score, cvss_vector, severity, published, url, hash) VALUES ('
-               + ', '.join(q(x) for x in [r['cve'], r['slug'], r['title'], json.dumps(r['ranges'], separators=(',', ':')), r['cvss_score'],
+    out.append('INSERT INTO wp_vulns (cve, kind, slug, title, ranges, cvss_score, cvss_vector, severity, published, url, hash) VALUES ('
+               + ', '.join(q(x) for x in [r['cve'], r.get('kind', 'plugin'), r['slug'], r['title'], json.dumps(r['ranges'], separators=(',', ':')), r['cvss_score'],
                                           r['cvss_vector'], r['severity'], r['published'], r['url'], r['hash']])
-               + ') ON CONFLICT (cve, slug) DO UPDATE SET title = excluded.title, ranges = excluded.ranges, cvss_score = excluded.cvss_score, '
+               + ') ON CONFLICT (cve, slug) DO UPDATE SET kind = excluded.kind, title = excluded.title, ranges = excluded.ranges, cvss_score = excluded.cvss_score, '
                'cvss_vector = excluded.cvss_vector, severity = excluded.severity, published = excluded.published, url = excluded.url, hash = excluded.hash;')
 for cve in rejected:
     out.append(f'DELETE FROM wp_vulns WHERE cve = {q(cve)};')

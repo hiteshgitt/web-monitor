@@ -7,7 +7,7 @@
 //   "patched in 3 h 12 min" and the fleet view counts it.
 // Exposure rules (e.g. a PHP ini value) narrow "affected" to "exposed" when the integration reports its config.
 import { notificationStatement } from './alerts.js';
-import { compareVersions, parseSemver } from './vulnerabilities.js';
+import { compareVersions, cveCvss, parseSemver } from './vulnerabilities.js';
 import { ApiError, newId, parseJson } from './util.js';
 
 export const COMPONENTS = ['php', 'node', 'wordpress', 'nextjs'];
@@ -291,7 +291,12 @@ export async function radarFor(env, userId) {
 export async function advisoriesForSite(env, siteId) {
   const { results } = await env.DB.prepare(`SELECT a.*, s.state, s.version_seen, s.patched_at FROM advisories a JOIN advisory_sites s ON s.advisory_id = a.id
     WHERE s.website_id = ? AND a.status IN ('announced', 'released') ORDER BY a.published_at DESC LIMIT 20`).bind(siteId).all();
-  return results.map((r) => ({ ...publicAdvisory(r), siteState: r.state, versionSeen: r.version_seen, patchedAt: r.patched_at }));
+  const out = results.map((r) => ({ ...publicAdvisory(r), siteState: r.state, versionSeen: r.version_seen, patchedAt: r.patched_at }));
+  // CVSS (from the NVD, cached a day) for the first CVE of the items that still need action.
+  for (const a of out.filter((x) => x.siteState === 'affected').slice(0, 4)) {
+    a.cvss = a.cves?.[0] ? await cveCvss(env, a.cves[0]).catch(() => null) : null;
+  }
+  return out;
 }
 
 /** Admin list with fleet counts. */

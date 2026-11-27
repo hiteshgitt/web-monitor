@@ -47,10 +47,12 @@ const Section = ({ title, aside, children, page = false, id }) => (
   </section>
 );
 
+// Status words from integrations ("needs_improvement") read as words, and long values wrap inside the card.
+const statText = (v) => (typeof v === 'string' && /^[a-z]+(_[a-z]+)+$/.test(v) ? v.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : typeof v === 'string' && /^[a-z]+$/.test(v) ? v.replace(/^./, (c) => c.toUpperCase()) : v);
 const Stat = ({ label, value, sub }) => (
-  <div className="rounded-2xl bg-canvas px-4 py-3.5 print:bg-white print:border print:border-brand-100">
+  <div className="min-w-0 h-full rounded-2xl bg-canvas px-4 py-3.5 print:bg-white print:border print:border-brand-100">
     <div className="text-[11px] font-extrabold uppercase tracking-widest text-ink-muted">{label}</div>
-    <div className="text-2xl font-extrabold text-ink tabular-nums mt-1">{value}</div>
+    <div className={`${typeof value === 'string' && /[a-z]{3}/i.test(value) && !/^[A-F][+-]?$/.test(value) ? 'text-xl leading-snug' : 'text-2xl'} font-extrabold text-ink tabular-nums mt-1 break-words`}>{statText(value)}</div>
     {sub && <div className="text-xs text-ink-muted mt-0.5">{sub}</div>}
   </div>
 );
@@ -157,7 +159,7 @@ const PatchingSection = ({ patching }) => {
       {(patching.runtime.length > 0 || patching.packages.length > 0) && (
         <ul className="mt-4 space-y-1.5 text-sm">
           {patching.runtime.map((r) => <li key={r.key} className="text-ink"><span className="font-semibold">{r.component} {r.version}:</span> {r.title}. {r.fix}</li>)}
-          {patching.packages.map((p) => <li key={`${p.name}@${p.version}`} className="text-ink"><span className="font-semibold">{p.name} {p.version}</span> ({p.severity}{p.cvss?.score != null ? `, CVSS ${p.cvss.score.toFixed(1)}` : ''}{p.cve ? `, ${p.cve}` : ''}){p.fixed ? ` → update to ${p.fixed}` : p.fixAbove ? ` → update to a version newer than ${p.fixAbove}` : ''}</li>)}
+          {patching.packages.map((p) => <li key={`${p.name}@${p.version}`} className="text-ink"><span className="font-semibold">{p.name}{p.kind === 'theme' ? ' (theme)' : ''} {p.version}</span> ({p.severity}{p.cvss?.score != null ? `, CVSS ${p.cvss.score.toFixed(1)}` : ''}{p.cve ? `, ${p.cve}` : ''}){p.fixed ? ` → update to ${p.fixed}` : p.fixAbove ? ` → update to a version newer than ${p.fixAbove}` : ''}</li>)}
         </ul>
       )}
     </Section>

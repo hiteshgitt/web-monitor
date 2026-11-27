@@ -30,7 +30,7 @@ export const PLAN_COMPARISON = [
   { group: 'Advanced view (Pro)' },
   { feature: 'AI insights & Zealot assistant', basic: false, pro: true },
   { feature: 'Plugin & package audit (outdated, inactive)', basic: false, pro: true },
-  { feature: 'Known vulnerabilities with CVSS: WordPress plugins, packages, PHP, Node.js, WordPress & Next.js', basic: false, pro: true },
+  { feature: 'Known vulnerabilities with CVSS: WordPress plugins & themes, packages, PHP, Node.js, WordPress & Next.js', basic: false, pro: true },
   { feature: 'Release Radar: security releases from announcement to patched', basic: false, pro: true },
   { feature: 'Error tracking with stack traces, suspicious-file scan (file and line)', basic: false, pro: true },
   { feature: 'Server agent: per-process CPU / memory, disks and inodes, floods and attack attempts per IP', basic: false, pro: true },

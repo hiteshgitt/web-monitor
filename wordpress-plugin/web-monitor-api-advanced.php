@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Web Monitor API (Advanced)
  * Description: Advanced REST API endpoints for the Web Monitor Dashboard. Exposes real, dynamic WordPress health, analytics, performance, SEO and security data (no simulated/random values).
- * Version: 1.6.0
+ * Version: 1.7.0
  * Author: Web Monitor Team
  * Requires at least: 5.6
  * Tested up to: 7.0
@@ -718,7 +718,7 @@ function webmonitor_advanced_health_check($request) {
         'site_url' => home_url(),
         'wordpress_version' => get_bloginfo('version'),
         'php_version' => PHP_VERSION,
-        'plugin_version' => '1.6.0',
+        'plugin_version' => '1.7.0',
         'errors' => webmonitor_errors_summary(),
         'components' => $components,
         'security_config' => web_monitor_security_config(),
@@ -1038,6 +1038,28 @@ function webmonitor_plugin_updates() {
     return $updates;
 }
 
+/** Installed themes: slug (stylesheet directory), name, version, whether active (or the active theme's parent), update. */
+function webmonitor_theme_inventory() {
+    if (!function_exists('wp_get_themes')) {
+        return array();
+    }
+    $updates = get_site_transient('update_themes');
+    $active = get_stylesheet();
+    $parent = get_template();
+    $out = array();
+    foreach (wp_get_themes() as $slug => $theme) {
+        $new = (is_object($updates) && isset($updates->response[$slug]['new_version'])) ? $updates->response[$slug]['new_version'] : null;
+        $out[] = array(
+            'slug' => (string) $slug,
+            'name' => (string) $theme->get('Name'),
+            'version' => (string) $theme->get('Version'),
+            'is_active' => ($slug === $active || $slug === $parent),
+            'new_version' => $new,
+        );
+    }
+    return $out;
+}
+
 function webmonitor_advanced_plugins($request) {
     // Get all plugins and active list
     $active_plugins = get_option('active_plugins', array());
@@ -1108,6 +1130,8 @@ function webmonitor_advanced_plugins($request) {
         'outdated_plugins' => $outdated,
         'potentially_unused_plugins' => $potentially_unused,
         'security_status' => count($outdated) > 0 ? 'Updates' : 'Protected',
+        // Since 1.7.0: installed themes, so Web Monitor can check them for known vulnerabilities too.
+        'all_themes' => webmonitor_theme_inventory(),
         'recommendations' => array(
             'Review inactive and potentially unused plugins',
             'Update outdated plugins to the latest versions',
