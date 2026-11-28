@@ -39,4 +39,5 @@ export const PLAN_COMPARISON = [
   { feature: 'Deep security: SSL grade, malware, vulnerabilities', basic: false, pro: true },
   { feature: 'Logs, alert center & CSV reports', basic: false, pro: true },
   { feature: 'Client report (PDF) with vulnerability assessment, client links & monthly email', basic: false, pro: true },
+  { feature: 'Verifiable Security Assessment Attestation (90 days, QR code)', basic: false, pro: true },
 ];

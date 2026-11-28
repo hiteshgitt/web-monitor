@@ -12,6 +12,7 @@ import StatusPage from './components/site/StatusPage';
 import SiteReport from './components/report/SiteReport';
 import ReleaseRadar from './components/radar/ReleaseRadar';
 import SharedReport from './components/report/SharedReport';
+import AttestationPage from './components/report/AttestationPage';
 
 const FullScreenLoader = () => (
   <div className="min-h-screen bg-canvas flex items-center justify-center">
@@ -43,6 +44,7 @@ const Root = () => (
         {/* Super admin: separate accounts and sign-in, not linked from the website */}
         <Route path="/ruyashield/*" element={<AdminApp />} />
         <Route path="/r/:token" element={<SharedReport />} />
+        <Route path="/verify/:id" element={<AttestationPage />} />
         <Route path="/app/report/:siteId" element={<RequireAuth><SiteReport /></RequireAuth>} />
         <Route path="/app/radar" element={<RequireAuth><ReleaseRadar /></RequireAuth>} />
         <Route path="/app/*" element={<RequireAuth><App /></RequireAuth>} />

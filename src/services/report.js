@@ -33,3 +33,14 @@ export async function fetchSharedReport(token) {
 export const fetchReportEmail = (siteId) => call(`/websites/${siteId}/report/email`);
 export const saveReportEmail = (siteId, body) => call(`/websites/${siteId}/report/email`, { method: 'PUT', body: JSON.stringify(body) });
 export const sendReportEmailNow = (siteId) => call(`/websites/${siteId}/report/email/send`, { method: 'POST' });
+
+// Security Assessment Attestation (Pro) and its public verification.
+export const fetchAttestation = (siteId) => call(`/websites/${siteId}/attestation`);
+export const issueAttestation = (siteId) => call(`/websites/${siteId}/attestation`, { method: 'POST' });
+export const revokeAttestation = (siteId, id) => call(`/websites/${siteId}/attestation/${id}`, { method: 'DELETE' });
+export async function fetchPublicAttestation(id) {
+  const response = await fetch(`${API_BASE_URL}/verify/${encodeURIComponent(id)}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'This attestation could not be loaded.');
+  return data;
+}

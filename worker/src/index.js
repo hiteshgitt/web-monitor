@@ -1,6 +1,7 @@
 // Web Monitor on Cloudflare Workers.
 // - fetch:     /api/* (everything else is served from the website/dashboard build as static assets)
 // - scheduled: the monitor, once per minute (cron trigger)
+import { publicAttestation } from './lib/attestation.js';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
@@ -54,6 +55,16 @@ app.get('/shared-report/:token', async (c) => {
   c.header('Cache-Control', 'no-store');
   c.header('X-Robots-Tag', 'noindex');
   return c.json(await sharedReport(c.env, c.req.param('token')));
+});
+
+// Public verification of a Security Assessment Attestation (no session).
+app.get('/verify/:id', async (c) => {
+  if (c.env.AUTH_LIMITER) {
+    const { success } = await c.env.AUTH_LIMITER.limit({ key: `verify:${c.req.header('CF-Connecting-IP') || 'unknown'}` });
+    if (!success) throw new ApiError(429, 'Too many requests. Please wait a minute and try again.');
+  }
+  c.header('Cache-Control', 'no-store');
+  return c.json(await publicAttestation(c.env, c.req.param('id')));
 });
 
 // One-click unsubscribe from a report email (GET from the link, POST from mail clients' unsubscribe button).

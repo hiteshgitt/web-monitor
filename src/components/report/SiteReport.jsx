@@ -4,6 +4,7 @@ import { ArrowLeft, Download, ExternalLink, ShieldCheck, Sparkles } from 'lucide
 import UpgradeModal from '../pro/UpgradeModal';
 import ReportSharePanel from './ReportSharePanel';
 import ReportEmailPanel from './ReportEmailPanel';
+import AttestationPanel from './AttestationPanel';
 import { REPORT_UPGRADE } from './reportUpgrade';
 import Logo from '../Logo';
 import { fetchSiteReport } from '../../services/report';
@@ -620,6 +621,7 @@ const SiteReport = () => {
           {isDesktop ? (
             <aside className="space-y-4 sticky top-6 order-last print:hidden">
               {periodCard}
+              <AttestationPanel siteId={siteId} />
               <ReportSharePanel siteId={siteId} days={days} />
               <ReportEmailPanel siteId={siteId} />
             </aside>
@@ -634,6 +636,7 @@ const SiteReport = () => {
 
           {!isDesktop && (
             <div className="space-y-4 print:hidden">
+              <AttestationPanel siteId={siteId} />
               <ReportSharePanel siteId={siteId} days={days} />
               <ReportEmailPanel siteId={siteId} />
             </div>

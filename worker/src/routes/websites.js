@@ -1,3 +1,4 @@
+import { attestationState, issueAttestation, revokeAttestation } from '../lib/attestation.js';
 import { Hono } from 'hono';
 import { isPro, loadOwnedWebsite, requirePro } from '../lib/auth.js';
 import { buildReport, REPORT_PERIODS } from '../lib/report.js';
@@ -150,6 +151,14 @@ websites.post('/:id/report/shares', requirePro, async (c) => {
 });
 websites.delete('/:id/report/shares/:shareId', requirePro, async (c) => {
   await revokeShare(c.env, c.get('user').id, c.get('website').id, c.req.param('shareId'));
+  return c.json({ ok: true });
+});
+
+// Security Assessment Attestation (Pro).
+websites.get('/:id/attestation', requirePro, async (c) => c.json(await attestationState(c.env, c.get('user').id, c.get('website'))));
+websites.post('/:id/attestation', requirePro, async (c) => c.json(await issueAttestation(c.env, c.get('user').id, c.get('website')), 201));
+websites.delete('/:id/attestation/:attId', requirePro, async (c) => {
+  await revokeAttestation(c.env, c.get('user').id, c.get('website').id, c.req.param('attId'));
   return c.json({ ok: true });
 });
 

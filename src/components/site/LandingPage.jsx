@@ -39,7 +39,7 @@ const FEATURES = [
   { icon: Activity, title: 'Root-cause diagnosis', text: 'When a site goes down we say what broke (database, PHP memory, a fatal error) and what to do, not just “500”.' },
   { icon: Radar, title: 'Release Radar', text: 'Pro: PHP, Node.js, WordPress and Next.js security releases matched to your sites, from the announcement to proof each one is patched.', pro: true },
   { icon: Monitor, title: 'Server agent', text: 'Pro: one command on your VPS. CPU and memory per process, disks and inodes, request floods and XSS / SQL-injection attempts per IP from your nginx or Apache logs, with alerts.', pro: true },
-  { icon: CheckCircle2, title: 'Client-ready assessment report', text: 'Pro: one PDF per site with uptime, speed, SSL, vulnerabilities by severity and CVSS, and exactly what was and was not assessed. Share a link or email it monthly. An automated assessment, not a penetration test.', pro: true },
+  { icon: CheckCircle2, title: 'Client-ready assessment report', text: 'Pro: one PDF per site with uptime, speed, SSL, vulnerabilities by severity and CVSS, and exactly what was and was not assessed. Share a link or email it monthly, and issue a verifiable Security Attestation when nothing critical or high is open. Automated, not a CERT-In VAPT certificate.', pro: true },
   { icon: Search, title: 'Error tracking and file scan', text: 'Pro: every error with its file, line and stack trace, and a scan for backdoors, web shells and injected code with the exact line.', pro: true },
   { icon: Activity, title: 'Inode monitoring', text: 'The file count on your hosting, read by the integration, with an alert before the limit stops uploads, email and caching. No server access needed.' },
 ];
